@@ -75,6 +75,7 @@ export interface Stock {
   shares: number;
   averageCost: number;
   currentPrice: number;
+  source?: 'Cathay' | 'Firstrade';
 }
 
 export interface Budget {

@@ -1887,6 +1887,11 @@ const StockPage = ({ user }: { user: User }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newStock, setNewStock] = useState<Partial<Stock>>({ symbol: '', name: '', shares: 0, averageCost: 0, currentPrice: 0 });
 
+  // Filtering & Batch Delete State
+  const [selectedSource, setSelectedSource] = useState<'all' | 'Cathay' | 'Firstrade'>('all');
+  const [selectedStocks, setSelectedStocks] = useState<Set<string>>(new Set());
+  const [usdRate, setUsdRate] = useState(32.5); // Default rate
+
   // AI Recognition State
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [aiImage, setAiImage] = useState<string | null>(null);
@@ -1949,17 +1954,19 @@ const StockPage = ({ user }: { user: User }) => {
     }
   };
 
-  const handleImportAIResult = async () => {
+  const handleImportAIResult = async (source: 'Cathay' | 'Firstrade') => {
     if (!aiResult) return;
     try {
-      // 1. Delete existing stocks
-      const batchDelete = stocks.map(stock => deleteDoc(doc(db, 'stocks', stock.id)));
+      // 1. Delete existing stocks from the same source
+      const stocksToDelete = stocks.filter(s => s.source === source);
+      const batchDelete = stocksToDelete.map(stock => deleteDoc(doc(db, 'stocks', stock.id)));
       await Promise.all(batchDelete);
 
-      // 2. Add new stocks
+      // 2. Add new stocks with the source field
       const batchAdd = aiResult.map(item => {
         return addDoc(collection(db, 'stocks'), {
           ...item,
+          source,
           uid: user.uid
         });
       });
@@ -1992,11 +1999,66 @@ const StockPage = ({ user }: { user: User }) => {
     }
   };
 
+  const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
+
+  const filteredStocks = stocks.filter(s => selectedSource === 'all' || s.source === selectedSource);
+  
+  const portfolioSummary = filteredStocks.reduce((acc, s) => {
+    const isUsd = s.source === 'Firstrade';
+    const cost = s.shares * s.averageCost;
+    const val = s.shares * s.currentPrice;
+    const profit = val - cost;
+    
+    acc.totalCost += isUsd ? cost * usdRate : cost;
+    acc.totalVal += isUsd ? val * usdRate : val;
+    acc.totalProfit += isUsd ? profit * usdRate : profit;
+    return acc;
+  }, { totalCost: 0, totalVal: 0, totalProfit: 0 });
+
+  const toggleStockSelection = (id: string) => {
+    const next = new Set(selectedStocks);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedStocks(next);
+  };
+
+  const handleBatchDelete = async () => {
+    try {
+      const batchDelete = Array.from(selectedStocks).map(id => deleteDoc(doc(db, 'stocks', id)));
+      await Promise.all(batchDelete);
+      setSelectedStocks(new Set());
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'stocks');
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (!confirm('確定要刪除所有股票資訊嗎？此操作無法復原。')) return;
+    try {
+      const batchDelete = stocks.map(stock => deleteDoc(doc(db, 'stocks', stock.id)));
+      await Promise.all(batchDelete);
+      setSelectedStocks(new Set());
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'stocks');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-slate-800">股票投資</h2>
         <div className="flex gap-2">
+          <select value={selectedSource} onChange={e => setSelectedSource(e.target.value as any)} className="p-2 border rounded-lg text-sm">
+            <option value="all">全部來源</option>
+            <option value="Cathay">國泰證券</option>
+            <option value="Firstrade">Firstrade</option>
+          </select>
+          <button onClick={handleBatchDelete} disabled={selectedStocks.size === 0} className="flex items-center gap-2 bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 transition-colors disabled:opacity-50">
+            <Trash2 size={20} /> 批次刪除 ({selectedStocks.size})
+          </button>
+          <button onClick={handleDeleteAll} className="flex items-center gap-2 bg-rose-800 text-white px-4 py-2 rounded-lg hover:bg-rose-900 transition-colors">
+            <Trash2 size={20} /> 刪除全部
+          </button>
           <button 
             onClick={() => setIsAIModalOpen(true)} 
             className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
@@ -2008,6 +2070,130 @@ const StockPage = ({ user }: { user: User }) => {
           </button>
         </div>
       </div>
+
+      {/* Summary Table & Portfolio Total */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-bold text-slate-800">投資組合損益表</h3>
+          <div className="flex gap-4 text-sm">
+            <div className="text-slate-500">總成本: <span className="font-bold text-slate-800">${portfolioSummary.totalCost.toLocaleString()} TWD</span></div>
+            <div className="text-slate-500">總市值: <span className="font-bold text-slate-800">${portfolioSummary.totalVal.toLocaleString()} TWD</span></div>
+            <div className={`font-bold ${portfolioSummary.totalProfit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+              總損益: ${portfolioSummary.totalProfit.toLocaleString()} TWD
+            </div>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="text-xs text-slate-500 uppercase bg-slate-50">
+              <tr>
+                <th className="px-4 py-3">股票</th>
+                <th className="px-4 py-3">來源</th>
+                <th className="px-4 py-3">股數</th>
+                <th className="px-4 py-3">成本</th>
+                <th className="px-4 py-3">市值</th>
+                <th className="px-4 py-3">損益</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredStocks.map(stock => {
+                const isUsd = stock.source === 'Firstrade';
+                const cost = stock.shares * stock.averageCost;
+                const val = stock.shares * stock.currentPrice;
+                const profit = val - cost;
+                return (
+                  <tr key={stock.id} className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedStock(stock)}>
+                    <td className="px-4 py-3 font-medium text-indigo-600 hover:underline">{stock.symbol} ({stock.name})</td>
+                    <td className="px-4 py-3">{stock.source}</td>
+                    <td className="px-4 py-3">{stock.shares.toLocaleString()}</td>
+                    <td className="px-4 py-3">${cost.toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
+                    <td className="px-4 py-3">${val.toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
+                    <td className={`px-4 py-3 font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      ${profit.toLocaleString()} {isUsd ? 'USD' : 'TWD'}
+                      {isUsd && <span className="text-xs text-slate-400 ml-1">(${(profit * usdRate).toFixed(0)} TWD)</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Summary Table */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <h3 className="font-bold text-slate-800 mb-4">投資組合損益表</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="text-xs text-slate-500 uppercase bg-slate-50">
+              <tr>
+                <th className="px-4 py-3">股票</th>
+                <th className="px-4 py-3">來源</th>
+                <th className="px-4 py-3">股數</th>
+                <th className="px-4 py-3">成本</th>
+                <th className="px-4 py-3">市值</th>
+                <th className="px-4 py-3">損益</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredStocks.map(stock => {
+                const isUsd = stock.source === 'Firstrade';
+                const cost = stock.shares * stock.averageCost;
+                const val = stock.shares * stock.currentPrice;
+                const profit = val - cost;
+                return (
+                  <tr key={stock.id} className="border-b border-slate-100">
+                    <td className="px-4 py-3 font-medium">{stock.symbol} ({stock.name})</td>
+                    <td className="px-4 py-3">{stock.source}</td>
+                    <td className="px-4 py-3">{stock.shares.toLocaleString()}</td>
+                    <td className="px-4 py-3">${cost.toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
+                    <td className="px-4 py-3">${val.toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
+                    <td className={`px-4 py-3 font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      ${profit.toLocaleString()} {isUsd ? 'USD' : 'TWD'}
+                      {isUsd && <span className="text-xs text-slate-400 ml-1">(${(profit * usdRate).toFixed(0)} TWD)</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Stock Detail Modal */}
+      <AnimatePresence>
+        {selectedStock && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold text-slate-800">{selectedStock.symbol} - {selectedStock.name}</h3>
+                <button onClick={() => setSelectedStock(null)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
+              </div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <div className="text-sm text-slate-500">來源</div>
+                    <div className="font-bold">{selectedStock.source}</div>
+                  </div>
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <div className="text-sm text-slate-500">持有股數</div>
+                    <div className="font-bold">{selectedStock.shares.toLocaleString()}</div>
+                  </div>
+                </div>
+                <div className="h-[200px] flex items-center justify-center border rounded-lg text-slate-400">
+                  {/* Placeholder for historical chart */}
+                  [ {selectedStock.symbol} 歷年淨值曲線圖 (模擬資料) ]
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* AI Recognition Modal */}
       <AnimatePresence>
@@ -2114,10 +2300,16 @@ const StockPage = ({ user }: { user: User }) => {
                           </div>
                         </div>
                         <button 
-                          onClick={handleImportAIResult}
+                          onClick={() => handleImportAIResult('Cathay')}
                           className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 flex items-center justify-center gap-2"
                         >
-                          <Save size={20} /> 匯入所有股票
+                          <Save size={20} /> 匯入為國泰證券資料
+                        </button>
+                        <button 
+                          onClick={() => handleImportAIResult('Firstrade')}
+                          className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 flex items-center justify-center gap-2"
+                        >
+                          <Save size={20} /> 匯入為 Firstrade 資料
                         </button>
                       </div>
                     )}
@@ -2146,20 +2338,21 @@ const StockPage = ({ user }: { user: User }) => {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {stocks.map(stock => {
+        {filteredStocks.map(stock => {
           const totalCost = stock.shares * stock.averageCost;
           const currentVal = stock.shares * stock.currentPrice;
           const profit = currentVal - totalCost;
           const roi = (profit / totalCost) * 100;
           return (
-            <div key={stock.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 relative group">
+            <div key={stock.id} className={`bg-white p-6 rounded-xl shadow-sm border ${selectedStocks.has(stock.id) ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-200'} relative group`}>
+              <input type="checkbox" checked={selectedStocks.has(stock.id)} onChange={() => toggleStockSelection(stock.id)} className="absolute top-4 left-4" />
               <button onClick={() => handleDelete(stock.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Trash2 size={18} />
               </button>
-              <div className="flex justify-between items-start mb-4">
+              <div className="flex justify-between items-start mb-4 ml-6">
                 <div>
                   <h3 className="text-xl font-bold text-slate-800">{stock.symbol}</h3>
-                  <p className="text-sm text-slate-500">{stock.name}</p>
+                  <p className="text-sm text-slate-500">{stock.name} ({stock.source})</p>
                 </div>
                 <div className={`text-right ${profit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
                   <p className="text-lg font-bold">{roi.toFixed(2)}%</p>
@@ -2173,11 +2366,11 @@ const StockPage = ({ user }: { user: User }) => {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">平均成本</span>
-                  <span className="text-slate-800 font-medium">${stock.averageCost}</span>
+                  <span className="text-slate-800 font-medium">${stock.averageCost} {stock.source === 'Firstrade' ? 'USD' : 'TWD'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">目前市值</span>
-                  <span className="text-slate-800 font-bold">${currentVal.toLocaleString()}</span>
+                  <span className="text-slate-800 font-bold">${currentVal.toLocaleString()} {stock.source === 'Firstrade' ? 'USD' : 'TWD'}</span>
                 </div>
               </div>
             </div>
