@@ -2003,6 +2003,29 @@ const StockPage = ({ user }: { user: User }) => {
   };
 
   const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
+  const [stockData, setStockData] = useState<any>(null);
+  const [isFetchingData, setIsFetchingData] = useState(false);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (selectedStock) {
+        setIsFetchingData(true);
+        try {
+          const response = await fetch(`/api/stock/${selectedStock.symbol}`);
+          if (!response.ok) throw new Error('Failed to fetch');
+          const data = await response.json();
+          setStockData(data);
+        } catch (err) {
+          console.error('Error fetching stock data:', err);
+        } finally {
+          setIsFetchingData(false);
+        }
+      } else {
+        setStockData(null);
+      }
+    };
+    fetchData();
+  }, [selectedStock]);
 
   const filteredStocks = stocks.filter(s => selectedSource === 'all' || s.source === selectedSource);
   
@@ -2090,9 +2113,9 @@ const StockPage = ({ user }: { user: User }) => {
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-slate-500 uppercase bg-slate-50">
               <tr>
-                <th className="px-4 py-3">股票</th>
+                <th className="px-4 py-3">股票/基金</th>
                 <th className="px-4 py-3">來源</th>
-                <th className="px-4 py-3">股數</th>
+                <th className="px-4 py-3">股數/單位</th>
                 <th className="px-4 py-3">成本</th>
                 <th className="px-4 py-3">市值</th>
                 <th className="px-4 py-3">損益</th>
@@ -2109,51 +2132,11 @@ const StockPage = ({ user }: { user: User }) => {
                     <td className="px-4 py-3 font-medium text-indigo-600 hover:underline">{stock.symbol} ({stock.name})</td>
                     <td className="px-4 py-3">{stock.source}</td>
                     <td className="px-4 py-3">{stock.shares.toLocaleString()}</td>
-                    <td className="px-4 py-3">${cost.toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
-                    <td className="px-4 py-3">${val.toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
+                    <td className="px-4 py-3">${Math.floor(cost).toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
+                    <td className="px-4 py-3">${Math.floor(val).toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
                     <td className={`px-4 py-3 font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                      ${profit.toLocaleString()} {isUsd ? 'USD' : 'TWD'}
-                      {isUsd && <span className="text-xs text-slate-400 ml-1">(${(profit * usdRate).toFixed(0)} TWD)</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Summary Table */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-        <h3 className="font-bold text-slate-800 mb-4">投資組合損益表</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-500 uppercase bg-slate-50">
-              <tr>
-                <th className="px-4 py-3">股票</th>
-                <th className="px-4 py-3">來源</th>
-                <th className="px-4 py-3">股數</th>
-                <th className="px-4 py-3">成本</th>
-                <th className="px-4 py-3">市值</th>
-                <th className="px-4 py-3">損益</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredStocks.map(stock => {
-                const isUsd = stock.source === 'Firstrade';
-                const cost = stock.shares * stock.averageCost;
-                const val = stock.shares * stock.currentPrice;
-                const profit = val - cost;
-                return (
-                  <tr key={stock.id} className="border-b border-slate-100">
-                    <td className="px-4 py-3 font-medium">{stock.symbol} ({stock.name})</td>
-                    <td className="px-4 py-3">{stock.source}</td>
-                    <td className="px-4 py-3">{stock.shares.toLocaleString()}</td>
-                    <td className="px-4 py-3">${cost.toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
-                    <td className="px-4 py-3">${val.toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
-                    <td className={`px-4 py-3 font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                      ${profit.toLocaleString()} {isUsd ? 'USD' : 'TWD'}
-                      {isUsd && <span className="text-xs text-slate-400 ml-1">(${(profit * usdRate).toFixed(0)} TWD)</span>}
+                      ${Math.floor(profit).toLocaleString()} {isUsd ? 'USD' : 'TWD'}
+                      {isUsd && <span className="text-xs text-slate-400 ml-1">(${Math.floor(profit * usdRate).toLocaleString()} TWD)</span>}
                     </td>
                   </tr>
                 );
@@ -2178,20 +2161,36 @@ const StockPage = ({ user }: { user: User }) => {
                 <button onClick={() => setSelectedStock(null)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
               </div>
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-50 p-4 rounded-lg">
-                    <div className="text-sm text-slate-500">來源</div>
-                    <div className="font-bold">{selectedStock.source}</div>
-                  </div>
-                  <div className="bg-slate-50 p-4 rounded-lg">
-                    <div className="text-sm text-slate-500">持有股數</div>
-                    <div className="font-bold">{selectedStock.shares.toLocaleString()}</div>
-                  </div>
-                </div>
-                <div className="h-[200px] flex items-center justify-center border rounded-lg text-slate-400">
-                  {/* Placeholder for historical chart */}
-                  [ {selectedStock.symbol} 歷年淨值曲線圖 (模擬資料) ]
-                </div>
+                {isFetchingData ? (
+                  <div className="text-center py-10">載入中...</div>
+                ) : stockData ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-slate-50 p-4 rounded-lg">
+                        <div className="text-sm text-slate-500">目前價格</div>
+                        <div className="font-bold text-xl">{stockData.regularMarketPrice} {stockData.currency}</div>
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-lg">
+                        <div className="text-sm text-slate-500">漲跌幅</div>
+                        <div className={`font-bold text-xl ${stockData.regularMarketChangePercent >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                          {stockData.regularMarketChangePercent.toFixed(2)}%
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-slate-50 p-4 rounded-lg">
+                        <div className="text-sm text-slate-500">開盤價</div>
+                        <div className="font-bold">{stockData.regularMarketOpen}</div>
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-lg">
+                        <div className="text-sm text-slate-500">最高價</div>
+                        <div className="font-bold">{stockData.regularMarketDayHigh}</div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-10 text-slate-500">無法取得即時資料</div>
+                )}
               </div>
             </motion.div>
           </div>
@@ -2566,7 +2565,6 @@ export default function App() {
       case 'salary': return <SalaryPage user={user} />;
       case 'credit-cards': return <CreditCardPage user={user} />;
       case 'banks': return <BankPage user={user} />;
-      case 'funds': return <FundPage user={user} />;
       case 'stocks': return <StockPage user={user} />;
       case 'budget': return <BudgetPage user={user} />;
       default: return <SalaryPage user={user} />;
