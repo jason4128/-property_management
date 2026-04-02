@@ -19,7 +19,8 @@ import {
   Save,
   X,
   LogOut,
-  LogIn
+  LogIn,
+  Settings
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TABS, TabId } from './constants';
@@ -174,10 +175,12 @@ const fromROCDate = (rocDate: string) => {
 };
 
 // --- AI Service ---
+const getApiKey = () => localStorage.getItem('GEMINI_API_KEY') || process.env.GEMINI_API_KEY;
+
 const analyzeSalaryInput = async (input: { text?: string, image?: string }) => {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = getApiKey();
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not configured.");
+    throw new Error("GEMINI_API_KEY is not configured. Please set it in Settings.");
   }
   const ai = new GoogleGenAI({ apiKey });
   
@@ -1913,9 +1916,9 @@ const StockPage = ({ user }: { user: User }) => {
     if (!aiImage) return;
     setIsAIProcessing(true);
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = getApiKey();
       if (!apiKey) {
-        throw new Error("GEMINI_API_KEY is not configured.");
+        throw new Error("GEMINI_API_KEY is not configured. Please set it in Settings.");
       }
       const ai = new GoogleGenAI({ apiKey });
       const prompt = `這是一張股票庫存明細的截圖（可能來自國泰證券或 Firstrade）。請辨識圖中的股票資訊並以 JSON 格式回傳一個陣列。
@@ -2076,10 +2079,10 @@ const StockPage = ({ user }: { user: User }) => {
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-bold text-slate-800">投資組合損益表</h3>
           <div className="flex gap-4 text-sm">
-            <div className="text-slate-500">總成本: <span className="font-bold text-slate-800">${portfolioSummary.totalCost.toLocaleString()} TWD</span></div>
-            <div className="text-slate-500">總市值: <span className="font-bold text-slate-800">${portfolioSummary.totalVal.toLocaleString()} TWD</span></div>
+            <div className="text-slate-500">總成本: <span className="font-bold text-slate-800">${Math.floor(portfolioSummary.totalCost).toLocaleString()} TWD</span></div>
+            <div className="text-slate-500">總市值: <span className="font-bold text-slate-800">${Math.floor(portfolioSummary.totalVal).toLocaleString()} TWD</span></div>
             <div className={`font-bold ${portfolioSummary.totalProfit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-              總損益: ${portfolioSummary.totalProfit.toLocaleString()} TWD
+              總損益: ${Math.floor(portfolioSummary.totalProfit).toLocaleString()} TWD
             </div>
           </div>
         </div>
@@ -2355,22 +2358,22 @@ const StockPage = ({ user }: { user: User }) => {
                   <p className="text-sm text-slate-500">{stock.name} ({stock.source})</p>
                 </div>
                 <div className={`text-right ${profit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                  <p className="text-lg font-bold">{roi.toFixed(2)}%</p>
-                  <p className="text-xs font-medium">{profit >= 0 ? '+' : ''}{profit.toLocaleString()}</p>
+                  <p className="text-lg font-bold">{Math.floor(roi)}%</p>
+                  <p className="text-xs font-medium">{profit >= 0 ? '+' : ''}{Math.floor(profit).toLocaleString()}</p>
                 </div>
               </div>
               <div className="space-y-2 pt-4 border-t border-slate-100">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">持有股數</span>
-                  <span className="text-slate-800 font-medium">{stock.shares.toLocaleString()}</span>
+                  <span className="text-slate-800 font-medium">{Math.floor(stock.shares).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">平均成本</span>
-                  <span className="text-slate-800 font-medium">${stock.averageCost} {stock.source === 'Firstrade' ? 'USD' : 'TWD'}</span>
+                  <span className="text-slate-800 font-medium">${Math.floor(stock.averageCost)} {stock.source === 'Firstrade' ? 'USD' : 'TWD'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">目前市值</span>
-                  <span className="text-slate-800 font-bold">${currentVal.toLocaleString()} {stock.source === 'Firstrade' ? 'USD' : 'TWD'}</span>
+                  <span className="text-slate-800 font-bold">${Math.floor(currentVal).toLocaleString()} {stock.source === 'Firstrade' ? 'USD' : 'TWD'}</span>
                 </div>
               </div>
             </div>
@@ -2540,6 +2543,15 @@ export default function App() {
     }
   };
 
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+
+  const saveApiKey = () => {
+    localStorage.setItem('GEMINI_API_KEY', apiKeyInput);
+    setIsApiKeyModalOpen(false);
+    alert('API Key 已儲存');
+  };
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -2648,6 +2660,13 @@ export default function App() {
               <p className="text-sm font-semibold text-slate-700 truncate">{user.email}</p>
             </div>
             <button 
+              onClick={() => setIsApiKeyModalOpen(true)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl transition-all font-medium"
+            >
+              <Settings size={20} />
+              設定 API Key
+            </button>
+            <button 
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-4 py-3 text-rose-500 hover:bg-rose-50 rounded-xl transition-all font-medium"
             >
@@ -2656,6 +2675,26 @@ export default function App() {
             </button>
           </div>
         </aside>
+
+        {/* API Key Modal */}
+        {isApiKeyModalOpen && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+              <h3 className="text-lg font-bold">設定 Gemini API Key</h3>
+              <input 
+                type="password" 
+                value={apiKeyInput} 
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                placeholder="輸入 API Key"
+                className="w-full p-2 border rounded-lg"
+              />
+              <div className="flex gap-2">
+                <button onClick={() => setIsApiKeyModalOpen(false)} className="flex-1 p-2 text-slate-600">取消</button>
+                <button onClick={saveApiKey} className="flex-1 p-2 bg-indigo-600 text-white rounded-lg">儲存</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Main Content */}
         <main className="flex-1 p-6 md:p-10 overflow-y-auto">
