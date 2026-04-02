@@ -1,0 +1,134 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: salaryRecords
+    // Document ID: auto-generated
+    // Fields: uid, date, rank, salaryPoint, basicPay, professionalAllowance, medicalIncentive, yearEndBonus, performanceBonus, overtimePay, otherIncome, retroactivePay, civilServiceInsurance, healthInsurance, pensionFund, otherDeduction, taxableIncome, note
+    //
+    // Collection: creditCards
+    // Document ID: auto-generated
+    // Fields: uid, name, bank, statementDate, dueDate, limit, currentBalance
+    //
+    // Collection: bankAccounts
+    // Document ID: auto-generated
+    // Fields: uid, name, bankName, balance, type
+    //
+    // Collection: funds
+    // Document ID: auto-generated
+    // Fields: uid, name, cost, currentValue, units
+    //
+    // Collection: stocks
+    // Document ID: auto-generated
+    // Fields: uid, symbol, name, shares, averageCost, currentPrice
+    //
+    // Collection: budgets
+    // Document ID: auto-generated
+    // Fields: uid, category, allocated, spent, year
+    //
+    // Collection: yearlyStandards
+    // Document ID: auto-generated
+    // Fields: uid, year, basicPay, professionalAllowance
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidSalaryRecord(data) {
+      return data.uid is string &&
+             data.date is string &&
+             data.basicPay is number;
+    }
+
+    function isValidYearlyStandard(data) {
+      return data.uid is string &&
+             data.year is string &&
+             data.basicPay is number &&
+             data.professionalAllowance is number;
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /salaryRecords/{recordId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
+      allow create: if isOwner(request.resource.data.uid) && 
+                      hasRequiredFields(['uid', 'date', 'basicPay']) && isValidSalaryRecord(request.resource.data);
+      allow update: if isDocOwner() && uidNotModified() && isValidSalaryRecord(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /creditCards/{cardId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
+      allow create: if isOwner(request.resource.data.uid) && hasRequiredFields(['uid', 'name', 'bank']);
+      allow update: if isDocOwner() && uidNotModified();
+      allow delete: if isDocOwner();
+    }
+
+    match /bankAccounts/{accountId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
+      allow create: if isOwner(request.resource.data.uid) && hasRequiredFields(['uid', 'name', 'bankName', 'balance', 'type']);
+      allow update: if isDocOwner() && uidNotModified();
+      allow delete: if isDocOwner();
+    }
+
+    match /funds/{fundId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
+      allow create: if isOwner(request.resource.data.uid) && hasRequiredFields(['uid', 'name', 'cost', 'currentValue', 'units']);
+      allow update: if isDocOwner() && uidNotModified();
+      allow delete: if isDocOwner();
+    }
+
+    match /stocks/{stockId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
+      allow create: if isOwner(request.resource.data.uid) && hasRequiredFields(['uid', 'symbol', 'name', 'shares', 'averageCost', 'currentPrice']);
+      allow update: if isDocOwner() && uidNotModified();
+      allow delete: if isDocOwner();
+    }
+
+    match /budgets/{budgetId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
+      allow create: if isOwner(request.resource.data.uid) && hasRequiredFields(['uid', 'category', 'allocated', 'spent', 'year']);
+      allow update: if isDocOwner() && uidNotModified();
+      allow delete: if isDocOwner();
+    }
+
+    match /yearlyStandards/{standardId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
+      allow create: if isOwner(request.resource.data.uid) && 
+                      hasRequiredFields(['uid', 'year', 'basicPay', 'professionalAllowance']) && 
+                      isValidYearlyStandard(request.resource.data);
+      allow update: if isDocOwner() && uidNotModified() && isValidYearlyStandard(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+  }
+}

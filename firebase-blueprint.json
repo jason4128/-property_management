@@ -1,0 +1,140 @@
+{
+  "entities": {
+    "SalaryRecord": {
+      "title": "SalaryRecord",
+      "description": "A record of monthly salary income and deductions",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user ID of the owner" },
+        "date": { "type": "string", "description": "Year and month (YYYY-MM)" },
+        "rank": { "type": "string", "description": "Rank/Grade" },
+        "salaryPoint": { "type": "number", "description": "Salary points" },
+        "basicPay": { "type": "number", "description": "Basic pay" },
+        "professionalAllowance": { "type": "number", "description": "Professional allowance" },
+        "medicalIncentive": { "type": "number", "description": "Medical incentive" },
+        "yearEndBonus": { "type": "number", "description": "Year-end bonus" },
+        "performanceBonus": { "type": "number", "description": "Performance bonus" },
+        "overtimePay": { "type": "number", "description": "Overtime pay" },
+        "otherIncome": { "type": "number", "description": "Other income" },
+        "retroactivePay": { "type": "number", "description": "Retroactive pay" },
+        "civilServiceInsurance": { "type": "number", "description": "Civil service insurance" },
+        "healthInsurance": { "type": "number", "description": "Health insurance" },
+        "pensionFund": { "type": "number", "description": "Pension fund" },
+        "otherDeduction": { "type": "number", "description": "Other deduction" },
+        "taxableIncome": { "type": "number", "description": "Taxable income" },
+        "note": { "type": "string", "description": "Optional note" }
+      },
+      "required": ["uid", "date", "basicPay"]
+    },
+    "CreditCard": {
+      "title": "CreditCard",
+      "description": "Credit card information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user ID of the owner" },
+        "name": { "type": "string", "description": "Card name" },
+        "bank": { "type": "string", "description": "Issuing bank" },
+        "statementDate": { "type": "number", "description": "Statement day of month" },
+        "dueDate": { "type": "number", "description": "Due day of month" },
+        "limit": { "type": "number", "description": "Credit limit" },
+        "currentBalance": { "type": "number", "description": "Current balance" }
+      },
+      "required": ["uid", "name", "bank"]
+    },
+    "BankAccount": {
+      "title": "BankAccount",
+      "description": "Bank account information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user ID of the owner" },
+        "name": { "type": "string", "description": "Account name" },
+        "bankName": { "type": "string", "description": "Bank name" },
+        "balance": { "type": "number", "description": "Current balance" },
+        "type": { "type": "string", "enum": ["savings", "checking", "fixed"], "description": "Account type" }
+      },
+      "required": ["uid", "name", "bankName", "balance", "type"]
+    },
+    "Fund": {
+      "title": "Fund",
+      "description": "Investment fund information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user ID of the owner" },
+        "name": { "type": "string", "description": "Fund name" },
+        "cost": { "type": "number", "description": "Total cost" },
+        "currentValue": { "type": "number", "description": "Current market value" },
+        "units": { "type": "number", "description": "Number of units" }
+      },
+      "required": ["uid", "name", "cost", "currentValue", "units"]
+    },
+    "Stock": {
+      "title": "Stock",
+      "description": "Stock investment information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user ID of the owner" },
+        "symbol": { "type": "string", "description": "Stock symbol" },
+        "name": { "type": "string", "description": "Stock name" },
+        "shares": { "type": "number", "description": "Number of shares" },
+        "averageCost": { "type": "number", "description": "Average cost per share" },
+        "currentPrice": { "type": "number", "description": "Current market price" }
+      },
+      "required": ["uid", "symbol", "name", "shares", "averageCost", "currentPrice"]
+    },
+    "Budget": {
+      "title": "Budget",
+      "description": "Monthly budget allocation",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user ID of the owner" },
+        "category": { "type": "string", "description": "Budget category" },
+        "allocated": { "type": "number", "description": "Allocated amount" },
+        "spent": { "type": "number", "description": "Spent amount" },
+        "year": { "type": "number", "description": "Year" }
+      },
+      "required": ["uid", "category", "allocated", "spent", "year"]
+    },
+    "YearlyStandard": {
+      "title": "YearlyStandard",
+      "description": "Standard expected salary values for a specific year",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user ID of the owner" },
+        "year": { "type": "string", "description": "The year (YYYY)" },
+        "basicPay": { "type": "number", "description": "Expected basic pay for this year" },
+        "professionalAllowance": { "type": "number", "description": "Expected professional allowance for this year" }
+      },
+      "required": ["uid", "year", "basicPay", "professionalAllowance"]
+    }
+  },
+  "firestore": {
+    "/salaryRecords/{recordId}": {
+      "schema": "SalaryRecord",
+      "description": "Collection of salary records"
+    },
+    "/yearlyStandards/{standardId}": {
+      "schema": "YearlyStandard",
+      "description": "Collection of yearly salary standards"
+    },
+    "/creditCards/{cardId}": {
+      "schema": "CreditCard",
+      "description": "Collection of credit cards"
+    },
+    "/bankAccounts/{accountId}": {
+      "schema": "BankAccount",
+      "description": "Collection of bank accounts"
+    },
+    "/funds/{fundId}": {
+      "schema": "Fund",
+      "description": "Collection of investment funds"
+    },
+    "/stocks/{stockId}": {
+      "schema": "Stock",
+      "description": "Collection of stocks"
+    },
+    "/budgets/{budgetId}": {
+      "schema": "Budget",
+      "description": "Collection of budgets"
+    }
+  }
+}
