@@ -1944,13 +1944,19 @@ const StockPage = ({ user }: { user: User }) => {
   const handleImportAIResult = async () => {
     if (!aiResult) return;
     try {
-      const batch = aiResult.map(item => {
+      // 1. Delete existing stocks
+      const batchDelete = stocks.map(stock => deleteDoc(doc(db, 'stocks', stock.id)));
+      await Promise.all(batchDelete);
+
+      // 2. Add new stocks
+      const batchAdd = aiResult.map(item => {
         return addDoc(collection(db, 'stocks'), {
           ...item,
           uid: user.uid
         });
       });
-      await Promise.all(batch);
+      await Promise.all(batchAdd);
+      
       setIsAIModalOpen(false);
       setAiResult(null);
       setAiImage(null);
@@ -2014,7 +2020,17 @@ const StockPage = ({ user }: { user: User }) => {
                 </button>
               </div>
 
-              <div className="p-6 overflow-y-auto flex-1 space-y-6">
+              <div className="p-6 overflow-y-auto flex-1 space-y-6" onPaste={(e) => {
+                const item = e.clipboardData.items[0];
+                if (item?.type.startsWith('image')) {
+                  const file = item.getAsFile();
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => setAiImage(reader.result as string);
+                    reader.readAsDataURL(file);
+                  }
+                }
+              }}>
                 {!aiImage ? (
                   <div className="border-2 border-dashed border-slate-200 rounded-xl p-12 text-center">
                     <input 
@@ -2036,7 +2052,7 @@ const StockPage = ({ user }: { user: User }) => {
                         <Plus size={32} />
                       </div>
                       <div>
-                        <p className="font-bold text-slate-700">上傳庫存截圖</p>
+                        <p className="font-bold text-slate-700">上傳或貼上庫存截圖</p>
                         <p className="text-sm text-slate-500">支援國泰證券、Firstrade 等券商截圖</p>
                       </div>
                     </label>
