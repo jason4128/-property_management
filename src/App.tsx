@@ -15,6 +15,7 @@ import {
   Trash2,
   ChevronRight,
   Calculator,
+  Camera,
   Save,
   X,
   LogOut,
@@ -1882,6 +1883,12 @@ const StockPage = ({ user }: { user: User }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newStock, setNewStock] = useState<Partial<Stock>>({ symbol: '', name: '', shares: 0, averageCost: 0, currentPrice: 0 });
 
+  // AI Recognition State
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [aiImage, setAiImage] = useState<string | null>(null);
+  const [isAIProcessing, setIsAIProcessing] = useState(false);
+  const [aiResult, setAiResult] = useState<any[] | null>(null);
+
   useEffect(() => {
     const q = query(collection(db, 'stocks'), where('uid', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -1893,11 +1900,71 @@ const StockPage = ({ user }: { user: User }) => {
     return () => unsubscribe();
   }, [user.uid]);
 
+  const handleAIStockRecognition = async () => {
+    if (!aiImage) return;
+    setIsAIProcessing(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const prompt = `這是一張股票庫存明細的截圖（可能來自國泰證券或 Firstrade）。請辨識圖中的股票資訊並以 JSON 格式回傳一個陣列。
+      每個物件包含：
+      - symbol: 股票代號 (例如: 0050, AAPL)
+      - name: 股票名稱 (例如: 元大台灣50, Apple)
+      - shares: 持有股數 (數字)
+      - averageCost: 平均成本 (數字)
+      - currentPrice: 目前股價 (數字)
+      
+      請只回傳 JSON 陣列，不要有其他文字。`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          { text: prompt },
+          {
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: aiImage.split(',')[1]
+            }
+          }
+        ]
+      });
+
+      const text = response.text || "";
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const data = JSON.parse(jsonMatch[0]);
+        setAiResult(data);
+      }
+    } catch (error) {
+      console.error("AI Recognition Error:", error);
+    } finally {
+      setIsAIProcessing(false);
+    }
+  };
+
+  const handleImportAIResult = async () => {
+    if (!aiResult) return;
+    try {
+      const batch = aiResult.map(item => {
+        return addDoc(collection(db, 'stocks'), {
+          ...item,
+          uid: user.uid
+        });
+      });
+      await Promise.all(batch);
+      setIsAIModalOpen(false);
+      setAiResult(null);
+      setAiImage(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'stocks');
+    }
+  };
+
   const handleAdd = async () => {
     try {
       const stock = { ...newStock, uid: user.uid };
       await addDoc(collection(db, 'stocks'), stock);
       setIsAdding(false);
+      setNewStock({ symbol: '', name: '', shares: 0, averageCost: 0, currentPrice: 0 });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'stocks');
     }
@@ -1915,10 +1982,128 @@ const StockPage = ({ user }: { user: User }) => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-slate-800">股票投資</h2>
-        <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
-          <Plus size={20} /> 新增股票
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setIsAIModalOpen(true)} 
+            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+          >
+            <Camera size={20} /> AI 掃描匯入
+          </button>
+          <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
+            <Plus size={20} /> 新增股票
+          </button>
+        </div>
       </div>
+
+      {/* AI Recognition Modal */}
+      <AnimatePresence>
+        {isAIModalOpen && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-emerald-50">
+                <h3 className="text-xl font-bold text-emerald-800 flex items-center gap-2">
+                  <Camera className="text-emerald-600" /> AI 股票庫存掃描
+                </h3>
+                <button onClick={() => setIsAIModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto flex-1 space-y-6">
+                {!aiImage ? (
+                  <div className="border-2 border-dashed border-slate-200 rounded-xl p-12 text-center">
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      id="stock-ai-upload" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => setAiImage(reader.result as string);
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    <label htmlFor="stock-ai-upload" className="cursor-pointer flex flex-col items-center gap-4">
+                      <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                        <Plus size={32} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-700">上傳庫存截圖</p>
+                        <p className="text-sm text-slate-500">支援國泰證券、Firstrade 等券商截圖</p>
+                      </div>
+                    </label>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="relative rounded-xl overflow-hidden border border-slate-200">
+                      <img src={aiImage} alt="Preview" className="w-full h-auto max-h-64 object-contain bg-slate-50" />
+                      <button 
+                        onClick={() => { setAiImage(null); setAiResult(null); }}
+                        className="absolute top-2 right-2 bg-white/80 backdrop-blur p-1 rounded-full text-rose-500 shadow-sm"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    {!aiResult && (
+                      <button 
+                        onClick={handleAIStockRecognition}
+                        disabled={isAIProcessing}
+                        className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {isAIProcessing ? (
+                          <>
+                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            AI 辨識中...
+                          </>
+                        ) : (
+                          <>開始辨識</>
+                        )}
+                      </button>
+                    )}
+
+                    {aiResult && (
+                      <div className="space-y-4">
+                        <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                          <h4 className="font-bold text-emerald-800 mb-2">辨識結果</h4>
+                          <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {aiResult.map((item, idx) => (
+                              <div key={idx} className="bg-white p-3 rounded-lg border border-emerald-100 text-sm flex justify-between items-center">
+                                <div>
+                                  <span className="font-bold text-slate-800">{item.symbol}</span>
+                                  <span className="text-slate-500 ml-2">{item.name}</span>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-medium text-slate-700">{item.shares.toLocaleString()} 股</div>
+                                  <div className="text-xs text-slate-400">成本: ${item.averageCost}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <button 
+                          onClick={handleImportAIResult}
+                          className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 flex items-center justify-center gap-2"
+                        >
+                          <Save size={20} /> 匯入所有股票
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {isAdding && (
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
