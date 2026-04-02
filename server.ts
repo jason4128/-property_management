@@ -44,13 +44,13 @@ async function startServer() {
       if (/^\d{4}$/.test(symbol)) {
         try {
           console.log(`Fetching history for: ${symbol}.TW`);
-          const data = await yf.historical(`${symbol}.TW`, { period1: '2020-01-01' });
+          const data = await yf.historical(`${symbol}.TW`, { period1: new Date('2020-01-01') });
           res.json(data);
           return;
         } catch (e) {
           console.log(`Failed with .TW, trying .TWO for ${symbol}`);
           try {
-            const data = await yf.historical(`${symbol}.TWO`, { period1: '2020-01-01' });
+            const data = await yf.historical(`${symbol}.TWO`, { period1: new Date('2020-01-01') });
             res.json(data);
             return;
           } catch (e2) {
@@ -60,11 +60,11 @@ async function startServer() {
         }
       }
       console.log(`Fetching history for: ${symbol}`);
-      const data = await yf.historical(symbol, { period1: '2020-01-01' });
+      const data = await yf.historical(symbol, { period1: new Date('2020-01-01') });
       res.json(data);
     } catch (error) {
       console.error(`Error fetching history for ${req.params.symbol}:`, error);
-      res.status(500).json({ error: "Failed to fetch historical data" });
+      res.status(500).json({ error: "Failed to fetch historical data", details: error instanceof Error ? error.message : String(error) });
     }
   });
 

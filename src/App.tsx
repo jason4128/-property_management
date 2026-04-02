@@ -1957,7 +1957,7 @@ const StockPage = ({ user }: { user: User }) => {
     }
   };
 
-  const handleImportAIResult = async (source: 'Cathay' | 'Firstrade') => {
+  const handleImportAIResult = async (source: 'Cathay' | 'Firstrade' | 'FundRich') => {
     if (!aiResult) return;
     try {
       // 1. Delete existing stocks from the same source
@@ -2336,6 +2336,12 @@ const StockPage = ({ user }: { user: User }) => {
                           className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 flex items-center justify-center gap-2"
                         >
                           <Save size={20} /> 匯入為 Firstrade 資料
+                        </button>
+                        <button 
+                          onClick={() => handleImportAIResult('FundRich')}
+                          className="w-full bg-amber-600 text-white py-3 rounded-xl font-bold hover:bg-amber-700 flex items-center justify-center gap-2"
+                        >
+                          <Save size={20} /> 匯入為鉅亨買基金資料
                         </button>
                       </div>
                     )}
