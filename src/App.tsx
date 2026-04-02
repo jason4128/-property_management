@@ -377,6 +377,8 @@ const SalaryPage = ({ user }: { user: User }) => {
   });
   const [showYearlySuccess, setShowYearlySuccess] = useState(false);
   
+  const [selectedYear, setSelectedYear] = useState<string>("all");
+  
   const [newRecord, setNewRecord] = useState<Partial<SalaryRecord>>({
     date: new Date().toISOString().slice(0, 7),
     rank: '',
@@ -630,7 +632,25 @@ const SalaryPage = ({ user }: { user: User }) => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-slate-800">薪資記錄</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm">
+            <span className="text-sm font-bold text-slate-500">年份:</span>
+            <select 
+              className="text-sm border-none focus:ring-0 bg-transparent p-0 pr-8"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+            >
+              <option value="all">全部</option>
+              {Array.from(new Set(records.map(r => r.date.split('-')[0])))
+                .sort((a, b) => b.localeCompare(a))
+                .map(year => (
+                  <option key={year} value={year}>
+                    {year} (民國 {Number(year) - 1911} 年)
+                  </option>
+                ))
+              }
+            </select>
+          </div>
           <button 
             onClick={() => setIsComparing(!isComparing)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors shadow-sm ${isComparing ? 'bg-rose-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}
@@ -1276,7 +1296,10 @@ const SalaryPage = ({ user }: { user: User }) => {
                 <td colSpan={isComparing ? 20 : 17} className="p-8 text-center text-slate-400">尚無薪資記錄</td>
               </tr>
             ) : (
-              records.sort((a, b) => b.date.localeCompare(a.date)).map(r => {
+              records
+                .filter(r => selectedYear === "all" || r.date.startsWith(selectedYear))
+                .sort((a, b) => b.date.localeCompare(a.date))
+                .map(r => {
                 const totalIncome = (r.basicPay || 0) + (r.professionalAllowance || 0) + (r.medicalIncentive || 0) + (r.overtimePay || 0) + (r.yearEndBonus || 0) + (r.performanceBonus || 0) + (r.otherIncome || 0);
                 const totalDeduction = (r.civilServiceInsurance || 0) + (r.healthInsurance || 0) + (r.pensionFund || 0) + (r.otherDeduction || 0);
                 const net = totalIncome - totalDeduction;
