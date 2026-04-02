@@ -2004,6 +2004,7 @@ const StockPage = ({ user }: { user: User }) => {
 
   const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
   const [stockData, setStockData] = useState<any>(null);
+  const [historyData, setHistoryData] = useState<any[]>([]);
   const [isFetchingData, setIsFetchingData] = useState(false);
 
   useEffect(() => {
@@ -2011,10 +2012,19 @@ const StockPage = ({ user }: { user: User }) => {
       if (selectedStock) {
         setIsFetchingData(true);
         try {
-          const response = await fetch(`/api/stock/${selectedStock.symbol}`);
-          if (!response.ok) throw new Error('Failed to fetch');
-          const data = await response.json();
-          setStockData(data);
+          const [quoteRes, historyRes] = await Promise.all([
+            fetch(`/api/stock/${selectedStock.symbol}`),
+            fetch(`/api/stock/history/${selectedStock.symbol}`)
+          ]);
+          
+          const quoteText = await quoteRes.text();
+          const historyText = await historyRes.text();
+          
+          if (!quoteRes.ok) throw new Error(`Failed to fetch quote: ${quoteText}`);
+          if (!historyRes.ok) throw new Error(`Failed to fetch history: ${historyText}`);
+          
+          setStockData(JSON.parse(quoteText));
+          setHistoryData(JSON.parse(historyText));
         } catch (err) {
           console.error('Error fetching stock data:', err);
         } finally {
@@ -2022,6 +2032,7 @@ const StockPage = ({ user }: { user: User }) => {
         }
       } else {
         setStockData(null);
+        setHistoryData([]);
       }
     };
     fetchData();
@@ -2078,6 +2089,7 @@ const StockPage = ({ user }: { user: User }) => {
             <option value="all">全部來源</option>
             <option value="Cathay">國泰證券</option>
             <option value="Firstrade">Firstrade</option>
+            <option value="FundRich">鉅亨買基金</option>
           </select>
           <button onClick={handleBatchDelete} disabled={selectedStocks.size === 0} className="flex items-center gap-2 bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 transition-colors disabled:opacity-50">
             <Trash2 size={20} /> 批次刪除 ({selectedStocks.size})
@@ -2168,24 +2180,36 @@ const StockPage = ({ user }: { user: User }) => {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="bg-slate-50 p-4 rounded-lg">
                         <div className="text-sm text-slate-500">目前價格</div>
-                        <div className="font-bold text-xl">{stockData.regularMarketPrice} {stockData.currency}</div>
+                        <div className="font-bold text-xl">{stockData.regularMarketPrice ?? 'N/A'} {stockData.currency ?? ''}</div>
                       </div>
                       <div className="bg-slate-50 p-4 rounded-lg">
                         <div className="text-sm text-slate-500">漲跌幅</div>
-                        <div className={`font-bold text-xl ${stockData.regularMarketChangePercent >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                          {stockData.regularMarketChangePercent.toFixed(2)}%
+                        <div className={`font-bold text-xl ${(stockData.regularMarketChangePercent ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                          {(stockData.regularMarketChangePercent ?? 0).toFixed(2)}%
                         </div>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="bg-slate-50 p-4 rounded-lg">
                         <div className="text-sm text-slate-500">開盤價</div>
-                        <div className="font-bold">{stockData.regularMarketOpen}</div>
+                        <div className="font-bold">{stockData.regularMarketOpen ?? 'N/A'}</div>
                       </div>
                       <div className="bg-slate-50 p-4 rounded-lg">
                         <div className="text-sm text-slate-500">最高價</div>
-                        <div className="font-bold">{stockData.regularMarketDayHigh}</div>
+                        <div className="font-bold">{stockData.regularMarketDayHigh ?? 'N/A'}</div>
                       </div>
+                    </div>
+                    <div className="h-[300px] w-full mt-4">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={historyData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" tickFormatter={(date) => new Date(date).toLocaleDateString()} />
+                          <YAxis domain={['auto', 'auto']} />
+                          <Tooltip labelFormatter={(date) => new Date(date).toLocaleDateString()} />
+                          <Legend />
+                          <Line type="monotone" dataKey="close" stroke="#8884d8" name="收盤價" dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
                     </div>
                   </>
                 ) : (
