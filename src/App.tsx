@@ -175,7 +175,11 @@ const fromROCDate = (rocDate: string) => {
 
 // --- AI Service ---
 const analyzeSalaryInput = async (input: { text?: string, image?: string }) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not configured.");
+  }
+  const ai = new GoogleGenAI({ apiKey });
   
   const prompt = `你是一個專業的財務分析助手。請分析提供的公務員薪資表格（可能是文字、表格或圖片）。
   表格包含多個月份的資料，請提取每一列的資訊並以 JSON 陣列格式返回。
@@ -1904,7 +1908,11 @@ const StockPage = ({ user }: { user: User }) => {
     if (!aiImage) return;
     setIsAIProcessing(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("GEMINI_API_KEY is not configured.");
+      }
+      const ai = new GoogleGenAI({ apiKey });
       const prompt = `這是一張股票庫存明細的截圖（可能來自國泰證券或 Firstrade）。請辨識圖中的股票資訊並以 JSON 格式回傳一個陣列。
       每個物件包含：
       - symbol: 股票代號 (例如: 0050, AAPL)
