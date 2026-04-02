@@ -391,6 +391,40 @@ const SalaryPage = ({ user }: { user: User }) => {
   
   const [selectedYear, setSelectedYear] = useState<string>("all");
   const [showChart, setShowChart] = useState(false);
+
+  const yearlyData = React.useMemo(() => {
+    if (records.length === 0) return [];
+    const aggregated = records.reduce((acc, r) => {
+      const year = r.date.split('-')[0];
+      if (!acc[year]) {
+        acc[year] = {
+          year,
+          '實領薪資': 0,
+          '固定月薪(含加給/獎勵)': 0,
+          '年終/考績獎金': 0,
+          '月數': 0
+        };
+      }
+      const totalIncome = (r.basicPay || 0) + (r.professionalAllowance || 0) + (r.medicalIncentive || 0) + (r.overtimePay || 0) + (r.yearEndBonus || 0) + (r.performanceBonus || 0) + (r.otherIncome || 0);
+      const totalDeduction = (r.civilServiceInsurance || 0) + (r.healthInsurance || 0) + (r.pensionFund || 0) + (r.otherDeduction || 0);
+      
+      acc[year]['實領薪資'] += (totalIncome - totalDeduction);
+      acc[year]['固定月薪(含加給/獎勵)'] += (r.basicPay || 0) + (r.professionalAllowance || 0) + (r.medicalIncentive || 0);
+      acc[year]['年終/考績獎金'] += (r.yearEndBonus || 0) + (r.performanceBonus || 0);
+      acc[year]['月數'] += 1;
+      return acc;
+    }, {} as Record<string, any>);
+
+    return Object.entries(aggregated)
+      .sort(([yearA], [yearB]) => yearA.localeCompare(yearB))
+      .map(([year, data]) => ({
+        displayYear: `民國 ${Number(year) - 1911} 年`,
+        year,
+        '年實領總額': data['實領薪資'],
+        '平均月薪(含加給)': Math.round(data['固定月薪(含加給/獎勵)'] / data['月數']),
+        '年終/考績總額': data['年終/考績獎金']
+      }));
+  }, [records]);
   
   const [newRecord, setNewRecord] = useState<Partial<SalaryRecord>>({
     date: new Date().toISOString().slice(0, 7),
@@ -698,139 +732,90 @@ const SalaryPage = ({ user }: { user: User }) => {
       </div>
 
       {showChart && records.length > 0 && (
-        <motion.div 
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-slate-800 flex items-center gap-2">
-              <TrendingUp size={20} className="text-indigo-500" />
-              薪資趨勢分析
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          {/* Chart 1: Yearly Net Pay */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white p-5 rounded-xl shadow-sm border border-slate-200"
+          >
+            <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4 text-sm">
+              <TrendingUp size={16} className="text-indigo-500" />
+              年實領總額趨勢
             </h3>
-            <div className="text-xs text-slate-400">
-              顯示範圍: {selectedYear === 'all' ? '歷年全部' : `${selectedYear} 年度`}
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={yearlyData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorNet" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="displayYear" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={(v) => `${(v/10000).toFixed(0)}萬`} />
+                  <Tooltip formatter={(v: number) => [`$${v.toLocaleString()}`, '年實領']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Area type="monotone" dataKey="年實領總額" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#colorNet)" />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
-          </div>
-          
-          <div className="h-[350px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={Object.entries(
-                  records.reduce((acc, r) => {
-                    const year = r.date.split('-')[0];
-                    if (!acc[year]) {
-                      acc[year] = {
-                        year,
-                        '實領薪資': 0,
-                        '固定月薪(含加給/獎勵)': 0,
-                        '年終/考績獎金': 0,
-                        '月數': 0
-                      };
-                    }
-                    const totalIncome = (r.basicPay || 0) + (r.professionalAllowance || 0) + (r.medicalIncentive || 0) + (r.overtimePay || 0) + (r.yearEndBonus || 0) + (r.performanceBonus || 0) + (r.otherIncome || 0);
-                    const totalDeduction = (r.civilServiceInsurance || 0) + (r.healthInsurance || 0) + (r.pensionFund || 0) + (r.otherDeduction || 0);
-                    
-                    acc[year]['實領薪資'] += (totalIncome - totalDeduction);
-                    acc[year]['固定月薪(含加給/獎勵)'] += (r.basicPay || 0) + (r.professionalAllowance || 0) + (r.medicalIncentive || 0);
-                    acc[year]['年終/考績獎金'] += (r.yearEndBonus || 0) + (r.performanceBonus || 0);
-                    acc[year]['月數'] += 1;
-                    return acc;
-                  }, {} as Record<string, any>)
-                )
-                .sort(([yearA], [yearB]) => yearA.localeCompare(yearB))
-                .map(([year, data]) => ({
-                  displayYear: `民國 ${Number(year) - 1911} 年`,
-                  '年實領總額': data['實領薪資'],
-                  '平均月薪(含加給)': Math.round(data['固定月薪(含加給/獎勵)'] / data['月數']),
-                  '年終/考績總額': data['年終/考績獎金']
-                }))}
-                margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id="colorNet" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="displayYear" 
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#94a3b8', fontSize: 12 }}
-                  dy={10}
-                />
-                <YAxis 
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#94a3b8', fontSize: 12 }}
-                  tickFormatter={(value) => `$${(value / 10000).toFixed(1)}萬`}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#fff', 
-                    borderRadius: '12px', 
-                    border: '1px solid #e2e8f0',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
-                  }}
-                  formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
-                />
-                <Legend verticalAlign="top" height={36}/>
-                <Area 
-                  type="monotone" 
-                  dataKey="年實領總額" 
-                  stroke="#6366f1" 
-                  strokeWidth={3}
-                  fillOpacity={1} 
-                  fill="url(#colorNet)" 
-                  activeDot={{ r: 8 }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="平均月薪(含加給)" 
-                  stroke="#10b981" 
-                  strokeWidth={2}
-                  dot={{ r: 4, fill: '#10b981' }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="年終/考績總額" 
-                  stroke="#f59e0b" 
-                  strokeWidth={2}
-                  dot={{ r: 4, fill: '#f59e0b' }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-              <div className="text-xs text-slate-500 mb-1">平均實領</div>
-              <div className="text-lg font-bold text-indigo-600">
-                ${Math.round(records
-                  .filter(r => selectedYear === "all" || r.date.startsWith(selectedYear))
-                  .reduce((acc, r) => {
-                    const totalIncome = (r.basicPay || 0) + (r.professionalAllowance || 0) + (r.medicalIncentive || 0) + (r.overtimePay || 0) + (r.yearEndBonus || 0) + (r.performanceBonus || 0) + (r.otherIncome || 0);
-                    const totalDeduction = (r.civilServiceInsurance || 0) + (r.healthInsurance || 0) + (r.pensionFund || 0) + (r.otherDeduction || 0);
-                    return acc + (totalIncome - totalDeduction);
-                  }, 0) / (records.filter(r => selectedYear === "all" || r.date.startsWith(selectedYear)).length || 1)).toLocaleString()}
-              </div>
+          </motion.div>
+
+          {/* Chart 2: Average Monthly Pay */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white p-5 rounded-xl shadow-sm border border-slate-200"
+          >
+            <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4 text-sm">
+              <TrendingUp size={16} className="text-emerald-500" />
+              平均月薪成長 (含加給)
+            </h3>
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={yearlyData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="displayYear" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
+                  <Tooltip formatter={(v: number) => [`$${v.toLocaleString()}`, '平均月薪']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Line type="monotone" dataKey="平均月薪(含加給)" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#10b981' }} activeDot={{ r: 6 }} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
-            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-              <div className="text-xs text-slate-500 mb-1">最高實領</div>
-              <div className="text-lg font-bold text-emerald-600">
-                ${Math.max(...records
-                  .filter(r => selectedYear === "all" || r.date.startsWith(selectedYear))
-                  .map(r => {
-                    const totalIncome = (r.basicPay || 0) + (r.professionalAllowance || 0) + (r.medicalIncentive || 0) + (r.overtimePay || 0) + (r.yearEndBonus || 0) + (r.performanceBonus || 0) + (r.otherIncome || 0);
-                    const totalDeduction = (r.civilServiceInsurance || 0) + (r.healthInsurance || 0) + (r.pensionFund || 0) + (r.otherDeduction || 0);
-                    return totalIncome - totalDeduction;
-                  }), 0).toLocaleString()}
-              </div>
+          </motion.div>
+
+          {/* Chart 3: Yearly Bonus Total */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white p-5 rounded-xl shadow-sm border border-slate-200"
+          >
+            <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4 text-sm">
+              <TrendingUp size={16} className="text-amber-500" />
+              年終/考績獎金總額
+            </h3>
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={yearlyData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorBonus" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="displayYear" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={(v) => `${(v/10000).toFixed(0)}萬`} />
+                  <Tooltip formatter={(v: number) => [`$${v.toLocaleString()}`, '獎金總額']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Area type="monotone" dataKey="年終/考績總額" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorBonus)" />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        </div>
       )}
 
       {isComparing && (
