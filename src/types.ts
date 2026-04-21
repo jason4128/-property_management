@@ -122,6 +122,7 @@ export interface TaxRecord {
   withholding: number;
   dividendCredits: number;
   mainlandTaxCredits: number;
+  itemizedDeduction?: number; // 列舉扣除額
   note?: string;
   // Computed fields (often stored for quick access or history)
   totalIncome?: number;

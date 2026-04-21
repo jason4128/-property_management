@@ -332,6 +332,7 @@ const analyzeTaxDocument = async (fileBase64: string, mimeType: string) => {
   - educationCount: 教育學費特別扣除人數
   - preschoolCount: 幼兒學前特別扣除人數
   - longTermCareCount: 長期照顧特別扣除人數
+  - itemizedDeduction: 列舉扣除額總額 (如捐贈、保險費、醫藥費、災害損失、購屋借款利息、房屋租金支出等之合計)
   - withholding: 全部扣繳稅額
   - dividendCredits: 股利及盈餘可抵減稅額
   - note: 備註
@@ -2514,9 +2515,26 @@ const StockPage = ({ user }: { user: User }) => {
     
     setIsRefreshingPrices(true);
     try {
-      const response = await fetch(`/api/stocks/quotes?symbols=${symbols.join(',')}`);
-      if (!response.ok) throw new Error('Failed to fetch bulk quotes');
-      const latestData = await response.json();
+      let latestData;
+      try {
+        const response = await fetch(`/api/stocks/quotes?symbols=${symbols.join(',')}`);
+        if (!response.ok) throw new Error();
+        latestData = await response.json();
+      } catch (e) {
+        // Fallback for static hosting (GitHub Pages)
+        console.warn('Backend API unavailable, attempting CORS proxy fallback...');
+        const fetchWithProxy = async (sym: string) => {
+          const target = /^\d{4,6}$/.test(sym) ? `${sym}.TW` : sym;
+          const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
+          const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+          const res = await fetch(proxyUrl);
+          const json = await res.json();
+          const result = JSON.parse(json.contents);
+          return result.quoteResponse?.result?.[0];
+        };
+        const results = await Promise.all(symbols.map(fetchWithProxy));
+        latestData = results.filter(Boolean).map(r => ({ ...r, symbol: r.symbol.replace(/\.TW$|\.TWO$/, '') }));
+      }
       
       const updates = stocks.map(async (stock) => {
         const found = latestData.find((d: any) => 
@@ -2533,6 +2551,7 @@ const StockPage = ({ user }: { user: User }) => {
       await Promise.all(updates);
     } catch (err) {
       console.error('Refresh prices error:', err);
+      alert('更新股價失敗。如果您是使用 GitHub Pages，可能是因為跨網域代理伺服器暫時無法連線。');
     } finally {
       setIsRefreshingPrices(false);
     }
@@ -2682,19 +2701,52 @@ const StockPage = ({ user }: { user: User }) => {
       if (selectedStock) {
         setIsFetchingData(true);
         try {
-          const [quoteRes, historyRes] = await Promise.all([
-            fetch(`/api/stock/${selectedStock.symbol}`),
-            fetch(`/api/stock/history/${selectedStock.symbol}`)
-          ]);
+          let quote, history;
+          try {
+            const [quoteRes, historyRes] = await Promise.all([
+              fetch(`/api/stock/${selectedStock.symbol}`),
+              fetch(`/api/stock/history/${selectedStock.symbol}`)
+            ]);
+            
+            if (!quoteRes.ok || !historyRes.ok) throw new Error();
+            
+            quote = await quoteRes.json();
+            history = await historyRes.json();
+          } catch (e) {
+            // Fallback for static hosting
+            console.warn('Backend API unavailable for details, attempting CORS proxy fallback...');
+            const sym = selectedStock.symbol;
+            const target = /^\d{4,6}$/.test(sym) ? `${sym}.TW` : sym;
+            
+            // Fetch Quote
+            const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
+            const quoteProxy = `https://api.allorigins.win/get?url=${encodeURIComponent(quoteUrl)}`;
+            const qRes = await fetch(quoteProxy);
+            const qJson = await qRes.json();
+            const qResult = JSON.parse(qJson.contents);
+            quote = qResult.quoteResponse?.result?.[0];
+
+            // Fetch History (Simplified: default to 1 year)
+            // Use query2 for chart
+            const histUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${target}?range=1y&interval=1d`;
+            const histProxy = `https://api.allorigins.win/get?url=${encodeURIComponent(histUrl)}`;
+            const hRes = await fetch(histProxy);
+            const hJson = await hRes.json();
+            const hResult = JSON.parse(hJson.contents);
+            const chartData = hResult.chart?.result?.[0];
+            
+            if (chartData) {
+              const { timestamp, indicators } = chartData;
+              const closes = indicators.quote[0].close;
+              history = timestamp.map((t: number, i: number) => ({
+                date: t * 1000,
+                close: closes[i]
+              })).filter((d: any) => d.close != null);
+            }
+          }
           
-          const quoteText = await quoteRes.text();
-          const historyText = await historyRes.text();
-          
-          if (!quoteRes.ok) throw new Error(`Failed to fetch quote: ${quoteText}`);
-          if (!historyRes.ok) throw new Error(`Failed to fetch history: ${historyText}`);
-          
-          setStockData(JSON.parse(quoteText));
-          setHistoryData(JSON.parse(historyText));
+          if (quote) setStockData(quote);
+          if (history) setHistoryData(history);
         } catch (err) {
           console.error('Error fetching stock data:', err);
         } finally {
@@ -3278,26 +3330,88 @@ const DashboardPage = ({ user }: { user: User }) => {
   );
 };
 
-const DEFAULT_TAX_STANDARDS: Partial<TaxStandard> = {
-  exemptionBase: 92000,
-  exemptionSenior: 138000,
-  standardDeductionSingle: 124000,
-  standardDeductionMarried: 248000,
-  salaryDeductionUnit: 207000,
-  savingsDeductionLimit: 270000,
-  disabilityDeductionUnit: 207000,
-  educationDeductionUnit: 25000,
-  preschoolDeductionUnit: 120000,
-  longTermCareDeductionUnit: 120000,
-  basicLivingExpenseUnit: 202000, // 112年為20.2萬
-  taxBrackets: [
-    { limit: 560000, rate: 0.05, adjustment: 0 },
-    { limit: 1260000, rate: 0.12, adjustment: 39200 },
-    { limit: 2520000, rate: 0.20, adjustment: 140000 },
-    { limit: 4720000, rate: 0.30, adjustment: 392000 },
-    { limit: Infinity, rate: 0.40, adjustment: 864000 },
-  ]
-};
+const PRESET_TAX_STANDARDS: TaxStandard[] = [
+  {
+    id: 'preset-110', year: 110, uid: 'system',
+    exemptionBase: 88000, exemptionSenior: 132000, standardDeductionSingle: 120000, standardDeductionMarried: 240000,
+    salaryDeductionUnit: 200000, savingsDeductionLimit: 270000, disabilityDeductionUnit: 200000, educationDeductionUnit: 25000,
+    preschoolDeductionUnit: 120000, longTermCareDeductionUnit: 120000, basicLivingExpenseUnit: 192000,
+    taxBrackets: [
+      { limit: 540000, rate: 0.05, adjustment: 0 },
+      { limit: 1210000, rate: 0.12, adjustment: 37800 },
+      { limit: 2420000, rate: 0.20, adjustment: 134600 },
+      { limit: 4530000, rate: 0.30, adjustment: 376600 },
+      { limit: Infinity, rate: 0.40, adjustment: 829600 },
+    ]
+  },
+  {
+    id: 'preset-111', year: 111, uid: 'system',
+    exemptionBase: 92000, exemptionSenior: 138000, standardDeductionSingle: 124000, standardDeductionMarried: 248000,
+    salaryDeductionUnit: 207000, savingsDeductionLimit: 270000, disabilityDeductionUnit: 207000, educationDeductionUnit: 25000,
+    preschoolDeductionUnit: 120000, longTermCareDeductionUnit: 120000, basicLivingExpenseUnit: 196000,
+    taxBrackets: [
+      { limit: 560000, rate: 0.05, adjustment: 0 },
+      { limit: 1260000, rate: 0.12, adjustment: 39200 },
+      { limit: 2520000, rate: 0.20, adjustment: 140000 },
+      { limit: 4720000, rate: 0.30, adjustment: 392000 },
+      { limit: Infinity, rate: 0.40, adjustment: 864000 },
+    ]
+  },
+  {
+    id: 'preset-112', year: 112, uid: 'system',
+    exemptionBase: 92000, exemptionSenior: 138000, standardDeductionSingle: 124000, standardDeductionMarried: 248000,
+    salaryDeductionUnit: 207000, savingsDeductionLimit: 270000, disabilityDeductionUnit: 207000, educationDeductionUnit: 25000,
+    preschoolDeductionUnit: 120000, longTermCareDeductionUnit: 120000, basicLivingExpenseUnit: 202000,
+    taxBrackets: [
+      { limit: 560000, rate: 0.05, adjustment: 0 },
+      { limit: 1260000, rate: 0.12, adjustment: 39200 },
+      { limit: 2520000, rate: 0.20, adjustment: 140000 },
+      { limit: 4720000, rate: 0.30, adjustment: 392000 },
+      { limit: Infinity, rate: 0.40, adjustment: 864000 },
+    ]
+  },
+  {
+    id: 'preset-113', year: 113, uid: 'system',
+    exemptionBase: 97000, exemptionSenior: 145500, standardDeductionSingle: 131000, standardDeductionMarried: 262000,
+    salaryDeductionUnit: 218000, savingsDeductionLimit: 270000, disabilityDeductionUnit: 218000, educationDeductionUnit: 25000,
+    preschoolDeductionUnit: 120000, longTermCareDeductionUnit: 120000, basicLivingExpenseUnit: 209000,
+    taxBrackets: [
+      { limit: 590000, rate: 0.05, adjustment: 0 },
+      { limit: 1330000, rate: 0.12, adjustment: 41300 },
+      { limit: 2660000, rate: 0.20, adjustment: 147700 },
+      { limit: 4980000, rate: 0.30, adjustment: 413700 },
+      { limit: Infinity, rate: 0.40, adjustment: 911700 },
+    ]
+  },
+  {
+    id: 'preset-114', year: 114, uid: 'system',
+    exemptionBase: 97000, exemptionSenior: 145500, standardDeductionSingle: 131000, standardDeductionMarried: 262000,
+    salaryDeductionUnit: 218000, savingsDeductionLimit: 270000, disabilityDeductionUnit: 218000, educationDeductionUnit: 25000,
+    preschoolDeductionUnit: 120000, longTermCareDeductionUnit: 120000, basicLivingExpenseUnit: 209000,
+    taxBrackets: [
+      { limit: 590000, rate: 0.05, adjustment: 0 },
+      { limit: 1330000, rate: 0.12, adjustment: 41300 },
+      { limit: 2660000, rate: 0.20, adjustment: 147700 },
+      { limit: 4980000, rate: 0.30, adjustment: 413700 },
+      { limit: Infinity, rate: 0.40, adjustment: 911700 },
+    ]
+  },
+  {
+    id: 'preset-115', year: 115, uid: 'system',
+    exemptionBase: 97000, exemptionSenior: 145500, standardDeductionSingle: 131000, standardDeductionMarried: 262000,
+    salaryDeductionUnit: 218000, savingsDeductionLimit: 270000, disabilityDeductionUnit: 218000, educationDeductionUnit: 25000,
+    preschoolDeductionUnit: 120000, longTermCareDeductionUnit: 120000, basicLivingExpenseUnit: 209000,
+    taxBrackets: [
+      { limit: 590000, rate: 0.05, adjustment: 0 },
+      { limit: 1330000, rate: 0.12, adjustment: 41300 },
+      { limit: 2660000, rate: 0.20, adjustment: 147700 },
+      { limit: 4980000, rate: 0.30, adjustment: 413700 },
+      { limit: Infinity, rate: 0.40, adjustment: 911700 },
+    ]
+  }
+];
+
+const DEFAULT_TAX_STANDARDS: Partial<TaxStandard> = PRESET_TAX_STANDARDS[3]; // Default to 113
 
 const INITIAL_TAX_RECORD: Partial<TaxRecord> = {
   year: new Date().getFullYear() - 1912,
@@ -3320,6 +3434,7 @@ const INITIAL_TAX_RECORD: Partial<TaxRecord> = {
   withholding: 0,
   dividendCredits: 0,
   mainlandTaxCredits: 0,
+  itemizedDeduction: 0, // 列舉扣除額
 };
 
 // --- Tax Calculation Display Component ---
@@ -3412,7 +3527,12 @@ const CalculationBreakdown = ({ tax, result, std }: { tax: Partial<TaxRecord>, r
           <tbody>
             <tr>
               <td className="border border-slate-200 p-2">一般扣除額 ({tax.isMarried ? '有配偶' : '單身'})</td>
-              <td className="border border-slate-200 p-2 text-right">${result.generalDeduction.toLocaleString()}</td>
+              <td className="border border-slate-200 p-2 text-right">
+                <div className="flex flex-col items-end">
+                  <span className={result.isItemized ? 'text-slate-400 line-through' : 'font-bold'}>標扣: ${result.standardDeduction.toLocaleString()}</span>
+                  <span className={result.isItemized ? 'font-bold text-emerald-600' : 'text-slate-400'}>列舉: ${(tax.itemizedDeduction || 0).toLocaleString()}</span>
+                </div>
+              </td>
             </tr>
             <tr>
               <td className="border border-slate-200 p-2">儲蓄投資特別扣除額 (限額27萬)</td>
@@ -3549,6 +3669,7 @@ const TaxPage = ({ user }: { user: User }) => {
   const [newStandard, setNewStandard] = useState<Partial<TaxStandard>>({ ...DEFAULT_TAX_STANDARDS, year: new Date().getFullYear() - 1912 });
   const [viewMode, setViewMode] = useState<'records' | 'calculator' | 'standards'>('records');
   const [isAnalyzingStandard, setIsAnalyzingStandard] = useState(false);
+  const [aiScanYear, setAiScanYear] = useState<number>(113);
 
   useEffect(() => {
     const targetUids = getAppTargetUids(user);
@@ -3580,6 +3701,7 @@ const TaxPage = ({ user }: { user: User }) => {
         const result = await analyzeTaxDocument(base64, file.type);
         setNewTax(prev => ({
           ...prev,
+          year: aiScanYear, // Use the selected year from UI
           ...result
         }));
         setViewMode('calculator');
@@ -3670,7 +3792,11 @@ const TaxPage = ({ user }: { user: User }) => {
     const totalExemptions = (record.exemptionsCount || 0) * std.exemptionBase + (record.exemptionsSeniorCount || 0) * std.exemptionSenior;
 
     // 3. 扣除額
-    const generalDeduction = record.isMarried ? std.standardDeductionMarried : std.standardDeductionSingle;
+    const standardDeduction = record.isMarried ? std.standardDeductionMarried : std.standardDeductionSingle;
+    // 使用標扣或列舉較高者
+    const generalDeduction = Math.max(standardDeduction, record.itemizedDeduction || 0);
+    const isItemized = (record.itemizedDeduction || 0) > standardDeduction;
+    
     const savingsDeduction = Math.min(record.interestIncome || 0, std.savingsDeductionLimit);
     const disabilityTotal = (record.disabilityCount || 0) * std.disabilityDeductionUnit;
     const educationTotal = (record.educationCount || 0) * std.educationDeductionUnit;
@@ -3717,6 +3843,8 @@ const TaxPage = ({ user }: { user: User }) => {
       totalIncome,
       totalExemptions,
       generalDeduction,
+      standardDeduction,
+      isItemized,
       savingsDeduction,
       specialDeductionsTotal,
       specialDeductionsTotalPlusGeneral,
@@ -3753,6 +3881,27 @@ const TaxPage = ({ user }: { user: User }) => {
           <div className="flex justify-between items-center">
             <h3 className="font-bold text-slate-800 text-lg">年度稅務參數</h3>
             <div className="flex gap-3">
+              <button 
+                onClick={async () => {
+                  if(!confirm('確定要載入 110-115 年度的預設稅務參數嗎？')) return;
+                  try {
+                    for (const preset of PRESET_TAX_STANDARDS) {
+                      // Check if already exists
+                      const existing = standards.find(s => s.year === preset.year);
+                      if (!existing) {
+                        const { id, ...data } = preset;
+                        await addDoc(collection(db, 'taxStandards'), { ...data, uid: user.uid });
+                      }
+                    }
+                    alert('預設參數載入完成！');
+                  } catch (err) {
+                    alert('載入失敗，請確認網路連線。');
+                  }
+                }}
+                className="text-sm font-bold text-emerald-600 bg-emerald-50 px-4 py-2 rounded-xl hover:bg-emerald-100 transition-all flex items-center gap-2"
+              >
+                <Save size={16} /> 載入 110-115 預設參數
+              </button>
               <label className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl border border-indigo-100 cursor-pointer hover:bg-indigo-100 transition-all font-bold text-sm">
                 <Sparkles size={16} /> {isAnalyzingStandard ? '辨識中...' : 'AI 辨識參數'}
                 <input type="file" className="hidden" accept=".pdf,image/*" onChange={handleStandardUpload} disabled={isAnalyzingStandard} />
@@ -3840,11 +3989,21 @@ const TaxPage = ({ user }: { user: User }) => {
           <div className="flex justify-between items-center">
             <h3 className="font-bold text-slate-800 text-lg">申報歷史紀錄</h3>
             <div className="flex gap-3">
+              <div className="flex items-center gap-2 bg-slate-100 px-3 py-2 rounded-xl text-xs font-bold text-slate-500">
+                <span>辨識年度:</span>
+                <select 
+                  className="bg-transparent border-none p-0 focus:ring-0 text-indigo-600"
+                  value={aiScanYear}
+                  onChange={e => setAiScanYear(Number(e.target.value))}
+                >
+                  {[115, 114, 113, 112, 111, 110].map(y => <option key={y} value={y}>{y}年度</option>)}
+                </select>
+              </div>
               <label className="flex items-center gap-2 bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl border border-emerald-100 cursor-pointer hover:bg-emerald-100 transition-all font-bold text-sm">
                 <Sparkles size={16} /> {isAnalyzing ? '分析中...' : 'AI 辨識匯入'}
                 <input type="file" className="hidden" accept=".pdf,image/*" onChange={handleFileUpload} disabled={isAnalyzing} />
               </label>
-              <button onClick={() => { setNewTax(INITIAL_TAX_RECORD); setIsAdding(true); setViewMode('calculator'); }} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 font-bold text-sm">
+              <button onClick={() => { setNewTax({...INITIAL_TAX_RECORD, year: aiScanYear}); setIsAdding(true); setViewMode('calculator'); }} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 font-bold text-sm">
                 <Calculator size={16} /> 開啟計算器
               </button>
             </div>
@@ -3958,6 +4117,16 @@ const TaxPage = ({ user }: { user: User }) => {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400">列舉扣除額 (如保險、醫療、捐贈等)</label>
+                      <div className="relative">
+                        <input type="number" className={`w-full p-3 bg-slate-50 border rounded-xl ${currentResult.isItemized ? 'border-emerald-500 ring-2 ring-emerald-100' : ''}`} value={newTax.itemizedDeduction} onChange={e => setNewTax({...newTax, itemizedDeduction: Number(e.target.value)})} />
+                        {currentResult.isItemized && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded shadow-sm">已採用</span>}
+                      </div>
+                      <p className="text-[9px] text-slate-400 mt-1">
+                        系統將自動比對標扣 (${currentResult.standardDeduction.toLocaleString()})，並套用較高者。
+                      </p>
+                    </div>
+                    <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400">扣繳稅額 (各項收入已扣)</label>
                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.withholding} onChange={e => setNewTax({...newTax, withholding: Number(e.target.value)})} />
                     </div>
@@ -3992,6 +4161,12 @@ const TaxPage = ({ user }: { user: User }) => {
                   <span className="text-indigo-200">免稅+扣除額合計</span>
                   <span className="font-bold">-${Math.round(currentResult.totalExemptions + currentResult.generalDeduction + currentResult.specialDeductionsTotal + currentResult.bleDifference).toLocaleString()}</span>
                 </div>
+                {currentResult.isItemized && (
+                  <div className="flex justify-between text-[10px] italic -mt-2">
+                    <span className="text-emerald-300 ml-4">採用列舉扣除額模式</span>
+                    <span className="text-emerald-300 font-bold">✓</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-indigo-200">所得課稅額</span>
                   <span className="font-bold font-mono">${Math.round(currentResult.netTaxableIncome).toLocaleString()}</span>
@@ -4296,6 +4471,22 @@ export default function App() {
     alert('API Key 已儲存');
   };
 
+  const handleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error: any) {
+      if (error.code === 'auth/popup-closed-by-user') {
+        console.warn('Login popup closed by user.');
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        console.warn('Login request cancelled.');
+      } else {
+        console.error('Login Error:', error);
+        alert(`登入發生失敗：${error.message}`);
+      }
+    }
+  };
+
   const renderContent = () => {
     if (!user) return null;
     switch (activeTab) {
@@ -4389,15 +4580,20 @@ export default function App() {
               <div className="flex items-center justify-between gap-2 overflow-hidden">
                 <p className="text-sm font-semibold text-slate-700 truncate">{user.email || '訪客'}</p>
                 {user.email !== 'guest@example.com' ? (
-                  <button onClick={() => signOut(auth)} className="text-slate-400 hover:text-rose-500 transition-colors">
+                  <button onClick={() => signOut(auth)} className="text-slate-400 hover:text-rose-500 transition-colors" title="登出">
                     <LogOut size={16} />
                   </button>
                 ) : (
-                  <button onClick={() => signInWithPopup(auth, new GoogleAuthProvider())} className="text-indigo-600 hover:text-indigo-700 transition-colors">
+                  <button onClick={handleLogin} className="text-indigo-600 hover:text-indigo-700 transition-colors" title="登入">
                     <LogIn size={16} />
                   </button>
                 )}
               </div>
+              {user.email === 'guest@example.com' && (
+                <p className="text-[9px] text-slate-400 mt-1 leading-tight">
+                  ※ 登入失敗？請點擊右上的「在新分頁中開啟」
+                </p>
+              )}
             </div>
             <button 
               onClick={() => setIsApiKeyModalOpen(true)}
