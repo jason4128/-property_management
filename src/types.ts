@@ -103,6 +103,7 @@ export interface TaxRecord {
   id: string;
   uid: string;
   year: number; // 稅務年度 (例如 112)
+  parameterYear?: number; // 使用哪一年的參數計算 (選填，預設同 year)
   salaryUser: number;
   salarySpouse: number;
   profitIncome: number;
