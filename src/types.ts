@@ -108,6 +108,7 @@ export interface TaxRecord {
   salarySpouse: number;
   profitIncome: number;
   interestIncome: number;
+  otherIncome: number;
   exemptionsCount: number;
   exemptionsSeniorCount: number;
   isMarried: boolean;

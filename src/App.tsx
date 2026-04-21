@@ -157,6 +157,18 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     targetUids // Add targetUids for debugging
   }
   console.error('Firestore Error: ', JSON.stringify(errInfo));
+  
+  // Provide user feedback
+  const friendlyOp = {
+    [OperationType.CREATE]: '新增',
+    [OperationType.UPDATE]: '更新',
+    [OperationType.DELETE]: '刪除',
+    [OperationType.LIST]: '讀取列表',
+    [OperationType.GET]: '讀取',
+    [OperationType.WRITE]: '寫入'
+  }[operationType];
+  
+  alert(`資料庫動作失敗 (${friendlyOp}): ${errInfo.error}\n\n若持續發生，請檢查權限或登入狀態。`);
   throw new Error(JSON.stringify(errInfo));
 }
 
@@ -309,7 +321,8 @@ const analyzeSalaryInput = async (input: { text?: string, image?: string }) => {
     }
   });
 
-  return JSON.parse(response.text || "[]") as Partial<SalaryRecord>[];
+  const textRes = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+  return JSON.parse(textRes || "[]") as Partial<SalaryRecord>[];
 };
 
 const analyzeTaxDocument = async (fileBase64: string, mimeType: string) => {
@@ -324,6 +337,7 @@ const analyzeTaxDocument = async (fileBase64: string, mimeType: string) => {
   - salarySpouse: 配偶薪資收入總額
   - profitIncome: 營利所得 (包含股利 54C)
   - interestIncome: 利息所得
+  - otherIncome: 其他所得 (如租賃、執行業務、財產交易、競技競賽及機會中獎等)
   - exemptionsCount: 免稅額人數 (本人+配偶+未滿70歲扶養親屬)
   - exemptionsSeniorCount: 70歲以上扶養親屬人數
   - isMarried: 是否有配偶 (布林值 true/false)
@@ -1967,8 +1981,8 @@ ${text}
 }`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-flash-latest",
-        contents: prompt,
+        model: "gemini-3-flash-preview",
+        contents: { parts: [{ text: prompt }] },
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -1983,7 +1997,7 @@ ${text}
         }
       });
       
-      const responseText = response.text;
+      const responseText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
       const result = JSON.parse(responseText || '{}');
       
       if (targetForAi === 'new') {
@@ -2602,15 +2616,17 @@ const StockPage = ({ user }: { user: User }) => {
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: [
-          { text: prompt },
-          {
-            inlineData: {
-              mimeType: "image/jpeg",
-              data: aiImage.split(',')[1]
+        contents: {
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                mimeType: "image/jpeg",
+                data: aiImage.split(',')[1]
+              }
             }
-          }
-        ]
+          ]
+        }
       });
 
       const text = response.text || "";
@@ -3420,6 +3436,7 @@ const INITIAL_TAX_RECORD: Partial<TaxRecord> = {
   salarySpouse: 0,
   profitIncome: 0,
   interestIncome: 0,
+  otherIncome: 0,
   exemptionsCount: 1,
   exemptionsSeniorCount: 0,
   isMarried: false,
@@ -3477,6 +3494,10 @@ const CalculationBreakdown = ({ tax, result, std }: { tax: Partial<TaxRecord>, r
             <tr className="bg-slate-50 font-black">
               <td className="border border-slate-200 p-2 text-center" colSpan={3}>合 計</td>
               <td className="border border-slate-200 p-2 text-right text-indigo-600">${((result.salaryUserAfterDeduction || 0) + (result.salarySpouseAfterDeduction || 0)).toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td className="border border-slate-200 p-2 font-medium" colSpan={3}>其他所得 (租賃/執業/中獎等)</td>
+              <td className="border border-slate-200 p-2 text-right font-bold">${(tax.otherIncome || 0).toLocaleString()}</td>
             </tr>
           </tbody>
         </table>
@@ -3608,12 +3629,24 @@ const CalculationBreakdown = ({ tax, result, std }: { tax: Partial<TaxRecord>, r
         <div className="space-y-4">
           <div className="bg-white p-5 rounded-2xl border border-indigo-100 space-y-4 shadow-sm">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">第一階段：課稅所得額</p>
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="bg-slate-50 px-3 py-2 rounded-xl">總所得 ${result.totalIncome.toLocaleString()}</span>
+            <div className="flex flex-wrap items-center gap-2 text-sm leading-relaxed">
+              <span className="bg-white px-3 py-2 rounded-xl border border-indigo-50">本薪所得 ${Math.round((result.salaryUserAfterDeduction || 0) + (result.salarySpouseAfterDeduction || 0)).toLocaleString()}</span>
+              <span className="text-slate-400 font-bold">＋</span>
+              <span className="bg-white px-3 py-2 rounded-xl border border-indigo-50">營利所得 ${Math.round(tax.profitIncome || 0).toLocaleString()}</span>
+              <span className="text-slate-400 font-bold">＋</span>
+              <span className="bg-white px-3 py-2 rounded-xl border border-indigo-50">利息所得 ${Math.round(tax.interestIncome || 0).toLocaleString()}</span>
+              <span className="text-slate-400 font-bold">＋</span>
+              <span className="bg-white px-3 py-2 rounded-xl border border-indigo-50">其他所得 ${Math.round(tax.otherIncome || 0).toLocaleString()}</span>
+              <span className="text-slate-400 font-bold">＝</span>
+              <span className="bg-slate-50 px-3 py-2 rounded-xl border border-indigo-100">所得總額 ${result.totalIncome.toLocaleString()}</span>
+              
+              <div className="w-full h-0 border-t border-dashed border-slate-200 my-1"></div>
+              
+              <span className="bg-slate-50 px-3 py-2 rounded-xl">所得總額 ${result.totalIncome.toLocaleString()}</span>
               <span className="text-slate-400 font-bold">－</span>
               <span className="bg-slate-50 px-3 py-2 rounded-xl">免稅額 ${result.totalExemptions.toLocaleString()}</span>
               <span className="text-slate-400 font-bold">－</span>
-              <span className="bg-slate-50 px-3 py-2 rounded-xl">扣除額及差額 ${(result.specialDeductionsTotalPlusGeneral + result.bleDifference).toLocaleString()}</span>
+              <span className="bg-slate-50 px-3 py-2 rounded-xl">扣除額及差額 ${(result.specialDeductionsTotalPlusGeneral + (result.bleDifference || 0)).toLocaleString()}</span>
               {tax.startupInvestmentDeduction && (
                  <>
                    <span className="text-slate-400 font-bold">－</span>
@@ -3687,11 +3720,32 @@ const TaxPage = ({ user }: { user: User }) => {
     if (!file) return;
     setIsAnalyzing(true);
     try {
-      // AI Logic here (omitted for brevity but normally would call a service)
-      alert('AI 辨識完成（模擬）');
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        try {
+          const result = await analyzeTaxDocument(base64, file.type);
+          if (result) {
+            // Use the selected year if provided, otherwise use the one detected by AI
+            const finalYear = aiScanYear || (result.year || 113);
+            setNewTax({
+              ...newTax,
+              ...result,
+              year: finalYear,
+              uid: user.uid
+            });
+            setIsAdding(true);
+          }
+        } catch (err: any) {
+          console.error("Tax document AI failed:", err);
+          alert(`辨識失敗: ${err.message}`);
+        } finally {
+          setIsAnalyzing(false);
+        }
+      };
+      reader.readAsDataURL(file);
     } catch (err) {
-      alert('AI 辨識失敗');
-    } finally {
+      alert('檔案讀取失敗');
       setIsAnalyzing(false);
     }
   };
@@ -3701,11 +3755,29 @@ const TaxPage = ({ user }: { user: User }) => {
     if (!file) return;
     setIsAnalyzingStandard(true);
     try {
-      // AI Logic for standards
-      alert('AI 辨識年度參數完成（模擬）');
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        try {
+          const result = await analyzeTaxStandards(base64, file.type);
+          if (result) {
+            setNewStandard({
+              ...newStandard,
+              ...result,
+              uid: user.uid
+            });
+            setIsAddingStandard(true);
+          }
+        } catch (err: any) {
+          console.error("Tax standard AI failed:", err);
+          alert(`辨識失敗: ${err.message}`);
+        } finally {
+          setIsAnalyzingStandard(false);
+        }
+      };
+      reader.readAsDataURL(file);
     } catch (err) {
-      alert('AI 辨識失敗');
-    } finally {
+      alert('檔案讀取失敗');
       setIsAnalyzingStandard(false);
     }
   };
@@ -3725,12 +3797,58 @@ const TaxPage = ({ user }: { user: User }) => {
 
   const handleSaveTax = async () => {
     try {
-      await addDoc(collection(db, 'taxes'), { ...newTax, uid: user.uid, createdAt: new Date() });
+      if (newTax.id) {
+        await updateDoc(doc(db, 'taxes', newTax.id), { ...newTax, updatedAt: new Date() });
+        alert('稅務紀錄已更新');
+      } else {
+        await addDoc(collection(db, 'taxes'), { ...newTax, uid: user.uid, createdAt: new Date() });
+        alert('稅務紀錄已儲存');
+      }
       setIsAdding(false);
       setViewMode('records');
-      alert('稅務紀錄已儲存');
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'taxes');
+      handleFirestoreError(err, newTax.id ? OperationType.UPDATE : OperationType.CREATE, 'taxes');
+    }
+  };
+
+  const handleDeleteTax = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    console.log('Delete button clicked for ID:', id);
+    if (!id) {
+      window.alert('錯誤：無法獲取紀錄 ID');
+      return;
+    }
+    
+    if (window.confirm(`確定要永久刪除此年度稅務紀錄嗎？\n(ID: ${id})`)) {
+      try {
+        console.log(`正在執行刪除動作, path: taxes/${id}`);
+        await deleteDoc(doc(db, 'taxes', id));
+        console.log('刪除成功');
+        window.alert('紀錄已成功刪除');
+      } catch (err) {
+        console.error('刪除稅務紀錄失敗:', err);
+        handleFirestoreError(err, OperationType.DELETE, 'taxes');
+      }
+    } else {
+      console.log('使用者取消刪除');
+    }
+  };
+
+  const handleDeleteStandard = async (id: string) => {
+    if (!id) {
+      window.alert('錯誤：無法獲取參數 ID');
+      return;
+    }
+    
+    if (window.confirm(`確定要刪除此年度稅務參數嗎？\n(這將影響該年度的計算準確性)`)) {
+      try {
+        console.log(`正在刪除稅務參數: ${id}`);
+        await deleteDoc(doc(db, 'taxStandards', id));
+        window.alert('年度參數已刪除');
+      } catch (err) {
+        console.error('刪除稅務參數失敗:', err);
+        handleFirestoreError(err, OperationType.DELETE, 'taxStandards');
+      }
     }
   };
 
@@ -3744,8 +3862,8 @@ const TaxPage = ({ user }: { user: User }) => {
     const salarySpouseDeduction = record.isMarried ? Math.min(record.salarySpouse || 0, std.salaryDeductionUnit) : 0;
     const salarySpouseAfterDeduction = record.isMarried ? (record.salarySpouse || 0) - salarySpouseDeduction : 0;
 
-    // 2. 總所得 (薪資所得 + 營利所得 + 利息所得)
-    const totalIncome = salaryUserAfterDeduction + salarySpouseAfterDeduction + (record.profitIncome || 0) + (record.interestIncome || 0);
+    // 2. 總所得 (薪資所得 + 營利所得 + 利息所得 + 其他所得)
+    const totalIncome = salaryUserAfterDeduction + salarySpouseAfterDeduction + (record.profitIncome || 0) + (record.interestIncome || 0) + (record.otherIncome || 0);
 
     // 3. 免稅額
     const totalExemptions = (record.exemptionsCount || 0) * std.exemptionBase + (record.exemptionsSeniorCount || 0) * std.exemptionSenior;
@@ -3784,11 +3902,27 @@ const TaxPage = ({ user }: { user: User }) => {
     const finalTaxDue = taxPayable - (record.investmentCredits || 0) - (record.homePurchaseCredits || 0) - (record.withholding || 0) - divCredit - (record.mainlandTaxCredits || 0);
 
     return {
-      salaryUserDeduction, salaryUserAfterDeduction, salarySpouseDeduction, salarySpouseAfterDeduction,
-      totalIncome, totalExemptions, generalDeduction, standardDeduction, isItemized,
-      savingsDeduction, specialDeductionsTotal, specialDeductionsTotalPlusGeneral,
-      headcount, bleComparison, bleDifference, netTaxableIncome, bracket, taxPayable,
-      divCreditRaw, divCredit, finalTaxDue
+      salaryUserDeduction: Math.round(salaryUserDeduction), 
+      salaryUserAfterDeduction: Math.round(salaryUserAfterDeduction), 
+      salarySpouseDeduction: Math.round(salarySpouseDeduction), 
+      salarySpouseAfterDeduction: Math.round(salarySpouseAfterDeduction),
+      totalIncome: Math.round(totalIncome), 
+      totalExemptions: Math.round(totalExemptions), 
+      generalDeduction: Math.round(generalDeduction), 
+      standardDeduction: Math.round(standardDeduction), 
+      isItemized,
+      savingsDeduction: Math.round(savingsDeduction),
+      specialDeductionsTotal: Math.round(specialDeductionsTotal),
+      specialDeductionsTotalPlusGeneral: Math.round(specialDeductionsTotalPlusGeneral),
+      headcount,
+      bleComparison: Math.round(bleComparison),
+      bleDifference: Math.round(bleDifference),
+      netTaxableIncome: Math.round(netTaxableIncome),
+      bracket,
+      taxPayable: Math.round(taxPayable),
+      divCreditRaw: Math.round(divCreditRaw),
+      divCredit: Math.round(divCredit),
+      finalTaxDue: Math.round(finalTaxDue)
     };
   };
 
@@ -3851,7 +3985,7 @@ const TaxPage = ({ user }: { user: User }) => {
                     <button onClick={() => { setNewStandard(std); setIsAddingStandard(true); }} className="p-2 text-slate-400 hover:text-indigo-600">
                       <Edit2 size={18} />
                     </button>
-                    <button onClick={() => { if(confirm('確定刪除此年度參數？')) deleteDoc(doc(db, 'taxStandards', std.id)); }} className="p-2 text-slate-300 hover:text-rose-500">
+                    <button onClick={() => handleDeleteStandard(std.id)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="刪除年度參數">
                       <Trash2 size={18} />
                     </button>
                   </div>
@@ -4063,9 +4197,12 @@ const TaxPage = ({ user }: { user: User }) => {
             {taxes.map(tax => {
               const res = calculateResult(tax);
               return (
-                <div key={tax.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between group hover:border-indigo-200 transition-all cursor-pointer" onClick={() => { setNewTax(tax); setIsAdding(true); setViewMode('calculator'); }}>
-                  <div className="flex items-center gap-6">
-                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-lg">
+                <div key={tax.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between group hover:border-indigo-200 transition-all overflow-hidden">
+                  <div 
+                    className="flex-1 p-6 flex items-center gap-6 cursor-pointer hover:bg-slate-50 transition-colors" 
+                    onClick={() => { setNewTax(tax); setIsAdding(true); setViewMode('calculator'); }}
+                  >
+                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-lg group-hover:bg-indigo-100 transition-colors">
                       {tax.year}
                     </div>
                     <div>
@@ -4073,14 +4210,22 @@ const TaxPage = ({ user }: { user: User }) => {
                       <p className="text-xs text-slate-400">總所得: ${res.totalIncome.toLocaleString()} / 課稅所得: ${res.netTaxableIncome.toLocaleString()}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-12">
+                  
+                  <div className="flex items-center gap-8 pr-6">
                     <div className="text-right">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">應補(退)稅額</p>
                       <p className={`text-xl font-black ${res.finalTaxDue > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
                         {res.finalTaxDue > 0 ? '+' : ''}${Math.round(res.finalTaxDue).toLocaleString()}
                       </p>
                     </div>
-                    <button onClick={(e) => { e.stopPropagation(); if(confirm('確定刪除此稅務紀錄？')) deleteDoc(doc(db, 'taxes', tax.id)); }} className="p-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={18} /></button>
+                    <button 
+                      type="button"
+                      onClick={(e) => handleDeleteTax(tax.id, e)} 
+                      className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                      title="刪除紀錄"
+                    >
+                      <Trash2 size={20} />
+                    </button>
                   </div>
                 </div>
               );
@@ -4139,6 +4284,10 @@ const TaxPage = ({ user }: { user: User }) => {
                     <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400">利息所得 (金融機構)</label>
                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.interestIncome} onChange={e => setNewTax({...newTax, interestIncome: Number(e.target.value)})} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400">其他所得 (租賃/執業/中獎等)</label>
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.otherIncome} onChange={e => setNewTax({...newTax, otherIncome: Number(e.target.value)})} />
                     </div>
                   </div>
                 </section>
