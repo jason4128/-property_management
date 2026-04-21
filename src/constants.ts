@@ -4,11 +4,13 @@
  */
 
 export const TABS = [
+  { id: 'dashboard', label: '總資產概況', icon: 'LayoutDashboard' },
   { id: 'salary', label: '薪資記錄', icon: 'Wallet' },
   { id: 'credit-cards', label: '信用卡', icon: 'CreditCard' },
-  { id: 'banks', label: '各銀行', icon: 'Building2' },
+  { id: 'banks', label: '銀行存款', icon: 'Building2' },
   { id: 'stocks', label: '股票/基金', icon: 'BarChart3' },
   { id: 'budget', label: '年度支出預算', icon: 'PieChart' },
+  { id: 'tax', label: '所得稅管理', icon: 'FileText' },
 ] as const;
 
 export type TabId = typeof TABS[number]['id'];

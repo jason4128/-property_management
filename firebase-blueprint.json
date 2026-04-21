@@ -105,6 +105,68 @@
         "professionalAllowance": { "type": "number", "description": "Expected professional allowance for this year" }
       },
       "required": ["uid", "year", "basicPay", "professionalAllowance"]
+    },
+    "TaxRecord": {
+      "title": "TaxRecord",
+      "description": "A detailed record of annual income tax filings and calculations",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user ID of the owner" },
+        "year": { "type": "number", "description": "Tax year (ROC)" },
+        "salaryUser": { "type": "number", "description": "Salary income of the user" },
+        "salarySpouse": { "type": "number", "description": "Salary income of the spouse" },
+        "profitIncome": { "type": "number", "description": "Profit income (including 54C dividends)" },
+        "interestIncome": { "type": "number", "description": "Interest income" },
+        "exemptionsCount": { "type": "number", "description": "Count of normal exemptions (taxpayer, spouse, dependents < 70)" },
+        "exemptionsSeniorCount": { "type": "number", "description": "Count of senior exemptions (dependents >= 70)" },
+        "isMarried": { "type": "boolean", "description": "Whether the filing is for a married couple" },
+        "propertyLossDeduction": { "type": "number", "description": "Property transaction loss deduction" },
+        "savingsDeduction": { "type": "number", "description": "Savings and investment special deduction" },
+        "disabilityCount": { "type": "number", "description": "Count of individuals for disability deduction" },
+        "educationCount": { "type": "number", "description": "Count of individuals for education tuition deduction" },
+        "preschoolCount": { "type": "number", "description": "Count of individuals for preschool deduction" },
+        "longTermCareCount": { "type": "number", "description": "Count of individuals for long-term care deduction" },
+        "startupInvestmentDeduction": { "type": "number", "description": "Investment in startup companies deduction" },
+        "investmentCredits": { "type": "number", "description": "Investment tax credits" },
+        "homePurchaseCredits": { "type": "number", "description": "Home purchase tax credits" },
+        "withholding": { "type": "number", "description": "Total withholding tax" },
+        "dividendCredits": { "type": "number", "description": "Dividend tax credits (8.5% capped at 80k)" },
+        "mainlandTaxCredits": { "type": "number", "description": "Tax credits for income from Mainland China" },
+        "note": { "type": "string", "description": "Optional note" }
+      },
+      "required": ["uid", "year"]
+    },
+    "TaxStandard": {
+      "title": "TaxStandard",
+      "description": "Yearly tax deduction and exemption standards and brackets",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user ID of the owner" },
+        "year": { "type": "number", "description": "ROC year (e.g., 112)" },
+        "exemptionBase": { "type": "number", "description": "Base exemption per person" },
+        "exemptionSenior": { "type": "number", "description": "Senior exemption per person (70+)" },
+        "standardDeductionSingle": { "type": "number", "description": "Standard deduction for single filers" },
+        "standardDeductionMarried": { "type": "number", "description": "Standard deduction for married filers" },
+        "salaryDeductionUnit": { "type": "number", "description": "Special deduction for salary income" },
+        "savingsDeductionLimit": { "type": "number", "description": "Maximum savings special deduction" },
+        "disabilityDeductionUnit": { "type": "number", "description": "Unit for disability special deduction" },
+        "educationDeductionUnit": { "type": "number", "description": "Unit for education tuition deduction" },
+        "preschoolDeductionUnit": { "type": "number", "description": "Unit for preschool deduction" },
+        "longTermCareDeductionUnit": { "type": "number", "description": "Unit for long-term care deduction" },
+        "basicLivingExpenseUnit": { "type": "number", "description": "Basic living expense per person" },
+        "taxBrackets": { 
+          "type": "array", 
+          "items": {
+            "type": "object",
+            "properties": {
+              "limit": { "type": "number", "description": "Upper limit of the bracket taxable income" },
+              "rate": { "type": "number", "description": "Tax rate for this bracket (decimal)" },
+              "adjustment": { "type": "number", "description": "Progressive difference (adjustment amount)" }
+            }
+          }
+        }
+      },
+      "required": ["uid", "year"]
     }
   },
   "firestore": {
@@ -135,6 +197,14 @@
     "/budgets/{budgetId}": {
       "schema": "Budget",
       "description": "Collection of budgets"
+    },
+    "/taxes/{taxId}": {
+      "schema": "TaxRecord",
+      "description": "Collection of income tax records"
+    },
+    "/taxStandards/{standardId}": {
+      "schema": "TaxStandard",
+      "description": "Collection of yearly tax standards"
     }
   }
 }

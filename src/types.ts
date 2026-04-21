@@ -57,7 +57,13 @@ export interface BankAccount {
   name: string;
   bankName: string;
   balance: number;
-  type: 'savings' | 'checking' | 'fixed';
+  type: 'savings' | 'checking' | 'fixed' | 'loan' | 'high-yield';
+  interestRate?: number; // 年度利率 %
+  loanTotal?: number; // 貸款總額
+  loanRemaining?: number; // 剩餘貸款
+  monthlyPayment?: number; // 每期還款金額
+  balanceLimit?: number; // 活存上限
+  remark?: string; // 備註 (優惠條件)
 }
 
 export interface Fund {
@@ -66,6 +72,60 @@ export interface Fund {
   cost: number;
   currentValue: number;
   units: number;
+  source?: string;
+}
+
+export interface TaxBracket {
+  limit: number;
+  rate: number;
+  adjustment: number;
+}
+
+export interface TaxStandard {
+  id: string;
+  uid: string;
+  year: number;
+  exemptionBase: number;
+  exemptionSenior: number;
+  standardDeductionSingle: number;
+  standardDeductionMarried: number;
+  salaryDeductionUnit: number;
+  savingsDeductionLimit: number;
+  disabilityDeductionUnit: number;
+  educationDeductionUnit: number;
+  preschoolDeductionUnit: number;
+  longTermCareDeductionUnit: number;
+  basicLivingExpenseUnit: number;
+  taxBrackets: TaxBracket[];
+}
+
+export interface TaxRecord {
+  id: string;
+  uid: string;
+  year: number; // 稅務年度 (例如 112)
+  salaryUser: number;
+  salarySpouse: number;
+  profitIncome: number;
+  interestIncome: number;
+  exemptionsCount: number;
+  exemptionsSeniorCount: number;
+  isMarried: boolean;
+  propertyLossDeduction: number;
+  savingsDeduction: number;
+  disabilityCount: number;
+  educationCount: number;
+  preschoolCount: number;
+  longTermCareCount: number;
+  startupInvestmentDeduction: number;
+  investmentCredits: number;
+  homePurchaseCredits: number;
+  withholding: number;
+  dividendCredits: number;
+  mainlandTaxCredits: number;
+  note?: string;
+  // Computed fields (often stored for quick access or history)
+  totalIncome?: number;
+  taxDue?: number;
 }
 
 export interface Stock {

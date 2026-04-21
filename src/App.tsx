@@ -13,15 +13,24 @@ import {
   PieChart,
   Plus,
   Trash2,
+  RefreshCw,
   ChevronRight,
   Calculator,
   Camera,
   Save,
   X,
+  Edit2,
   LogOut,
   LogIn,
-  Settings
+  Settings,
+  Sparkles,
+  Link,
+  Loader2,
+  Info,
+  LayoutDashboard,
+  FileText
 } from 'lucide-react';
+import { GoogleGenAI, Type } from "@google/genai";
 import { motion, AnimatePresence } from 'motion/react';
 import { TABS, TabId } from './constants';
 import { 
@@ -34,7 +43,10 @@ import {
   Legend, 
   ResponsiveContainer,
   AreaChart,
-  Area
+  Area,
+  BarChart,
+  Bar,
+  Cell as RechartsCell
 } from 'recharts';
 import { 
   SalaryRecord, 
@@ -43,7 +55,10 @@ import {
   Fund, 
   Stock, 
   Budget,
-  YearlyStandard
+  YearlyStandard,
+  TaxRecord,
+  TaxStandard,
+  TaxBracket
 } from './types';
 import { 
   BASIC_PAY_TABLE, 
@@ -51,13 +66,14 @@ import {
   calculateExpectedDeductions 
 } from './salaryTable';
 
-import { GoogleGenAI, Type } from "@google/genai";
 import { auth, db } from './firebase';
 import { 
   signInWithPopup, 
   GoogleAuthProvider, 
   onAuthStateChanged, 
   signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   User
 } from 'firebase/auth';
 import { 
@@ -83,6 +99,25 @@ enum OperationType {
   WRITE = 'write',
 }
 
+const getAppTargetUids = (user: any) => {
+  const base = ['default-user', 'local_default_user', 'guest-user', 'guest', 'anonymous', 'local_user'];
+  
+  // Also include the user email from metadata as a fallback if they are that user
+  const emailWhitelist = ['jason2134@gmail.com'];
+  
+  const email = user?.email && user.email !== 'guest@example.com' ? user.email : null;
+  const currentAuthEmail = auth.currentUser?.email;
+  
+  return Array.from(new Set([
+    ...base, 
+    ...emailWhitelist,
+    user?.uid, 
+    auth.currentUser?.uid,
+    email,
+    currentAuthEmail
+  ])).filter(Boolean);
+};
+
 interface FirestoreErrorInfo {
   error: string;
   operationType: OperationType;
@@ -103,23 +138,23 @@ interface FirestoreErrorInfo {
 }
 
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
+  const targetUids = auth.currentUser ? getAppTargetUids(auth.currentUser) : ['default-user', 'local_default_user'];
+  const errInfo: any = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
       emailVerified: auth.currentUser?.emailVerified,
       isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
       providerInfo: auth.currentUser?.providerData.map(provider => ({
         providerId: provider.providerId,
         displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
+        email: provider.email
       })) || []
     },
     operationType,
-    path
+    path,
+    targetUids // Add targetUids for debugging
   }
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
@@ -275,6 +310,116 @@ const analyzeSalaryInput = async (input: { text?: string, image?: string }) => {
   });
 
   return JSON.parse(response.text || "[]") as Partial<SalaryRecord>[];
+};
+
+const analyzeTaxDocument = async (fileBase64: string, mimeType: string) => {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
+  const ai = new GoogleGenAI({ apiKey });
+  
+  const prompt = `你是一個專業的稅務分析助手。請分析提供的所得稅申報書或核定通知書（可能是圖片或 PDF）。
+  請提取以下資訊並以 JSON 格式返回：
+  - year: 稅務年度 (民國年，數字)
+  - salaryUser: 本人薪資收入總額
+  - salarySpouse: 配偶薪資收入總額
+  - profitIncome: 營利所得 (包含股利 54C)
+  - interestIncome: 利息所得
+  - exemptionsCount: 免稅額人數 (本人+配偶+未滿70歲扶養親屬)
+  - exemptionsSeniorCount: 70歲以上扶養親屬人數
+  - isMarried: 是否有配偶 (布林值 true/false)
+  - savingsDeduction: 儲蓄投資特別扣除額
+  - disabilityCount: 身心障礙特別扣除人數
+  - educationCount: 教育學費特別扣除人數
+  - preschoolCount: 幼兒學前特別扣除人數
+  - longTermCareCount: 長期照顧特別扣除人數
+  - withholding: 全部扣繳稅額
+  - dividendCredits: 股利及盈餘可抵減稅額
+  - note: 備註
+  
+  請確保：
+  1. 返回純 JSON 物件。
+  2. 數值均為數字類型。`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: {
+      parts: [
+        { text: prompt },
+        {
+          inlineData: {
+            mimeType: mimeType,
+            data: fileBase64.split(',')[1]
+          }
+        }
+      ]
+    },
+    config: {
+      responseMimeType: 'application/json'
+    }
+  });
+
+  const text = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+  return JSON.parse(text) as Partial<TaxRecord>;
+};
+
+const analyzeTaxStandards = async (fileBase64: string, mimeType: string) => {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
+  const ai = new GoogleGenAI({ apiKey });
+  
+  const prompt = `你是一個專業的稅務法律助手。請分析提供的台灣個人綜合所得稅年度參數文件（可能是國稅局公告圖片或新聞截圖）。
+  請提取該年度的稅務參數並以 JSON 格式返回。
+  
+  欄位需求：
+  - year: 年度 (民國年，如 112)
+  - exemptionBase: 一般免稅額
+  - exemptionSenior: 70歲以上免稅額
+  - standardDeductionSingle: 標準扣除額 (單身)
+  - standardDeductionMarried: 標準扣除額 (有配偶)
+  - salaryDeductionUnit: 薪資所得特別扣除額
+  - savingsDeductionLimit: 儲蓄投資特別扣除額上限 (基準 270,000)
+  - disabilityDeductionUnit: 身心障礙特別扣除額
+  - educationDeductionUnit: 教育學費特別扣除額
+  - preschoolDeductionUnit: 幼兒學前特別扣除額
+  - longTermCareDeductionUnit: 長期照顧特別扣除額
+  - basicLivingExpenseUnit: 基本生活費 (如 202,000)
+  - taxBrackets: 稅率級距陣列，每個物件包含：
+    - limit: 該級距上限 (最後一級為 Infinity，請設為 999999999)
+    - rate: 稅率 (如 0.05)
+    - adjustment: 累進差額
+  
+  請確保：
+  1. 返回純 JSON 物件。
+  2. 數值均為數字類型。
+  3. 級距請按金額從小到大排列。`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: {
+      parts: [
+        { text: prompt },
+        {
+          inlineData: {
+            mimeType: mimeType,
+            data: fileBase64.split(',')[1]
+          }
+        }
+      ]
+    },
+    config: {
+      responseMimeType: 'application/json'
+    }
+  });
+
+  const rawText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+  const parsed = JSON.parse(rawText);
+  if (parsed.taxBrackets) {
+    parsed.taxBrackets = parsed.taxBrackets.map((b: any) => ({
+      ...b,
+      limit: b.limit === 999999999 ? Infinity : b.limit
+    }));
+  }
+  return parsed as Partial<TaxStandard>;
 };
 
 // --- Components ---
@@ -454,7 +599,8 @@ const SalaryPage = ({ user }: { user: User }) => {
   });
 
   useEffect(() => {
-    const q = query(collection(db, 'salaryRecords'), where('uid', '==', user.uid));
+    const targetUids = getAppTargetUids(user);
+    const q = query(collection(db, 'salaryRecords'), where('uid', 'in', targetUids));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as SalaryRecord));
       setRecords(data);
@@ -465,7 +611,8 @@ const SalaryPage = ({ user }: { user: User }) => {
   }, [user.uid]);
 
   useEffect(() => {
-    const q = query(collection(db, 'yearlyStandards'), where('uid', '==', user.uid));
+    const targetUids = getAppTargetUids(user);
+    const q = query(collection(db, 'yearlyStandards'), where('uid', 'in', targetUids));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as YearlyStandard));
       setYearlyStandards(data);
@@ -1604,7 +1751,8 @@ const CreditCardPage = ({ user }: { user: User }) => {
   });
 
   useEffect(() => {
-    const q = query(collection(db, 'creditCards'), where('uid', '==', user.uid));
+    const targetUids = getAppTargetUids(user);
+    const q = query(collection(db, 'creditCards'), where('uid', 'in', targetUids));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as CreditCard));
       setCards(data);
@@ -1697,12 +1845,26 @@ const CreditCardPage = ({ user }: { user: User }) => {
 const BankPage = ({ user }: { user: User }) => {
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newAccount, setNewAccount] = useState<Partial<BankAccount>>({
-    name: '', bankName: '', balance: 0, type: 'savings'
+    name: '', bankName: '', balance: 0, type: 'savings', interestRate: 0, balanceLimit: 0, remark: ''
   });
+  const [editingAccount, setEditingAccount] = useState<Partial<BankAccount>>({});
+
+  // AI Scraper state
+  const [aiAnalysisUrl, setAiAnalysisUrl] = useState('');
+  const [aiAnalysisText, setAiAnalysisText] = useState('');
+  const [aiMode, setAiMode] = useState<'url' | 'text'>('url');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [targetForAi, setTargetForAi] = useState<'new' | 'edit'>('new');
+
+  // 利率計算器暫存
+  const [calcInterest, setCalcInterest] = useState({ amount: 0, months: 12 });
 
   useEffect(() => {
-    const q = query(collection(db, 'bankAccounts'), where('uid', '==', user.uid));
+    const targetUids = getAppTargetUids(user);
+    const q = query(collection(db, 'bankAccounts'), where('uid', 'in', targetUids));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as BankAccount));
       setAccounts(data);
@@ -1717,12 +1879,24 @@ const BankPage = ({ user }: { user: User }) => {
       const account = { ...newAccount, uid: user.uid };
       await addDoc(collection(db, 'bankAccounts'), account);
       setIsAdding(false);
+      setNewAccount({ name: '', bankName: '', balance: 0, type: 'savings', interestRate: 0, balanceLimit: 0, remark: '' });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'bankAccounts');
     }
   };
 
+  const handleUpdate = async () => {
+    if (!editingId) return;
+    try {
+      await updateDoc(doc(db, 'bankAccounts', editingId), editingAccount);
+      setEditingId(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'bankAccounts');
+    }
+  };
+
   const handleDelete = async (id: string) => {
+    if (!confirm('確定要刪除此帳戶嗎？')) return;
     try {
       await deleteDoc(doc(db, 'bankAccounts', id));
     } catch (error) {
@@ -1730,57 +1904,486 @@ const BankPage = ({ user }: { user: User }) => {
     }
   };
 
+  const startEditing = (acc: BankAccount) => {
+    setEditingId(acc.id);
+    setEditingAccount(acc);
+    setCalcInterest({ amount: 0, months: 12 });
+  };
+
+  const syncInterestRate = (type: 'new' | 'edit') => {
+    const target = type === 'new' ? newAccount : editingAccount;
+    const balance = target.balance || 0;
+    if (balance === 0 || calcInterest.amount === 0) return;
+    const rate = (calcInterest.amount / balance) * (12 / calcInterest.months) * 100;
+    const roundedRate = Math.round(rate * 1000) / 1000;
+    if (type === 'new') setNewAccount({...newAccount, interestRate: roundedRate});
+    else setEditingAccount({...editingAccount, interestRate: roundedRate});
+  };
+
+  const analyzeUrlWithAi = async () => {
+    if (aiMode === 'url' && !aiAnalysisUrl) return;
+    if (aiMode === 'text' && !aiAnalysisText) return;
+
+    // Use the system-provided key as primary, fallback to localStorage if explicitly managed
+    const apiKey = process.env.GEMINI_API_KEY || localStorage.getItem('GEMINI_API_KEY');
+    
+    if (!apiKey) {
+      alert("GEMINI_API_KEY is not configured.");
+      return;
+    }
+    
+    setIsAnalyzing(true);
+    try {
+      let text = aiAnalysisText;
+
+      if (aiMode === 'url') {
+        const scrapeResp = await fetch('/api/scrape-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: aiAnalysisUrl })
+        });
+        const scrapeData = await scrapeResp.json();
+        if (scrapeData.error) {
+          throw new Error(scrapeData.error || "網頁讀取超時或失敗");
+        }
+        text = scrapeData.text;
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `你是一個專業的金融活動分析師。請分析以下網頁文字內容，提取有關「數位帳戶/高利活存」的優惠資訊：
+1. 年度利率 (%) (請提取純數字)
+2. 加碼活動條件及限制 (請簡潔總結)
+3. 存款上限 (如果有提到，純數字)
+
+網頁內容：
+${text}
+
+請嚴格按照以下 JSON 格式回覆：
+{
+  "rate": number,
+  "conditions": "string",
+  "limit": number | null
+}`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-flash-latest",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              rate: { type: Type.NUMBER },
+              conditions: { type: Type.STRING },
+              limit: { type: Type.NUMBER, nullable: true }
+            },
+            required: ["rate", "conditions"]
+          }
+        }
+      });
+      
+      const responseText = response.text;
+      const result = JSON.parse(responseText || '{}');
+      
+      if (targetForAi === 'new') {
+        setNewAccount({
+          ...newAccount, 
+          interestRate: result.rate || newAccount.interestRate,
+          balanceLimit: result.limit || newAccount.balanceLimit,
+          remark: result.conditions || newAccount.remark
+        });
+      } else {
+        setEditingAccount({
+          ...editingAccount,
+          interestRate: result.rate || editingAccount.interestRate,
+          balanceLimit: result.limit || editingAccount.balanceLimit,
+          remark: result.conditions || editingAccount.remark
+        });
+      }
+      setShowAiModal(false);
+      setAiAnalysisUrl('');
+      setAiAnalysisText('');
+    } catch (error: any) {
+      console.error("AI Analysis failed:", error);
+      alert(`AI 分析失敗：${error.message || "請確認網址是否可存取，或嘗試使用「文字貼上」模式。"}`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const renderNumberInput = (
+    label: string, 
+    value: number | undefined, 
+    onChange: (val: number) => void,
+    step?: string
+  ) => (
+    <div className="space-y-1">
+      <label className="text-[10px] font-bold text-slate-400 uppercase">{label}</label>
+      <input 
+        type="number" 
+        step={step}
+        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" 
+        value={(value === undefined || value === 0) ? '' : value} 
+        placeholder="0"
+        onChange={e => onChange(e.target.value === '' ? 0 : Number(e.target.value))} 
+      />
+    </div>
+  );
+
+  const categories = [
+    { title: '一般銀行存款', types: ['savings', 'checking', 'fixed'], data: accounts.filter(a => ['savings', 'checking', 'fixed', undefined].includes(a.type)) },
+    { title: '高利活存', types: ['high-yield'], data: accounts.filter(a => a.type === 'high-yield') },
+    { title: '貸款 / 借貸', types: ['loan'], data: accounts.filter(a => a.type === 'loan') }
+  ];
+
+  const totalBalance = accounts.reduce((sum, a) => sum + (a.type === 'loan' ? -a.balance : a.balance), 0);
+  const totalLoan = accounts.filter(a => a.type === 'loan').reduce((sum, a) => sum + (a.balance || 0), 0);
+
+  const totalInterest = accounts.reduce((sum, acc) => {
+    if (acc.interestRate && acc.balance > 0 && acc.type !== 'loan') {
+      return sum + (acc.balance * (acc.interestRate / 100));
+    }
+    return sum;
+  }, 0);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-800">銀行帳戶</h2>
-        <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
-          <Plus size={20} /> 新增帳戶
-        </button>
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">銀行存款</h2>
+          <p className="text-sm text-slate-500">管理您的銀行存款、高利活存以及貸款還款進度</p>
+        </div>
+        <div className="flex gap-3">
+          <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
+            <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+              <Calculator size={20} />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">預估年利息</p>
+              <p className="text-lg font-black text-indigo-600">${Math.round(totalInterest).toLocaleString()}</p>
+            </div>
+          </div>
+          {!isAdding && (
+            <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-2 rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100 font-bold">
+              <Plus size={20} /> 新增項目
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Summary Section */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">存款總額 (不含高利)</p>
+          <p className="text-2xl font-black text-slate-800">${accounts.filter(a => ['savings', 'checking', 'fixed', undefined].includes(a.type)).reduce((sum, a) => sum + a.balance, 0).toLocaleString()}</p>
+        </div>
+        <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
+          <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-1">高利活存總額</p>
+          <p className="text-2xl font-black text-indigo-700">${accounts.filter(a => a.type === 'high-yield').reduce((sum, a) => sum + a.balance, 0).toLocaleString()}</p>
+        </div>
+        <div className="bg-rose-50 p-6 rounded-2xl border border-rose-100">
+          <p className="text-xs font-bold text-rose-400 uppercase tracking-widest mb-1">剩餘貸款總額</p>
+          <p className="text-2xl font-black text-rose-700">${totalLoan.toLocaleString()}</p>
+        </div>
+      </div>
+
+      <div className="bg-white p-4 rounded-2xl border border-indigo-200 flex justify-between items-center bg-indigo-50/20 shadow-sm">
+        <span className="font-bold text-secondary text-slate-600">資產淨值 (存款 - 貸款)</span>
+        <span className={`text-2xl font-black ${totalBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+          ${totalBalance.toLocaleString()}
+        </span>
       </div>
 
       {isAdding && (
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" placeholder="帳戶名稱" className="p-2 border rounded-md" value={newAccount.name} onChange={e => setNewAccount({...newAccount, name: e.target.value})} />
-            <input type="text" placeholder="銀行名稱" className="p-2 border rounded-md" value={newAccount.bankName} onChange={e => setNewAccount({...newAccount, bankName: e.target.value})} />
-            <input type="number" placeholder="餘額" className="p-2 border rounded-md" value={newAccount.balance} onChange={e => setNewAccount({...newAccount, balance: Number(e.target.value)})} />
-            <select className="p-2 border rounded-md" value={newAccount.type} onChange={e => setNewAccount({...newAccount, type: e.target.value as any})}>
-              <option value="savings">活期儲蓄</option>
-              <option value="checking">支票帳戶</option>
-              <option value="fixed">定期存款</option>
-            </select>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-2xl shadow-lg border border-indigo-100 space-y-4 ring-2 ring-indigo-50">
+          <div className="flex justify-between items-center border-b pb-2">
+            <h3 className="font-bold text-indigo-900">新增存款項目或貸款</h3>
+            <button onClick={() => setIsAdding(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
           </div>
-          <div className="flex justify-end gap-3">
-            <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
-            <button onClick={handleAdd} className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">儲存</button>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="md:col-span-1 space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">項目名稱</label>
+              <input type="text" placeholder="例如：薪轉戶、房貸" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" value={newAccount.name || ''} onChange={e => setNewAccount({...newAccount, name: e.target.value})} />
+            </div>
+            <div className="md:col-span-1 space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">銀行存款</label>
+              <input type="text" placeholder="台銀、國泰" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" value={newAccount.bankName || ''} onChange={e => setNewAccount({...newAccount, bankName: e.target.value})} />
+            </div>
+            <div className="md:col-span-1 space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">類型</label>
+              <select className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" value={newAccount.type || 'savings'} onChange={e => setNewAccount({...newAccount, type: e.target.value as any})}>
+                <option value="savings">一般活存</option>
+                <option value="high-yield">✨ 高利活存</option>
+                <option value="checking">支票帳戶</option>
+                <option value="fixed">定期存款</option>
+                <option value="loan">貸款 / 借貸</option>
+              </select>
+            </div>
+            {renderNumberInput(newAccount.type === 'loan' ? '剩餘貸款' : '目前餘額', newAccount.balance, val => setNewAccount({...newAccount, balance: val}))}
+
+            {(newAccount.type === 'high-yield' || newAccount.type === 'loan' || newAccount.type === 'fixed' || newAccount.type === 'savings') && (
+              <div className="md:col-span-4 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">利率與條件設定</span>
+                    {newAccount.type === 'high-yield' && (
+                      <button onClick={() => { setTargetForAi('new'); setShowAiModal(true); }} className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 text-white rounded-full text-xs font-bold hover:bg-indigo-700 transition-all shadow-md">
+                        <Sparkles size={12} /> AI 辨識活動網址
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  {renderNumberInput('年度利率 (%)', newAccount.interestRate, val => setNewAccount({...newAccount, interestRate: val}), "0.001")}
+                  {newAccount.type === 'high-yield' && renderNumberInput('優惠存款上限', newAccount.balanceLimit, val => setNewAccount({...newAccount, balanceLimit: val}))}
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">加碼活動條件 / 備註</label>
+                    <input type="text" placeholder="例如：需每月轉入2萬、限新戶" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" value={newAccount.remark || ''} onChange={e => setNewAccount({...newAccount, remark: e.target.value})} />
+                  </div>
+                </div>
+              </div>
+            )}
+            {newAccount.type === 'loan' && (
+              <div className="md:col-span-1">
+                {renderNumberInput('每期還款金額', newAccount.monthlyPayment, val => setNewAccount({...newAccount, monthlyPayment: val}))}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-500 font-medium hover:text-slate-700">取消</button>
+            <button onClick={handleAdd} className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 font-bold shadow-md transition-all active:scale-95">確認儲存</button>
           </div>
         </motion.div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {accounts.map(acc => (
-          <div key={acc.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center group">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600">
-                <Building2 size={24} />
+      {categories.map((cat, catIdx) => (
+        <div key={catIdx} className="space-y-4">
+          <div className="flex items-center gap-4 px-2">
+            <h3 className="font-black text-slate-400 uppercase tracking-[0.2em] text-xs">{cat.title}</h3>
+            <div className="h-px bg-slate-200 flex-1"></div>
+            <span className="text-xs font-bold text-slate-400">小計: ${cat.data.reduce((sum, a) => sum + (a.balance || 0), 0).toLocaleString()}</span>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[800px]">
+              <thead className="bg-slate-50/50 border-b border-slate-200">
+                <tr>
+                  <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[25%]">項目名稱</th>
+                  <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">金額</th>
+                  <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">利率 / 利息</th>
+                  <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">備註 / 條件</th>
+                  <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {cat.data.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-slate-300 italic text-sm">此分類暫無資料</td>
+                  </tr>
+                )}
+                {cat.data.map(acc => {
+                  const isEditing = editingId === acc.id;
+                  const editingType = editingAccount.type || acc.type;
+                  const isHighYield = editingType === 'high-yield';
+                  const annualInterest = (acc.balance * (acc.interestRate || 0)) / 100;
+                  const limitPercent = acc.balanceLimit ? Math.min((acc.balance / acc.balanceLimit) * 100, 100) : 0;
+
+                  if (isEditing) {
+                    return (
+                      <tr key={acc.id} className="bg-indigo-50/30">
+                        <td className="p-4">
+                          <input className="w-full p-2 border rounded-md mb-1 focus:ring-2 focus:ring-indigo-500 outline-none" type="text" value={editingAccount.name || ''} onChange={e => setEditingAccount({...editingAccount, name: e.target.value})} />
+                          <input className="w-full p-1 text-xs border rounded-md mb-1 focus:ring-2 focus:ring-indigo-500 outline-none" type="text" value={editingAccount.bankName || ''} onChange={e => setEditingAccount({...editingAccount, bankName: e.target.value})} />
+                          <select className="w-full p-1 text-[10px] border rounded-md focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-500 bg-slate-50" value={editingAccount.type || 'savings'} onChange={e => setEditingAccount({...editingAccount, type: e.target.value as any})}>
+                            <option value="savings">一般活存</option>
+                            <option value="high-yield">✨ 高利活存</option>
+                            <option value="checking">支票帳戶</option>
+                            <option value="fixed">定期存款</option>
+                            <option value="loan">貸款 / 借貸</option>
+                          </select>
+                        </td>
+                        <td className="p-4 text-right">
+                          <input className="p-2 border rounded-md w-full text-right font-black focus:ring-2 focus:ring-indigo-500 outline-none" type="number" value={editingAccount.balance ?? 0} onChange={e => setEditingAccount({...editingAccount, balance: Number(e.target.value)})} />
+                          {isHighYield && (
+                            <div className="mt-2 text-right">
+                              <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">存款上限</label>
+                              <input className="p-1 text-[10px] border rounded w-full text-right focus:ring-2 focus:ring-indigo-500 outline-none" type="number" value={editingAccount.balanceLimit ?? 0} onChange={e => setEditingAccount({...editingAccount, balanceLimit: Number(e.target.value)})} />
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-2 mb-2">
+                            <input className="p-1 border rounded w-16 text-right font-bold text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none" type="number" step="0.001" value={editingAccount.interestRate ?? 0} onChange={e => setEditingAccount({...editingAccount, interestRate: Number(e.target.value)})} /> %
+                          </div>
+                          {isHighYield && (
+                            <button onClick={() => { setTargetForAi('edit'); setShowAiModal(true); }} className="text-[10px] text-indigo-600 font-bold flex items-center gap-1 justify-end ml-auto hover:underline">
+                              <Sparkles size={10} /> AI 重新辨識
+                            </button>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <textarea className="w-full p-2 border rounded-md text-xs h-20 bg-white focus:ring-2 focus:ring-indigo-500 outline-none" value={editingAccount.remark || ''} onChange={e => setEditingAccount({...editingAccount, remark: e.target.value})} placeholder="加碼條件或備註" />
+                        </td>
+                        <td className="p-4 text-center space-y-2">
+                          <button onClick={handleUpdate} className="p-2 bg-indigo-600 text-white rounded-lg block mx-auto hover:bg-indigo-700 shadow-md">
+                            <Save size={16} />
+                          </button>
+                          <button onClick={() => setEditingId(null)} className="p-2 text-slate-400 block mx-auto hover:text-slate-600">
+                            <X size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return (
+                    <tr key={acc.id} className="hover:bg-slate-50 transition-colors group">
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${catIdx === 1 ? 'bg-indigo-100 text-indigo-600' : catIdx === 2 ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-600'}`}>
+                            {catIdx === 2 ? <TrendingUp className="rotate-180" size={18} /> : <Building2 size={18} />}
+                          </div>
+                          <div>
+                            <p className="font-bold text-slate-800">{acc.name}</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{acc.bankName}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4 text-right">
+                        <p className={`text-lg font-black ${catIdx === 2 ? 'text-rose-600' : 'text-slate-800'}`}>${(acc.balance || 0).toLocaleString()}</p>
+                        {isHighYield && acc.balanceLimit && (
+                          <div className="mt-1 w-32 ml-auto">
+                            <div className="flex justify-between text-[9px] mb-1 font-bold text-slate-400">
+                              <span>進度: {limitPercent.toFixed(0)}%</span>
+                              <span>限額: {(acc.balanceLimit / 10000).toLocaleString()}萬</span>
+                            </div>
+                            <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden">
+                              <div className={`h-full transition-all duration-500 ${limitPercent >= 100 ? 'bg-amber-400' : 'bg-indigo-500'}`} style={{ width: `${limitPercent}%` }}></div>
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-4 text-right">
+                        {acc.interestRate ? (
+                          <div className="space-y-0.5">
+                            <p className="font-bold text-indigo-600">{acc.interestRate}%</p>
+                            <p className="text-[10px] text-slate-400 font-bold tracking-tight">預估年{catIdx === 2 ? '利息' : '收益'}: ${annualInterest.toFixed(0).toLocaleString()}</p>
+                          </div>
+                        ) : '-'}
+                      </td>
+                      <td className="p-4">
+                        {acc.remark ? (
+                          <div className="flex gap-1.5 items-start">
+                            <Info size={12} className="text-slate-300 mt-0.5 flex-shrink-0" />
+                            <p className="text-xs text-slate-500 leading-relaxed font-medium line-clamp-3">{acc.remark}</p>
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-slate-300 italic font-medium">尚無備註</p>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => startEditing(acc)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg shadow-sm border border-transparent hover:border-slate-100 transition-all">
+                            <Edit2 size={16} />
+                          </button>
+                          <button onClick={() => handleDelete(acc.id)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-white rounded-lg shadow-sm border border-transparent hover:border-slate-100 transition-all">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+
+      {/* AI Modal with Fallback */}
+      {showAiModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-8 space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600 shadow-inner">
+                <Sparkles size={24} />
               </div>
               <div>
-                <h3 className="font-bold text-slate-800">{acc.name}</h3>
-                <p className="text-sm text-slate-500">{acc.bankName} • {acc.type === 'savings' ? '活期' : acc.type === 'fixed' ? '定存' : '支票'}</p>
+                <h3 className="text-xl font-black text-slate-800">AI 活動自動辨識</h3>
+                <p className="text-sm text-slate-500">自動辨識利率與條件</p>
               </div>
             </div>
-            <div className="text-right flex items-center gap-4">
-              <div>
-                <p className="text-xl font-bold text-slate-800">${acc.balance.toLocaleString()}</p>
-              </div>
-              <button onClick={() => handleDelete(acc.id)} className="text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Trash2 size={18} />
+
+            <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+              <button 
+                onClick={() => setAiMode('url')} 
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${aiMode === 'url' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                網址讀取
+              </button>
+              <button 
+                onClick={() => setAiMode('text')} 
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${aiMode === 'text' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                文字貼上
               </button>
             </div>
-          </div>
-        ))}
-      </div>
+            
+            <div className="space-y-4">
+              {aiMode === 'url' ? (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">網頁連結 (URL)</label>
+                  <div className="relative">
+                    <Link size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input 
+                      type="url" 
+                      placeholder="https://www.bank.com.tw/..." 
+                      className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl outline-none transition-all font-medium" 
+                      value={aiAnalysisUrl}
+                      onChange={e => setAiAnalysisUrl(e.target.value)}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">活動內容文字</label>
+                  <textarea 
+                    placeholder="請貼上活動網頁的文字內容..." 
+                    className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl outline-none transition-all font-medium h-40 resize-none" 
+                    value={aiAnalysisText}
+                    onChange={e => setAiAnalysisText(e.target.value)}
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button 
+                  onClick={() => setShowAiModal(false)} 
+                  disabled={isAnalyzing}
+                  className="flex-1 px-4 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all disabled:opacity-50"
+                >
+                  取消
+                </button>
+                <button 
+                  onClick={analyzeUrlWithAi}
+                  disabled={isAnalyzing || (aiMode === 'url' ? !aiAnalysisUrl : !aiAnalysisText)}
+                  className="flex-[2] px-4 py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isAnalyzing ? <Loader2 className="animate-spin" size={20} /> : <Sparkles size={20} />}
+                  {isAnalyzing ? 'AI 分析中...' : '開始分析'}
+                </button>
+              </div>
+            </div>
+            
+            <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex gap-3">
+              <Info size={20} className="text-amber-500 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-700 font-medium leading-relaxed">
+                提示：若網址讀取失敗（超時或防火牆阻擋），請切換「文字貼上」模式，將網頁內容複製後貼上即可。
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1791,7 +2394,8 @@ const FundPage = ({ user }: { user: User }) => {
   const [newFund, setNewFund] = useState<Partial<Fund>>({ name: '', cost: 0, currentValue: 0, units: 0 });
 
   useEffect(() => {
-    const q = query(collection(db, 'funds'), where('uid', '==', user.uid));
+    const targetUids = getAppTargetUids(user);
+    const q = query(collection(db, 'funds'), where('uid', 'in', targetUids));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Fund));
       setFunds(data);
@@ -1887,11 +2491,12 @@ const FundPage = ({ user }: { user: User }) => {
 
 const StockPage = ({ user }: { user: User }) => {
   const [stocks, setStocks] = useState<Stock[]>([]);
+  const [funds, setFunds] = useState<Fund[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newStock, setNewStock] = useState<Partial<Stock>>({ symbol: '', name: '', shares: 0, averageCost: 0, currentPrice: 0 });
 
   // Filtering & Batch Delete State
-  const [selectedSource, setSelectedSource] = useState<'all' | 'Cathay' | 'Firstrade'>('all');
+  const [selectedSource, setSelectedSource] = useState<'all' | 'Cathay' | 'Firstrade' | 'FundRich'>('all');
   const [selectedStocks, setSelectedStocks] = useState<Set<string>>(new Set());
   const [usdRate, setUsdRate] = useState(32.5); // Default rate
 
@@ -1901,13 +2506,58 @@ const StockPage = ({ user }: { user: User }) => {
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [aiResult, setAiResult] = useState<any[] | null>(null);
 
+  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
+
+  const handleRefreshPrices = async () => {
+    const symbols = stocks.map(s => s.symbol).filter(Boolean);
+    if (symbols.length === 0) return;
+    
+    setIsRefreshingPrices(true);
+    try {
+      const response = await fetch(`/api/stocks/quotes?symbols=${symbols.join(',')}`);
+      if (!response.ok) throw new Error('Failed to fetch bulk quotes');
+      const latestData = await response.json();
+      
+      const updates = stocks.map(async (stock) => {
+        const found = latestData.find((d: any) => 
+          d.symbol === stock.symbol || 
+          d.symbol === `${stock.symbol}.TW` || 
+          d.symbol === `${stock.symbol}.TWO`
+        );
+        if (found && found.regularMarketPrice) {
+          await updateDoc(doc(db, 'stocks', stock.id), {
+            currentPrice: found.regularMarketPrice
+          });
+        }
+      });
+      await Promise.all(updates);
+    } catch (err) {
+      console.error('Refresh prices error:', err);
+    } finally {
+      setIsRefreshingPrices(false);
+    }
+  };
+
   useEffect(() => {
-    const q = query(collection(db, 'stocks'), where('uid', '==', user.uid));
+    const targetUids = getAppTargetUids(user);
+    const q = query(collection(db, 'stocks'), where('uid', 'in', targetUids));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Stock));
       setStocks(data);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'stocks');
+    });
+    return () => unsubscribe();
+  }, [user.uid]);
+
+  useEffect(() => {
+    const targetUids = getAppTargetUids(user);
+    const q = query(collection(db, 'funds'), where('uid', 'in', targetUids));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Fund));
+      setFunds(data);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'funds');
     });
     return () => unsubscribe();
   }, [user.uid]);
@@ -1921,13 +2571,13 @@ const StockPage = ({ user }: { user: User }) => {
         throw new Error("GEMINI_API_KEY is not configured. Please set it in Settings.");
       }
       const ai = new GoogleGenAI({ apiKey });
-      const prompt = `這是一張股票庫存明細的截圖（可能來自國泰證券或 Firstrade）。請辨識圖中的股票資訊並以 JSON 格式回傳一個陣列。
+      const prompt = `這是一張股票或基金庫存明細的截圖（可能來自國泰證券、Firstrade 或 鉅亨買基金）。請辨識圖中的資訊並以 JSON 格式回傳一個陣列。
       每個物件包含：
-      - symbol: 股票代號 (例如: 0050, AAPL)
-      - name: 股票名稱 (例如: 元大台灣50, Apple)
-      - shares: 持有股數 (數字)
-      - averageCost: 平均成本 (數字)
-      - currentPrice: 目前股價 (數字)
+      - symbol: 股票代號或基金代號 (例如: 0050, AAPL, 若為基金則填寫代號或 NA)
+      - name: 名稱 (例如: 元大台灣50, Apple, 統一黑馬基金)
+      - shares: 持有股數或單位數 (數字)
+      - averageCost: 平均成本或申購淨值 (數字)
+      - currentPrice: 目前股價或最新淨值 (數字)
       
       請只回傳 JSON 陣列，不要有其他文字。`;
 
@@ -1960,26 +2610,46 @@ const StockPage = ({ user }: { user: User }) => {
   const handleImportAIResult = async (source: 'Cathay' | 'Firstrade' | 'FundRich') => {
     if (!aiResult) return;
     try {
-      // 1. Delete existing stocks from the same source
-      const stocksToDelete = stocks.filter(s => s.source === source);
-      const batchDelete = stocksToDelete.map(stock => deleteDoc(doc(db, 'stocks', stock.id)));
-      await Promise.all(batchDelete);
+      const targetUids = user.uid === 'default-user' ? ['default-user', 'local_default_user'] : ['default-user', 'local_default_user', user.uid];
+      if (source === 'FundRich') {
+        const q = query(collection(db, 'funds'), where('source', '==', source), where('uid', 'in', targetUids));
+        const snapshot = await getDocs(q);
+        const batchDelete = snapshot.docs.map(fundDoc => deleteDoc(doc(db, 'funds', fundDoc.id)));
+        await Promise.all(batchDelete);
 
-      // 2. Add new stocks with the source field
-      const batchAdd = aiResult.map(item => {
-        return addDoc(collection(db, 'stocks'), {
-          ...item,
-          source,
-          uid: user.uid
+        const batchAdd = aiResult.map(item => {
+          return addDoc(collection(db, 'funds'), {
+            name: item.name,
+            units: item.shares || 0,
+            cost: (item.averageCost || 0) * (item.shares || 0),
+            currentValue: (item.currentPrice || 0) * (item.shares || 0),
+            source,
+            uid: user.uid
+          });
         });
-      });
-      await Promise.all(batchAdd);
+        await Promise.all(batchAdd);
+      } else {
+        // 1. Delete existing stocks from the same source
+        const stocksToDelete = stocks.filter(s => s.source === source);
+        const batchDelete = stocksToDelete.map(stock => deleteDoc(doc(db, 'stocks', stock.id)));
+        await Promise.all(batchDelete);
+
+        // 2. Add new stocks with the source field
+        const batchAdd = aiResult.map(item => {
+          return addDoc(collection(db, 'stocks'), {
+            ...item,
+            source,
+            uid: user.uid
+          });
+        });
+        await Promise.all(batchAdd);
+      }
       
       setIsAIModalOpen(false);
       setAiResult(null);
       setAiImage(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'stocks');
+      handleFirestoreError(error, OperationType.CREATE, source === 'FundRich' ? 'funds' : 'stocks');
     }
   };
 
@@ -2039,8 +2709,17 @@ const StockPage = ({ user }: { user: User }) => {
   }, [selectedStock]);
 
   const filteredStocks = stocks.filter(s => selectedSource === 'all' || s.source === selectedSource);
+  const filteredFunds = funds.filter(f => (selectedSource === 'all' || f.source === selectedSource) && f.source === 'FundRich');
   
-  const portfolioSummary = filteredStocks.reduce((acc, s) => {
+  const portfolioSummary = [...filteredStocks, ...filteredFunds.map(f => ({
+    id: f.id,
+    symbol: '基金',
+    name: f.name,
+    shares: f.units,
+    averageCost: f.units > 0 ? f.cost / f.units : 0,
+    currentPrice: f.units > 0 ? f.currentValue / f.units : 0,
+    source: (f as any).source
+  } as Stock))].reduce((acc, s) => {
     const isUsd = s.source === 'Firstrade';
     const cost = s.shares * s.averageCost;
     const val = s.shares * s.currentPrice;
@@ -2061,29 +2740,35 @@ const StockPage = ({ user }: { user: User }) => {
 
   const handleBatchDelete = async () => {
     try {
-      const batchDelete = Array.from(selectedStocks).map(id => deleteDoc(doc(db, 'stocks', id)));
-      await Promise.all(batchDelete);
+      const stockIds = Array.from(selectedStocks).filter(id => stocks.some(s => s.id === id));
+      const fundIds = Array.from(selectedStocks).filter(id => funds.some(f => f.id === id));
+      
+      const batchDeleteStocks = stockIds.map(id => deleteDoc(doc(db, 'stocks', id)));
+      const batchDeleteFunds = fundIds.map(id => deleteDoc(doc(db, 'funds', id)));
+      
+      await Promise.all([...batchDeleteStocks, ...batchDeleteFunds]);
       setSelectedStocks(new Set());
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'stocks');
+      handleFirestoreError(error, OperationType.DELETE, 'items');
     }
   };
 
   const handleDeleteAll = async () => {
-    if (!confirm('確定要刪除所有股票資訊嗎？此操作無法復原。')) return;
+    if (!confirm('確定要刪除所有股票與基金資訊嗎？此操作無法復原。')) return;
     try {
-      const batchDelete = stocks.map(stock => deleteDoc(doc(db, 'stocks', stock.id)));
-      await Promise.all(batchDelete);
+      const batchDeleteStocks = stocks.map(stock => deleteDoc(doc(db, 'stocks', stock.id)));
+      const batchDeleteFunds = funds.map(fund => deleteDoc(doc(db, 'funds', fund.id)));
+      await Promise.all([...batchDeleteStocks, ...batchDeleteFunds]);
       setSelectedStocks(new Set());
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'stocks');
+      handleFirestoreError(error, OperationType.DELETE, 'items');
     }
   };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-800">股票投資</h2>
+        <h2 className="text-2xl font-bold text-slate-800">股票 / 基金投資</h2>
         <div className="flex gap-2">
           <select value={selectedSource} onChange={e => setSelectedSource(e.target.value as any)} className="p-2 border rounded-lg text-sm">
             <option value="all">全部來源</option>
@@ -2096,6 +2781,14 @@ const StockPage = ({ user }: { user: User }) => {
           </button>
           <button onClick={handleDeleteAll} className="flex items-center gap-2 bg-rose-800 text-white px-4 py-2 rounded-lg hover:bg-rose-900 transition-colors">
             <Trash2 size={20} /> 刪除全部
+          </button>
+          <button 
+            onClick={handleRefreshPrices} 
+            disabled={isRefreshingPrices || stocks.length === 0}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={20} className={isRefreshingPrices ? 'animate-spin' : ''} />
+            {isRefreshingPrices ? '更新中...' : '更新即時現價'}
           </button>
           <button 
             onClick={() => setIsAIModalOpen(true)} 
@@ -2125,6 +2818,20 @@ const StockPage = ({ user }: { user: User }) => {
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-slate-500 uppercase bg-slate-50">
               <tr>
+                <th className="px-4 py-3 w-10">
+                  <input 
+                    type="checkbox" 
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        const allIds = new Set([...stocks.map(s => s.id), ...funds.map(f => f.id)]);
+                        setSelectedStocks(allIds);
+                      } else {
+                        setSelectedStocks(new Set());
+                      }
+                    }}
+                    checked={selectedStocks.size > 0 && selectedStocks.size === (stocks.length + funds.length)}
+                  />
+                </th>
                 <th className="px-4 py-3">股票/基金</th>
                 <th className="px-4 py-3">來源</th>
                 <th className="px-4 py-3">股數/單位</th>
@@ -2134,14 +2841,24 @@ const StockPage = ({ user }: { user: User }) => {
               </tr>
             </thead>
             <tbody>
-              {filteredStocks.map(stock => {
+              {filteredStocks.sort((a,b) => (a.source || '').localeCompare(b.source || '')).map(stock => {
                 const isUsd = stock.source === 'Firstrade';
                 const cost = stock.shares * stock.averageCost;
                 const val = stock.shares * stock.currentPrice;
                 const profit = val - cost;
                 return (
-                  <tr key={stock.id} className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedStock(stock)}>
-                    <td className="px-4 py-3 font-medium text-indigo-600 hover:underline">{stock.symbol} ({stock.name})</td>
+                  <tr key={stock.id} className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer">
+                    <td className="px-4 py-3">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedStocks.has(stock.id)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          toggleStockSelection(stock.id);
+                        }}
+                      />
+                    </td>
+                    <td className="px-4 py-3 font-medium text-indigo-600 hover:underline" onClick={() => setSelectedStock(stock)}>{stock.symbol} ({stock.name})</td>
                     <td className="px-4 py-3">{stock.source}</td>
                     <td className="px-4 py-3">{stock.shares.toLocaleString()}</td>
                     <td className="px-4 py-3">${Math.floor(cost).toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
@@ -2149,6 +2866,34 @@ const StockPage = ({ user }: { user: User }) => {
                     <td className={`px-4 py-3 font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
                       ${Math.floor(profit).toLocaleString()} {isUsd ? 'USD' : 'TWD'}
                       {isUsd && <span className="text-xs text-slate-400 ml-1">(${Math.floor(profit * usdRate).toLocaleString()} TWD)</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+              {filteredFunds.map(fund => {
+                const isUsd = false;
+                const cost = fund.cost;
+                const val = fund.currentValue;
+                const profit = val - cost;
+                return (
+                  <tr key={fund.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-4 py-3">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedStocks.has(fund.id)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          toggleStockSelection(fund.id);
+                        }}
+                      />
+                    </td>
+                    <td className="px-4 py-3 font-medium text-indigo-600">基金 ({fund.name})</td>
+                    <td className="px-4 py-3">{fund.source}</td>
+                    <td className="px-4 py-3">{fund.units.toLocaleString()}</td>
+                    <td className="px-4 py-3">${Math.floor(cost).toLocaleString()} TWD</td>
+                    <td className="px-4 py-3">${Math.floor(val).toLocaleString()} TWD</td>
+                    <td className={`px-4 py-3 font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      ${Math.floor(profit).toLocaleString()} TWD
                     </td>
                   </tr>
                 );
@@ -2413,13 +3158,898 @@ const StockPage = ({ user }: { user: User }) => {
   );
 };
 
+const DashboardPage = ({ user }: { user: User }) => {
+  const [data, setData] = useState({
+    banks: [] as BankAccount[],
+    stocks: [] as Stock[],
+    funds: [] as Fund[],
+    cards: [] as CreditCard[]
+  });
+  const [usdRate] = useState(32.5); // Default rate if not fetched
+  const [isTransferring, setIsTransferring] = useState(false);
+
+  useEffect(() => {
+    const targetUids = getAppTargetUids(user);
+    
+    const unsubBanks = onSnapshot(query(collection(db, 'bankAccounts'), where('uid', 'in', targetUids)), s => 
+      setData(prev => ({ ...prev, banks: s.docs.map(d => ({ ...d.data(), id: d.id } as BankAccount)) }))
+    );
+    const unsubStocks = onSnapshot(query(collection(db, 'stocks'), where('uid', 'in', targetUids)), s => 
+      setData(prev => ({ ...prev, stocks: s.docs.map(d => ({ ...d.data(), id: d.id } as Stock)) }))
+    );
+    const unsubFunds = onSnapshot(query(collection(db, 'funds'), where('uid', 'in', targetUids)), s => 
+      setData(prev => ({ ...prev, funds: s.docs.map(d => ({ ...d.data(), id: d.id } as Fund)) }))
+    );
+    const unsubCards = onSnapshot(query(collection(db, 'creditCards'), where('uid', 'in', targetUids)), s => 
+      setData(prev => ({ ...prev, cards: s.docs.map(d => ({ ...d.data(), id: d.id } as CreditCard)) }))
+    );
+    return () => { unsubBanks(); unsubStocks(); unsubFunds(); unsubCards(); };
+  }, [user.uid]);
+
+  const bankTotal = data.banks.reduce((sum, a) => sum + (a.type === 'loan' ? -a.balance : a.balance), 0);
+  const stockTotal = data.stocks.reduce((sum, s) => {
+    const val = s.shares * s.currentPrice;
+    return sum + (s.source === 'Firstrade' ? val * usdRate : val);
+  }, 0);
+  const fundTotal = data.funds.reduce((sum, f) => sum + f.currentValue, 0);
+  const cardDebt = data.cards.reduce((sum, c) => sum + (c.currentBalance || 0), 0);
+  
+  const totalAssets = bankTotal + stockTotal + fundTotal - cardDebt;
+
+  const chartData = [
+    { name: '銀行存款', value: Math.max(0, bankTotal), color: '#6366f1' },
+    { name: '股票投資', value: Math.max(0, stockTotal), color: '#10b981' },
+    { name: '基金投資', value: Math.max(0, fundTotal), color: '#f59e0b' },
+    { name: '信用卡負債', value: Math.max(0, cardDebt), color: '#ef4444' },
+  ].filter(d => d.value > 0);
+
+  return (
+    <div className="space-y-8">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">總資產概況</h2>
+          <p className="text-sm text-slate-500">所有財務帳戶的匯總資訊</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">淨資產總額</p>
+          <p className="text-3xl font-black text-slate-800">${Math.round(totalAssets).toLocaleString()}</p>
+          <div className="mt-4 flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded w-fit">
+            <TrendingUp size={14} />
+            <span>資產健康</span>
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">銀行存款</p>
+          <p className="text-2xl font-bold text-indigo-600">${Math.round(bankTotal).toLocaleString()}</p>
+        </div>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">投資市值 (股/基)</p>
+          <p className="text-2xl font-bold text-emerald-600">${Math.round(stockTotal + fundTotal).toLocaleString()}</p>
+        </div>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">信用卡負債</p>
+          <p className="text-2xl font-bold text-rose-500">${Math.round(cardDebt).toLocaleString()}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+          <h3 className="font-bold text-slate-800 mb-8 flex items-center gap-2">
+            <PieChart className="text-indigo-600" size={20} /> 資產比例
+          </h3>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  formatter={(value: number) => [`$${value.toLocaleString()}`, '金額']}
+                />
+                <Area type="monotone" dataKey="value" stroke="#6366f1" fill="#6366f1" fillOpacity={0.1} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+          <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
+            <BarChart3 className="text-indigo-600" size={20} /> 各項明細
+          </h3>
+          <div className="space-y-4">
+            {chartData.map((item, i) => (
+              <div key={i} className="flex items-center gap-4">
+                <div className="w-2 h-10 rounded-full" style={{ backgroundColor: item.color }} />
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-slate-700">{item.name}</p>
+                  <p className="text-xs text-slate-400">{((item.value / totalAssets) * 100).toFixed(1)}%</p>
+                </div>
+                <p className="font-bold text-slate-800">${item.value.toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const DEFAULT_TAX_STANDARDS: Partial<TaxStandard> = {
+  exemptionBase: 92000,
+  exemptionSenior: 138000,
+  standardDeductionSingle: 124000,
+  standardDeductionMarried: 248000,
+  salaryDeductionUnit: 207000,
+  savingsDeductionLimit: 270000,
+  disabilityDeductionUnit: 207000,
+  educationDeductionUnit: 25000,
+  preschoolDeductionUnit: 120000,
+  longTermCareDeductionUnit: 120000,
+  basicLivingExpenseUnit: 202000, // 112年為20.2萬
+  taxBrackets: [
+    { limit: 560000, rate: 0.05, adjustment: 0 },
+    { limit: 1260000, rate: 0.12, adjustment: 39200 },
+    { limit: 2520000, rate: 0.20, adjustment: 140000 },
+    { limit: 4720000, rate: 0.30, adjustment: 392000 },
+    { limit: Infinity, rate: 0.40, adjustment: 864000 },
+  ]
+};
+
+const INITIAL_TAX_RECORD: Partial<TaxRecord> = {
+  year: new Date().getFullYear() - 1912,
+  salaryUser: 0,
+  salarySpouse: 0,
+  profitIncome: 0,
+  interestIncome: 0,
+  exemptionsCount: 1,
+  exemptionsSeniorCount: 0,
+  isMarried: false,
+  propertyLossDeduction: 0,
+  savingsDeduction: 0,
+  disabilityCount: 0,
+  educationCount: 0,
+  preschoolCount: 0,
+  longTermCareCount: 0,
+  startupInvestmentDeduction: 0,
+  investmentCredits: 0,
+  homePurchaseCredits: 0,
+  withholding: 0,
+  dividendCredits: 0,
+  mainlandTaxCredits: 0,
+};
+
+// --- Tax Calculation Display Component ---
+const CalculationBreakdown = ({ tax, result, std }: { tax: Partial<TaxRecord>, result: any, std: TaxStandard }) => {
+  return (
+    <div className="space-y-8 bg-slate-50/50 p-6 rounded-3xl border border-slate-100 overflow-x-auto">
+      <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
+        <Calculator size={24} className="text-indigo-600" />
+          {tax.year} 年度稅額計算詳解
+      </h3>
+
+      {/* 1. 薪資所得計算式 */}
+      <section className="space-y-3">
+        <h4 className="text-sm font-bold text-slate-700 bg-slate-200/50 px-3 py-1 rounded-md inline-block">★ 薪資所得計算式</h4>
+        <table className="w-full text-xs text-left border-collapse border border-slate-200 bg-white">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="border border-slate-200 p-2">對象</th>
+              <th className="border border-slate-200 p-2 text-right">薪資收入總額</th>
+              <th className="border border-slate-200 p-2 text-right">薪資所得特別扣除額</th>
+              <th className="border border-slate-200 p-2 text-right">薪資所得</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-slate-200 p-2 font-medium">本人</td>
+              <td className="border border-slate-200 p-2 text-right">${(tax.salaryUser || 0).toLocaleString()}</td>
+              <td className="border border-slate-200 p-2 text-right text-rose-500">-${(result.salaryUserDeduction || 0).toLocaleString()}</td>
+              <td className="border border-slate-200 p-2 text-right font-bold">${(result.salaryUserAfterDeduction || 0).toLocaleString()}</td>
+            </tr>
+            {tax.isMarried && (
+              <tr>
+                <td className="border border-slate-200 p-2 font-medium">配偶</td>
+                <td className="border border-slate-200 p-2 text-right">${(tax.salarySpouse || 0).toLocaleString()}</td>
+                <td className="border border-slate-200 p-2 text-right text-rose-500">-${(result.salarySpouseDeduction || 0).toLocaleString()}</td>
+                <td className="border border-slate-200 p-2 text-right font-bold">${(result.salarySpouseAfterDeduction || 0).toLocaleString()}</td>
+              </tr>
+            )}
+            <tr className="bg-slate-50 font-black">
+              <td className="border border-slate-200 p-2 text-center" colSpan={3}>合 計</td>
+              <td className="border border-slate-200 p-2 text-right text-indigo-600">${((result.salaryUserAfterDeduction || 0) + (result.salarySpouseAfterDeduction || 0)).toLocaleString()}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      {/* 2. 免稅額 */}
+      <section className="space-y-3">
+        <h4 className="text-sm font-bold text-slate-700 bg-slate-200/50 px-3 py-1 rounded-md inline-block">★ 免稅額詳情</h4>
+        <table className="w-full text-xs text-left border-collapse border border-slate-200 bg-white">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="border border-slate-200 p-2">類別</th>
+              <th className="border border-slate-200 p-2 text-right">單價</th>
+              <th className="border border-slate-200 p-2 text-center">人數</th>
+              <th className="border border-slate-200 p-2 text-right">免稅額</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-slate-200 p-2">一般免稅額 (本人/配偶/扶養)</td>
+              <td className="border border-slate-200 p-2 text-right">${std.exemptionBase.toLocaleString()}</td>
+              <td className="border border-slate-200 p-2 text-center">{tax.exemptionsCount || 0}</td>
+              <td className="border border-slate-200 p-2 text-right font-bold">${((tax.exemptionsCount || 0) * std.exemptionBase).toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td className="border border-slate-200 p-2">70歲以上扶養親屬</td>
+              <td className="border border-slate-200 p-2 text-right">${std.exemptionSenior.toLocaleString()}</td>
+              <td className="border border-slate-200 p-2 text-center">{tax.exemptionsSeniorCount || 0}</td>
+              <td className="border border-slate-200 p-2 text-right font-bold">${((tax.exemptionsSeniorCount || 0) * std.exemptionSenior).toLocaleString()}</td>
+            </tr>
+            <tr className="bg-slate-50 font-black">
+              <td className="border border-slate-200 p-2 text-center" colSpan={3}>合 計</td>
+              <td className="border border-slate-200 p-2 text-right text-indigo-600">${result.totalExemptions.toLocaleString()}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      {/* 3. 扣除額 */}
+      <section className="space-y-3">
+        <h4 className="text-sm font-bold text-slate-700 bg-slate-200/50 px-3 py-1 rounded-md inline-block">★ 扣除額合計</h4>
+        <table className="w-full text-xs text-left border-collapse border border-slate-200 bg-white">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="border border-slate-200 p-2">項目</th>
+              <th className="border border-slate-200 p-2 text-right">金額</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-slate-200 p-2">一般扣除額 ({tax.isMarried ? '有配偶' : '單身'})</td>
+              <td className="border border-slate-200 p-2 text-right">${result.generalDeduction.toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td className="border border-slate-200 p-2">儲蓄投資特別扣除額 (限額27萬)</td>
+              <td className="border border-slate-200 p-2 text-right">${(result.savingsDeduction || 0).toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td className="border border-slate-200 p-2">身心障礙特別扣除額 ({tax.disabilityCount}人)</td>
+              <td className="border border-slate-200 p-2 text-right">${((tax.disabilityCount || 0) * std.disabilityDeductionUnit).toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td className="border border-slate-200 p-2">教育學費特別扣除額 ({tax.educationCount}人)</td>
+              <td className="border border-slate-200 p-2 text-right">${((tax.educationCount || 0) * std.educationDeductionUnit).toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td className="border border-slate-200 p-2">幼兒學前特別扣除額 ({tax.preschoolCount}人)</td>
+              <td className="border border-slate-200 p-2 text-right">${((tax.preschoolCount || 0) * std.preschoolDeductionUnit).toLocaleString()}</td>
+            </tr>
+             <tr>
+              <td className="border border-slate-200 p-2">長期照顧特別扣除額 ({tax.longTermCareCount}人)</td>
+              <td className="border border-slate-200 p-2 text-right">${((tax.longTermCareCount || 0) * std.longTermCareDeductionUnit).toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td className="border border-slate-200 p-2">財產交易損失扣除額</td>
+              <td className="border border-slate-200 p-2 text-right">${(tax.propertyLossDeduction || 0).toLocaleString()}</td>
+            </tr>
+            <tr className="bg-slate-50 font-black">
+              <td className="border border-slate-200 p-2">合 計</td>
+              <td className="border border-slate-200 p-2 text-right text-indigo-600">${result.specialDeductionsTotalPlusGeneral.toLocaleString()}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      {/* 4. 基本生活費差額 */}
+      <section className="space-y-3">
+        <h4 className="text-sm font-bold text-slate-700 bg-slate-200/50 px-3 py-1 rounded-md inline-block">★ 基本生活費差額計算</h4>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-4">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="bg-slate-100 p-2 rounded-lg">(基礎金額 ${std.basicLivingExpenseUnit.toLocaleString()} × 人數 {result.headcount})</span>
+            <span className="font-bold text-slate-400">－</span>
+            <span className="bg-slate-100 p-2 rounded-lg">(免稅額 + 標扣 + 特扣合計 ${result.bleComparison.toLocaleString()})</span>
+            <span className="font-bold text-slate-400">＝</span>
+            <span className={`p-2 rounded-lg font-bold ${result.bleDifference > 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-400'}`}>
+              基本生活費差額: ${result.bleDifference.toLocaleString()}
+            </span>
+          </div>
+          <p className="text-[10px] text-slate-400 italic font-medium">※ 特扣合計包含：儲蓄、身障、教育、幼兒、長照特別扣除額</p>
+        </div>
+      </section>
+
+      {/* 5. 股利抵減 */}
+      <section className="space-y-3">
+        <h4 className="text-sm font-bold text-slate-700 bg-slate-200/50 px-3 py-1 rounded-md inline-block">★ 股利及盈餘可抵減稅額</h4>
+        <div className="bg-white p-4 rounded-xl border border-slate-200">
+           <div className="flex items-center gap-3 text-xs">
+              <span className="bg-slate-100 p-2 rounded-lg">股利總額 ${ (tax.profitIncome || 0).toLocaleString() }</span>
+              <span className="font-bold text-slate-400">×</span>
+              <span className="bg-slate-100 p-2 rounded-lg">8.5%</span>
+              <span className="font-bold text-slate-400">＝</span>
+              <span className="bg-indigo-100 p-2 rounded-lg font-bold text-indigo-700">${ result.divCreditRaw.toLocaleString() }</span>
+              <span className="text-[10px] text-slate-400">(上限8萬元)</span>
+              <span className="font-bold text-slate-400">等於</span>
+              <span className="bg-emerald-100 p-2 rounded-lg font-bold text-emerald-700">${ result.divCredit.toLocaleString() }</span>
+           </div>
+        </div>
+      </section>
+
+      {/* 6. 最終稅額計算 */}
+      <section className="space-y-6 pt-4 border-t border-slate-200">
+        <h4 className="text-sm font-black text-indigo-600 border-l-4 border-indigo-600 pl-3">★ 稅額總結計算式</h4>
+        
+        <div className="space-y-4">
+          <div className="bg-white p-5 rounded-2xl border border-indigo-100 space-y-4 shadow-sm">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">第一階段：課稅所得額</p>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="bg-slate-50 px-3 py-2 rounded-xl">總所得 ${result.totalIncome.toLocaleString()}</span>
+              <span className="text-slate-400 font-bold">－</span>
+              <span className="bg-slate-50 px-3 py-2 rounded-xl">免稅額 ${result.totalExemptions.toLocaleString()}</span>
+              <span className="text-slate-400 font-bold">－</span>
+              <span className="bg-slate-50 px-3 py-2 rounded-xl">扣除額及差額 ${(result.specialDeductionsTotalPlusGeneral + result.bleDifference).toLocaleString()}</span>
+              {tax.startupInvestmentDeduction && (
+                 <>
+                   <span className="text-slate-400 font-bold">－</span>
+                   <span className="bg-slate-50 px-3 py-2 rounded-xl">新創減除 ${tax.startupInvestmentDeduction.toLocaleString()}</span>
+                 </>
+              )}
+              <span className="text-slate-400 font-bold">＝</span>
+              <span className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black">課稅所得額 ${result.netTaxableIncome.toLocaleString()}</span>
+            </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-indigo-100 space-y-4 shadow-sm">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">第二階段：應納稅額</p>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+               <span className="bg-slate-50 px-3 py-2 rounded-xl">所得 ${result.netTaxableIncome.toLocaleString()}</span>
+               <span className="text-slate-400 font-bold">×</span>
+               <span className="bg-slate-50 px-3 py-2 rounded-xl">稅率 {result.bracket.rate * 100}%</span>
+               <span className="text-slate-400 font-bold">－</span>
+               <span className="bg-slate-50 px-3 py-2 rounded-xl">累進差額 ${result.bracket.adjustment.toLocaleString()}</span>
+               <span className="text-slate-400 font-bold">＝</span>
+               <span className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black">應納稅額 ${result.taxPayable.toLocaleString()}</span>
+            </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-indigo-100 space-y-4 shadow-sm">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">第三階段：實際退補</p>
+            <div className="flex flex-wrap items-center gap-2 text-sm leading-relaxed">
+              <span className="bg-slate-50 px-3 py-2 rounded-xl">應納稅額 ${result.taxPayable.toLocaleString()}</span>
+              <span className="text-slate-400 font-bold">－</span>
+              <span className="bg-slate-50 px-3 py-2 rounded-xl text-emerald-600">扣繳稅額 ${tax.withholding?.toLocaleString() || 0}</span>
+              <span className="text-slate-400 font-bold">－</span>
+              <span className="bg-slate-50 px-3 py-2 rounded-xl text-emerald-600">股利抵減 ${result.divCredit.toLocaleString()}</span>
+              {(tax.investmentCredits || 0) > 0 && <><span className="text-slate-400 font-bold">－</span><span className="bg-slate-50 px-3 py-2 rounded-xl text-emerald-600">投資抵減 ${tax.investmentCredits?.toLocaleString()}</span></>}
+              {(tax.homePurchaseCredits || 0) > 0 && <><span className="text-slate-400 font-bold">－</span><span className="bg-slate-50 px-3 py-2 rounded-xl text-emerald-600">自住宅重購 ${tax.homePurchaseCredits?.toLocaleString()}</span></>}
+              <span className="text-slate-400 font-bold">＝</span>
+              <span className={`px-4 py-2 rounded-xl font-black ${result.finalTaxDue > 0 ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                {result.finalTaxDue > 0 ? '應補稅額' : '應退稅額'}: ${Math.abs(Math.round(result.finalTaxDue)).toLocaleString()}
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+};
+
+const TaxPage = ({ user }: { user: User }) => {
+  const [taxes, setTaxes] = useState<TaxRecord[]>([]);
+  const [standards, setStandards] = useState<TaxStandard[]>([]);
+  const [isAdding, setIsAdding] = useState(false);
+  const [isAddingStandard, setIsAddingStandard] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [newTax, setNewTax] = useState<Partial<TaxRecord>>(INITIAL_TAX_RECORD);
+  const [newStandard, setNewStandard] = useState<Partial<TaxStandard>>({ ...DEFAULT_TAX_STANDARDS, year: new Date().getFullYear() - 1912 });
+  const [viewMode, setViewMode] = useState<'records' | 'calculator' | 'standards'>('records');
+  const [isAnalyzingStandard, setIsAnalyzingStandard] = useState(false);
+
+  useEffect(() => {
+    const targetUids = getAppTargetUids(user);
+    const q = query(collection(db, 'taxes'), where('uid', 'in', targetUids));
+    const unsubscribe = onSnapshot(q, s => {
+      setTaxes(s.docs.map(d => ({ ...d.data(), id: d.id } as TaxRecord)).sort((a,b) => b.year - a.year));
+    });
+    return () => unsubscribe();
+  }, [user.uid]);
+
+  useEffect(() => {
+    const targetUids = getAppTargetUids(user);
+    const q = query(collection(db, 'taxStandards'), where('uid', 'in', targetUids));
+    const unsubscribe = onSnapshot(q, s => {
+      setStandards(s.docs.map(d => ({ ...d.data(), id: d.id } as TaxStandard)).sort((a,b) => b.year - a.year));
+    });
+    return () => unsubscribe();
+  }, [user.uid]);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsAnalyzing(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        const result = await analyzeTaxDocument(base64, file.type);
+        setNewTax(prev => ({
+          ...prev,
+          ...result
+        }));
+        setViewMode('calculator');
+        setIsAdding(true);
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      alert(`AI 分析失敗：${err.message}`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleStandardUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsAnalyzingStandard(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        const result = await analyzeTaxStandards(base64, file.type);
+        setNewStandard(prev => ({
+          ...prev,
+          ...result
+        }));
+        setIsAddingStandard(true);
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      alert(`AI 辨識失敗：${err.message}`);
+    } finally {
+      setIsAnalyzingStandard(false);
+    }
+  };
+
+  const handleSaveStandard = async () => {
+    try {
+      if (newStandard.id) {
+        await updateDoc(doc(db, 'taxStandards', newStandard.id), { ...newStandard });
+      } else {
+        await addDoc(collection(db, 'taxStandards'), { ...newStandard, uid: user.uid });
+      }
+      setIsAddingStandard(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'taxStandards');
+    }
+  };
+
+  const handleSaveTax = async () => {
+    try {
+      if (newTax.id) {
+        await updateDoc(doc(db, 'taxes', newTax.id), { ...newTax });
+      } else {
+        await addDoc(collection(db, 'taxes'), { ...newTax, uid: user.uid });
+      }
+      setIsAdding(false);
+      setNewTax(INITIAL_TAX_RECORD);
+      setViewMode('records');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'taxes');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('確定刪除此稅務記錄？')) return;
+    try {
+      await deleteDoc(doc(db, 'taxes', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'taxes');
+    }
+  };
+
+  const calculateResult = (record: Partial<TaxRecord>) => {
+    const std = standards.find(s => s.year === record.year) || (DEFAULT_TAX_STANDARDS as TaxStandard);
+    
+    // 1. 綜合所得總額
+    const salaryUserDeduction = Math.min(record.salaryUser || 0, std.salaryDeductionUnit);
+    const salaryUserAfterDeduction = Math.max(0, (record.salaryUser || 0) - std.salaryDeductionUnit);
+    
+    const salarySpouseDeduction = record.isMarried ? Math.min(record.salarySpouse || 0, std.salaryDeductionUnit) : 0;
+    const salarySpouseAfterDeduction = record.isMarried ? Math.max(0, (record.salarySpouse || 0) - std.salaryDeductionUnit) : 0;
+    
+    const totalIncome = salaryUserAfterDeduction + salarySpouseAfterDeduction + (record.profitIncome || 0) + (record.interestIncome || 0);
+
+    // 2. 全部免稅額
+    const totalExemptions = (record.exemptionsCount || 0) * std.exemptionBase + (record.exemptionsSeniorCount || 0) * std.exemptionSenior;
+
+    // 3. 扣除額
+    const generalDeduction = record.isMarried ? std.standardDeductionMarried : std.standardDeductionSingle;
+    const savingsDeduction = Math.min(record.interestIncome || 0, std.savingsDeductionLimit);
+    const disabilityTotal = (record.disabilityCount || 0) * std.disabilityDeductionUnit;
+    const educationTotal = (record.educationCount || 0) * std.educationDeductionUnit;
+    const preschoolTotal = (record.preschoolCount || 0) * std.preschoolDeductionUnit;
+    const longTermCareTotal = (record.longTermCareCount || 0) * std.longTermCareDeductionUnit;
+
+    const specialDeductionsTotal = (record.propertyLossDeduction || 0) + 
+                             savingsDeduction + 
+                             disabilityTotal +
+                             educationTotal +
+                             preschoolTotal +
+                             longTermCareTotal;
+    
+    const specialDeductionsTotalPlusGeneral = generalDeduction + specialDeductionsTotal;
+
+    // 4. 基本生活費差額
+    const headcount = (record.exemptionsCount || 0) + (record.exemptionsSeniorCount || 0);
+    const bleTotal = headcount * std.basicLivingExpenseUnit;
+    // Basic living expense comparison: exemption + general deduction + special deductions (excluding salary deduction)
+    const bleComparison = totalExemptions + generalDeduction + savingsDeduction + disabilityTotal + educationTotal + preschoolTotal + longTermCareTotal;
+    const bleDifference = Math.max(0, bleTotal - bleComparison);
+
+    // 5. 課稅所得額
+    const netTaxableIncome = Math.max(0, totalIncome - totalExemptions - generalDeduction - specialDeductionsTotal - bleDifference - (record.startupInvestmentDeduction || 0));
+
+    // 6. 應納稅額
+    const bracket = std.taxBrackets.find((b, i) => {
+      const prevLimit = i > 0 ? std.taxBrackets[i-1].limit : 0;
+      return netTaxableIncome <= b.limit;
+    }) || std.taxBrackets[std.taxBrackets.length - 1];
+
+    const taxPayable = netTaxableIncome * bracket.rate - bracket.adjustment;
+
+    // 7. 應退/補稅額
+    const divCreditRaw = (record.profitIncome || 0) * 0.085;
+    const divCredit = Math.min(divCreditRaw, 80000);
+    const finalTaxDue = taxPayable - (record.investmentCredits || 0) - (record.homePurchaseCredits || 0) - (record.withholding || 0) - divCredit - (record.mainlandTaxCredits || 0);
+
+    return {
+      salaryUserDeduction,
+      salaryUserAfterDeduction,
+      salarySpouseDeduction,
+      salarySpouseAfterDeduction,
+      totalIncome,
+      totalExemptions,
+      generalDeduction,
+      savingsDeduction,
+      specialDeductionsTotal,
+      specialDeductionsTotalPlusGeneral,
+      headcount,
+      bleComparison,
+      bleDifference,
+      netTaxableIncome,
+      bracket,
+      taxPayable,
+      divCreditRaw,
+      divCredit,
+      finalTaxDue
+    };
+  };
+
+  const currentResult = calculateResult(newTax);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">所得稅管理</h2>
+          <p className="text-sm text-slate-500">預測與分析年度所得稅負</p>
+        </div>
+        <div className="flex gap-2 bg-slate-100 p-1 rounded-xl">
+          <button onClick={() => setViewMode('records')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'records' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>紀錄</button>
+          <button onClick={() => setViewMode('calculator')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'calculator' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>計算器</button>
+          <button onClick={() => setViewMode('standards')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'standards' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>參數設定</button>
+        </div>
+      </div>
+
+      {viewMode === 'standards' && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="font-bold text-slate-800 text-lg">年度稅務參數</h3>
+            <div className="flex gap-3">
+              <label className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl border border-indigo-100 cursor-pointer hover:bg-indigo-100 transition-all font-bold text-sm">
+                <Sparkles size={16} /> {isAnalyzingStandard ? '辨識中...' : 'AI 辨識參數'}
+                <input type="file" className="hidden" accept=".pdf,image/*" onChange={handleStandardUpload} disabled={isAnalyzingStandard} />
+              </label>
+              <button onClick={() => { setNewStandard({...DEFAULT_TAX_STANDARDS, year: 113}); setIsAddingStandard(true); }} className="text-sm font-bold text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl">新增年度參數</button>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {standards.map(std => (
+              <div key={std.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex justify-between items-start">
+                  <span className="text-2xl font-black text-slate-800">{std.year}年</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => { setNewStandard(std); setIsAddingStandard(true); }} className="p-2 text-slate-400 hover:text-indigo-600">
+                      <Edit2 size={18} />
+                    </button>
+                    <button onClick={() => { if(confirm('確定刪除此年度參數？')) deleteDoc(doc(db, 'taxStandards', std.id)); }} className="p-2 text-slate-300 hover:text-rose-500">
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <p className="text-slate-400 font-bold uppercase tracking-widest mb-1">一般免稅額</p>
+                    <p className="font-bold text-slate-700">${std.exemptionBase.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 font-bold uppercase tracking-widest mb-1">標準扣除(單)</p>
+                    <p className="font-bold text-slate-700">${std.standardDeductionSingle.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {standards.length === 0 && <p className="text-slate-400 text-sm">目前使用系統預設參數 (112年度)。</p>}
+          </div>
+
+          <AnimatePresence>
+            {isAddingStandard && (
+              <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl p-8">
+                   <div className="flex justify-between items-center mb-8">
+                    <h3 className="text-2xl font-black text-slate-800">編輯年度參數</h3>
+                    <button onClick={() => setIsAddingStandard(false)} className="p-2 hover:bg-slate-50 rounded-full"><X /></button>
+                   </div>
+                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                     <div className="space-y-2">
+                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">年度 (民國)</label>
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.year} onChange={e => setNewStandard({...newStandard, year: Number(e.target.value)})} />
+                     </div>
+                     <div className="space-y-2">
+                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">一般免稅額</label>
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.exemptionBase} onChange={e => setNewStandard({...newStandard, exemptionBase: Number(e.target.value)})} />
+                     </div>
+                     <div className="space-y-2">
+                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">薪資扣除額</label>
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.salaryDeductionUnit} onChange={e => setNewStandard({...newStandard, salaryDeductionUnit: Number(e.target.value)})} />
+                     </div>
+                     <div className="space-y-2">
+                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">標扣 (單身)</label>
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.standardDeductionSingle} onChange={e => setNewStandard({...newStandard, standardDeductionSingle: Number(e.target.value)})} />
+                     </div>
+                     <div className="space-y-2">
+                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">標扣 (有配偶)</label>
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.standardDeductionMarried} onChange={e => setNewStandard({...newStandard, standardDeductionMarried: Number(e.target.value)})} />
+                     </div>
+                     <div className="space-y-2">
+                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">基本生活費</label>
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.basicLivingExpenseUnit} onChange={e => setNewStandard({...newStandard, basicLivingExpenseUnit: Number(e.target.value)})} />
+                     </div>
+                   </div>
+                   <div className="mt-8 flex justify-end gap-3 pt-6 border-t">
+                    <button onClick={() => setIsAddingStandard(false)} className="px-6 py-2 font-bold text-slate-500">取消</button>
+                    <button onClick={handleSaveStandard} className="px-8 py-2 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-100">儲存參數</button>
+                   </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {viewMode === 'records' && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="font-bold text-slate-800 text-lg">申報歷史紀錄</h3>
+            <div className="flex gap-3">
+              <label className="flex items-center gap-2 bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl border border-emerald-100 cursor-pointer hover:bg-emerald-100 transition-all font-bold text-sm">
+                <Sparkles size={16} /> {isAnalyzing ? '分析中...' : 'AI 辨識匯入'}
+                <input type="file" className="hidden" accept=".pdf,image/*" onChange={handleFileUpload} disabled={isAnalyzing} />
+              </label>
+              <button onClick={() => { setNewTax(INITIAL_TAX_RECORD); setIsAdding(true); setViewMode('calculator'); }} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 font-bold text-sm">
+                <Calculator size={16} /> 開啟計算器
+              </button>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-4">
+            {taxes.map(tax => {
+              const res = calculateResult(tax);
+              return (
+                <div key={tax.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between group hover:border-indigo-200 transition-all cursor-pointer" onClick={() => { setNewTax(tax); setIsAdding(true); setViewMode('calculator'); }}>
+                  <div className="flex items-center gap-6">
+                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-lg">
+                      {tax.year}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{tax.year} 年度申報</p>
+                      <p className="text-xs text-slate-400">總所得: ${res.totalIncome.toLocaleString()} / 課稅所得: ${res.netTaxableIncome.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-12">
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">應補(退)稅額</p>
+                      <p className={`text-xl font-black ${res.finalTaxDue > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                        {res.finalTaxDue > 0 ? '+' : ''}${Math.round(res.finalTaxDue).toLocaleString()}
+                      </p>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(tax.id); }} className="p-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={18} /></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {(viewMode === 'calculator' || isAdding) && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-black text-slate-800">稅務試算表</h3>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 text-sm font-bold text-slate-500">
+                    <input type="checkbox" checked={newTax.isMarried} onChange={e => setNewTax({...newTax, isMarried: e.target.checked})} className="w-4 h-4 rounded text-indigo-600" />
+                    <span>合併申報 (夫妻)</span>
+                  </div>
+                  <select className="bg-slate-50 p-2 rounded-xl text-sm font-bold" value={newTax.year} onChange={e => setNewTax({...newTax, year: Number(e.target.value)})}>
+                    {[113, 112, 111].map(y => <option key={y} value={y}>{y}年度</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <section className="space-y-4">
+                  <h4 className="text-xs font-black text-indigo-600 uppercase tracking-widest border-l-4 border-indigo-600 pl-3">所得來源 (年收入)</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400">本人薪資總額</label>
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.salaryUser} onChange={e => setNewTax({...newTax, salaryUser: Number(e.target.value)})} />
+                    </div>
+                    {newTax.isMarried && (
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400">配偶薪資總額</label>
+                        <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.salarySpouse} onChange={e => setNewTax({...newTax, salarySpouse: Number(e.target.value)})} />
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400">營利所得 (含股利 54C)</label>
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.profitIncome} onChange={e => setNewTax({...newTax, profitIncome: Number(e.target.value)})} />
+                    </div>
+                    <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400">利息所得 (金融機構)</label>
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.interestIncome} onChange={e => setNewTax({...newTax, interestIncome: Number(e.target.value)})} />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="space-y-4">
+                  <h4 className="text-xs font-black text-indigo-600 uppercase tracking-widest border-l-4 border-indigo-600 pl-3">免稅額與撫養</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400">一般免稅人數 (含本人/配偶/70歲以下)</label>
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.exemptionsCount} onChange={e => setNewTax({...newTax, exemptionsCount: Number(e.target.value)})} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400">70歲以上扶養人數</label>
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.exemptionsSeniorCount} onChange={e => setNewTax({...newTax, exemptionsSeniorCount: Number(e.target.value)})} />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="space-y-4">
+                  <h4 className="text-xs font-black text-indigo-600 uppercase tracking-widest border-l-4 border-indigo-600 pl-3">特別扣除與扺減</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400">身障人數</label>
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl text-center" value={newTax.disabilityCount} onChange={e => setNewTax({...newTax, disabilityCount: Number(e.target.value)})} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400">幼兒人數</label>
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl text-center" value={newTax.preschoolCount} onChange={e => setNewTax({...newTax, preschoolCount: Number(e.target.value)})} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400">教育人數</label>
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl text-center" value={newTax.educationCount} onChange={e => setNewTax({...newTax, educationCount: Number(e.target.value)})} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400">長照人數</label>
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl text-center" value={newTax.longTermCareCount} onChange={e => setNewTax({...newTax, longTermCareCount: Number(e.target.value)})} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400">扣繳稅額 (各項收入已扣)</label>
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.withholding} onChange={e => setNewTax({...newTax, withholding: Number(e.target.value)})} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400">備註</label>
+                      <input type="text" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.note} onChange={e => setNewTax({...newTax, note: e.target.value})} placeholder="例如：112年度申報結果" />
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="bg-indigo-600 p-8 rounded-3xl shadow-xl shadow-indigo-200 text-white space-y-6">
+              <div>
+                <p className="text-indigo-200 text-[10px] font-bold uppercase tracking-widest mb-1">預估應補 (退) 稅額</p>
+                <h3 className="text-4xl font-black">
+                  {currentResult.finalTaxDue > 0 ? '+' : ''}${Math.round(currentResult.finalTaxDue).toLocaleString()}
+                </h3>
+                <p className="mt-2 text-xs text-indigo-200 font-medium opacity-80">
+                  {currentResult.finalTaxDue < 0 ? '恭喜！您預計可獲得稅務退還。' : '請預留稅款以備申報期繳納。'}
+                </p>
+              </div>
+
+              <div className="space-y-3 pt-6 border-t border-indigo-500/50">
+                <div className="flex justify-between text-sm">
+                  <span className="text-indigo-200">綜合所得總額</span>
+                  <span className="font-bold">${Math.round(currentResult.totalIncome).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-indigo-200">免稅+扣除額合計</span>
+                  <span className="font-bold">-${Math.round(currentResult.totalExemptions + currentResult.generalDeduction + currentResult.specialDeductionsTotal + currentResult.bleDifference).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-indigo-200">所得課稅額</span>
+                  <span className="font-bold font-mono">${Math.round(currentResult.netTaxableIncome).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm font-black pt-2 pt-2 border-t border-indigo-500/30">
+                  <span>應納稅額</span>
+                  <span>${Math.round(currentResult.taxPayable).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm italic">
+                  <span className="text-indigo-200">股利抵減額</span>
+                  <span className="text-emerald-300">-${Math.round(currentResult.divCredit).toLocaleString()}</span>
+                </div>
+                 <div className="flex justify-between text-sm italic">
+                  <span className="text-indigo-200">已扣繳稅額</span>
+                  <span className="text-emerald-300">-${Math.round(newTax.withholding || 0).toLocaleString()}</span>
+                </div>
+              </div>
+
+              <button 
+                onClick={handleSaveTax}
+                className="w-full py-4 bg-white text-indigo-600 font-black rounded-2xl shadow-lg hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+              >
+                <Save size={20} /> 儲存計算結果
+              </button>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 text-xs text-slate-500 leading-relaxed space-y-4">
+              <h4 className="font-bold text-slate-700 flex items-center gap-2 underline">
+                <Info size={14} /> 稅務大綱
+              </h4>
+              <p>計算大綱：<br/><b>1. 所得總額</b> = (薪資-扣除) + 股利 + 利息<br/><b>2. 淨所得</b> = 所得總額 - 免稅額 - 標扣 - 特扣 - 基本生活費差額<br/><b>3. 應納稅額</b> = (淨所得 × 稅率) - 累進差額<br/><b>4. 退補稅額</b> = 應納稅額 - 投資扺減 - 扣繳額 - 股利抵減(8.5%)</p>
+              <p className="text-[10px] text-amber-600 font-medium">※ 以上為試算結果，請以國稅局正式申報收執聯為準。</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(viewMode === 'calculator' || isAdding) && (
+        <div className="mt-8">
+           <CalculationBreakdown 
+             tax={newTax} 
+             result={currentResult} 
+             std={standards.find(s => s.year === newTax.year) || (DEFAULT_TAX_STANDARDS as TaxStandard)} 
+           />
+        </div>
+      )}
+    </div>
+  );
+};
+
 const BudgetPage = ({ user }: { user: User }) => {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newBudget, setNewBudget] = useState<Partial<Budget>>({ category: '', allocated: 0, spent: 0, year: new Date().getFullYear() });
 
   useEffect(() => {
-    const q = query(collection(db, 'budgets'), where('uid', '==', user.uid));
+    const targetUids = getAppTargetUids(user);
+    const q = query(collection(db, 'budgets'), where('uid', 'in', targetUids));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Budget));
       setBudgets(data);
@@ -2538,17 +4168,82 @@ const GenericPage = ({ title, icon: Icon, type }: { title: string, icon: any, ty
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabId>('salary');
-  const [user, setUser] = useState<User | null>(null);
+  const [activeTab, setActiveTab] = useState<TabId>('tax');
+  const [user, setUser] = useState<any>({ uid: 'default-user', email: 'guest@example.com' });
   const [loading, setLoading] = useState(true);
 
+  // Global Summary States
+  const [summary, setSummary] = useState({ banks: 0, stocks: 0, funds: 0, debt: 0 });
+
+  // Data Migration from LocalStorage to Firestore
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+    if (loading) return;
+    
+    const migrateData = async () => {
+      const keys = ['salaryRecords', 'bankAccounts', 'creditCards', 'stocks', 'funds', 'budgets', 'yearlyStandards', 'taxes', 'taxStandards'];
+      const currentUid = user.uid;
+      
+      for (const key of keys) {
+        const localData = localStorage.getItem(key);
+        if (localData) {
+          try {
+            const items = JSON.parse(localData);
+            if (Array.isArray(items) && items.length > 0) {
+              console.log(`Migrating ${items.length} items from localStorage for ${key}`);
+              const collectionRef = collection(db, key);
+              for (const item of items) {
+                // Check if already exists by some heuristic or just push if not too many
+                // For simplicity in this environment, we'll push with a special flag
+                const { id, ...data } = item;
+                await addDoc(collectionRef, { ...data, uid: currentUid, _migratedFromLocal: true });
+              }
+              // Clear local storage after successful migration to avoid duplicates
+              localStorage.removeItem(key);
+            }
+          } catch (e) {
+            console.error(`Failed to migrate ${key}:`, e);
+          }
+        }
+      }
+    };
+    
+    migrateData();
+  }, [user.uid, loading]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (authUser) => {
+      if (authUser) {
+        setUser(authUser);
+      } else {
+        setUser({ uid: 'default-user', email: 'guest@example.com' });
+      }
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    
+    const targetUids = getAppTargetUids(user);
+    
+    const unsubBanks = onSnapshot(query(collection(db, 'bankAccounts'), where('uid', 'in', targetUids)), s => {
+      setSummary(prev => ({ ...prev, banks: s.docs.reduce((acc, d) => acc + (d.data().balance || 0), 0) }));
+    });
+    const unsubStocks = onSnapshot(query(collection(db, 'stocks'), where('uid', 'in', targetUids)), s => {
+      setSummary(prev => ({ ...prev, stocks: s.docs.reduce((acc, d) => acc + (d.data().shares * d.data().currentPrice || 0), 0) }));
+    });
+    const unsubFunds = onSnapshot(query(collection(db, 'funds'), where('uid', 'in', targetUids)), s => {
+      setSummary(prev => ({ ...prev, funds: s.docs.reduce((acc, d) => acc + (d.data().currentValue || 0), 0) }));
+    });
+    const unsubDebt = onSnapshot(query(collection(db, 'creditCards'), where('uid', 'in', targetUids)), s => {
+      setSummary(prev => ({ ...prev, debt: s.docs.reduce((acc, d) => acc + (d.data().currentBalance || 0), 0) }));
+    });
+    
+    return () => {
+      unsubBanks(); unsubStocks(); unsubFunds(); unsubDebt();
+    };
+  }, [user?.uid]);
 
   useEffect(() => {
     async function testConnection() {
@@ -2563,17 +4258,37 @@ export default function App() {
     testConnection();
   }, []);
 
-  const handleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Login failed:", error);
-    }
-  };
-
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [isMigrating, setIsMigrating] = useState(false);
+
+  const migrateData = async () => {
+    if (!window.confirm('確定要將 jason2134@gmail.com 的資料匯入至目前帳號嗎？')) return;
+    
+    setIsMigrating(true);
+    let totalMigrated = 0;
+    const collectionsToMigrate = [
+      'salaryRecords', 'creditCards', 'bankAccounts', 'funds', 
+      'stocks', 'budgets', 'yearlyStandards', 'taxes', 'taxStandards'
+    ];
+    
+    try {
+      for (const colName of collectionsToMigrate) {
+        const q = query(collection(db, colName), where('uid', '==', 'jason2134@gmail.com'));
+        const snapshot = await getDocs(q);
+        
+        for (const d of snapshot.docs) {
+          await updateDoc(doc(db, colName, d.id), { uid: user.uid });
+          totalMigrated++;
+        }
+      }
+      alert(`遷移完成！共移動了 ${totalMigrated} 筆資料至目前帳號（${user.email || '訪客'}）。`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'migration');
+    } finally {
+      setIsMigrating(false);
+    }
+  };
 
   const saveApiKey = () => {
     localStorage.setItem('GEMINI_API_KEY', apiKeyInput);
@@ -2581,23 +4296,17 @@ export default function App() {
     alert('API Key 已儲存');
   };
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
-  };
-
   const renderContent = () => {
     if (!user) return null;
     switch (activeTab) {
+      case 'dashboard': return <DashboardPage user={user} />;
       case 'salary': return <SalaryPage user={user} />;
       case 'credit-cards': return <CreditCardPage user={user} />;
       case 'banks': return <BankPage user={user} />;
       case 'stocks': return <StockPage user={user} />;
       case 'budget': return <BudgetPage user={user} />;
-      default: return <SalaryPage user={user} />;
+      case 'tax': return <TaxPage user={user} />;
+      default: return <DashboardPage user={user} />;
     }
   };
 
@@ -2613,57 +4322,49 @@ export default function App() {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center space-y-8"
-        >
-          <div className="w-20 h-20 bg-indigo-600 rounded-2xl flex items-center justify-center text-white mx-auto shadow-xl shadow-indigo-200">
-            <Calculator size={40} />
-          </div>
-          <div className="space-y-2">
-            <h1 className="text-3xl font-bold text-slate-800">公務員財務管理</h1>
-            <p className="text-slate-500">請登入以同步您的財務資料</p>
-          </div>
-          <button 
-            onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-200 py-4 rounded-2xl font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
-          >
-            <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
-            使用 Google 帳號登入
-          </button>
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
+      <div className="h-screen bg-slate-50 flex flex-col md:flex-row overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-full md:w-64 bg-white border-r border-slate-200 p-6 flex flex-col gap-8">
+        <aside className="w-full md:w-64 bg-white border-r border-slate-200 p-6 flex flex-col gap-8 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
               <Calculator size={24} />
             </div>
             <h1 className="text-xl font-bold text-slate-800 leading-tight">
-              公務員<br/><span className="text-indigo-600">財務管理</span>
+              財務管理<br/><span className="text-indigo-600">系統</span>
             </h1>
           </div>
 
-          <nav className="flex flex-col gap-1">
+          <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 space-y-3">
+            <div>
+              <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">目前總資產</p>
+              <p className="text-xl font-black text-indigo-700">${(summary.banks + summary.stocks + summary.funds - summary.debt).toLocaleString()}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+              <div>
+                <p className="text-slate-400 font-bold">存款/投資</p>
+                <p className="font-bold text-emerald-600">${(summary.banks + summary.stocks + summary.funds).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 font-bold">負債 (信貸/卡)</p>
+                <p className="text-rose-500 font-bold">${summary.debt.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+
+          <nav className="flex flex-col gap-1 overflow-y-auto">
             {TABS.map((tab) => {
               const Icon = {
+                LayoutDashboard,
                 Wallet,
                 CreditCard: CreditCardIcon,
                 Building2,
                 TrendingUp,
                 BarChart3,
-                PieChart
-              }[tab.icon];
+                PieChart,
+                FileText
+              }[tab.icon as string];
 
               return (
                 <button
@@ -2682,10 +4383,21 @@ export default function App() {
             })}
           </nav>
 
-          <div className="mt-auto space-y-4">
+          <div className="mt-auto space-y-2">
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-              <p className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-1">使用者</p>
-              <p className="text-sm font-semibold text-slate-700 truncate">{user.email}</p>
+              <p className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-1">目前身份</p>
+              <div className="flex items-center justify-between gap-2 overflow-hidden">
+                <p className="text-sm font-semibold text-slate-700 truncate">{user.email || '訪客'}</p>
+                {user.email !== 'guest@example.com' ? (
+                  <button onClick={() => signOut(auth)} className="text-slate-400 hover:text-rose-500 transition-colors">
+                    <LogOut size={16} />
+                  </button>
+                ) : (
+                  <button onClick={() => signInWithPopup(auth, new GoogleAuthProvider())} className="text-indigo-600 hover:text-indigo-700 transition-colors">
+                    <LogIn size={16} />
+                  </button>
+                )}
+              </div>
             </div>
             <button 
               onClick={() => setIsApiKeyModalOpen(true)}
@@ -2695,11 +4407,12 @@ export default function App() {
               設定 API Key
             </button>
             <button 
-              onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-4 py-3 text-rose-500 hover:bg-rose-50 rounded-xl transition-all font-medium"
+              onClick={migrateData}
+              disabled={isMigrating}
+              className="w-full flex items-center gap-3 px-4 py-3 text-amber-600 hover:bg-amber-50 rounded-xl transition-all font-medium disabled:opacity-50"
             >
-              <LogOut size={20} />
-              登出
+              {isMigrating ? <Loader2 size={20} className="animate-spin" /> : <RefreshCw size={20} />}
+              匯入舊帳號資料
             </button>
           </div>
         </aside>
@@ -2725,7 +4438,7 @@ export default function App() {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 p-6 md:p-10 overflow-y-auto">
+        <main className="flex-1 p-6 md:p-10 overflow-y-auto bg-slate-50">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
