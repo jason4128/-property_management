@@ -28,26 +28,13 @@ import {
   Loader2,
   Info,
   LayoutDashboard,
-  FileText
+  FileText,
+  AlertCircle
 } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { motion, AnimatePresence } from 'motion/react';
 import { TABS, TabId } from './constants';
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  Cell as RechartsCell
-} from 'recharts';
+import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid, AreaChart, Area, BarChart, Bar, Cell as RechartsCell } from 'recharts';
 import { 
   SalaryRecord, 
   CreditCard, 
@@ -538,7 +525,7 @@ const normalizeRank = (rank: string): string => {
   return r;
 };
 
-const SalaryPage = ({ user }: { user: User }) => {
+const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [records, setRecords] = useState<SalaryRecord[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
@@ -650,12 +637,8 @@ const SalaryPage = ({ user }: { user: User }) => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'salaryRecords', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'salaryRecords');
-    }
+  const handleDelete = async (id: string, name: string) => {
+    setDeleteTarget({ type: 'salaryRecords', id, name });
   };
 
   const handleUpdate = async (id: string, field: keyof SalaryRecord, value: any) => {
@@ -793,12 +776,8 @@ const SalaryPage = ({ user }: { user: User }) => {
     }
   };
 
-  const handleDeleteYearlyStandard = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'yearlyStandards', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'yearlyStandards');
-    }
+  const handleDeleteYearlyStandard = async (id: string, year: string) => {
+    setDeleteTarget({ type: 'yearlyStandards', id, name: `${year} 年薪資標準` });
   };
 
   const handleUpdateYearlyStandard = async (id: string, field: keyof YearlyStandard, value: any) => {
@@ -1215,7 +1194,7 @@ const SalaryPage = ({ user }: { user: User }) => {
                               </td>
                               <td className="p-3 text-center">
                                 <button 
-                                  onClick={() => handleDeleteYearlyStandard(s.id)}
+                                  onClick={() => handleDeleteYearlyStandard(s.id, s.year)}
                                   className="text-rose-400 hover:text-rose-600 transition-colors"
                                 >
                                   <Trash2 size={16} />
@@ -1741,7 +1720,7 @@ const SalaryPage = ({ user }: { user: User }) => {
                     </td>
                     <td className="p-3 text-center">
                       <button 
-                        onClick={() => handleDelete(r.id)}
+                        onClick={() => handleDelete(r.id, r.date)}
                         className="text-slate-400 hover:text-rose-500 transition-colors"
                       >
                         <Trash2 size={16} />
@@ -1758,7 +1737,7 @@ const SalaryPage = ({ user }: { user: User }) => {
   );
 };
 
-const CreditCardPage = ({ user }: { user: User }) => {
+const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [cards, setCards] = useState<CreditCard[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newCard, setNewCard] = useState<Partial<CreditCard>>({
@@ -1787,12 +1766,8 @@ const CreditCardPage = ({ user }: { user: User }) => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'creditCards', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'creditCards');
-    }
+  const handleDelete = async (id: string, name: string) => {
+    setDeleteTarget({ type: 'creditCards', id, name });
   };
 
   return (
@@ -1822,7 +1797,7 @@ const CreditCardPage = ({ user }: { user: User }) => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {cards.map(card => (
           <div key={card.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 relative group">
-            <button onClick={() => handleDelete(card.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onClick={() => handleDelete(card.id, card.name)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
               <Trash2 size={18} />
             </button>
             <div className="flex items-center gap-3 mb-4">
@@ -1857,7 +1832,7 @@ const CreditCardPage = ({ user }: { user: User }) => {
   );
 };
 
-const BankPage = ({ user }: { user: User }) => {
+const BankPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1910,13 +1885,8 @@ const BankPage = ({ user }: { user: User }) => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('確定要刪除此帳戶嗎？')) return;
-    try {
-      await deleteDoc(doc(db, 'bankAccounts', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'bankAccounts');
-    }
+  const handleDelete = async (id: string, name: string) => {
+    setDeleteTarget({ type: 'bankAccounts', id, name });
   };
 
   const startEditing = (acc: BankAccount) => {
@@ -2301,7 +2271,7 @@ ${text}
                           <button onClick={() => startEditing(acc)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg shadow-sm border border-transparent hover:border-slate-100 transition-all">
                             <Edit2 size={16} />
                           </button>
-                          <button onClick={() => handleDelete(acc.id)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-white rounded-lg shadow-sm border border-transparent hover:border-slate-100 transition-all">
+                          <button onClick={() => handleDelete(acc.id, acc.name)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-white rounded-lg shadow-sm border border-transparent hover:border-slate-100 transition-all">
                             <Trash2 size={16} />
                           </button>
                         </div>
@@ -2403,7 +2373,7 @@ ${text}
   );
 };
 
-const FundPage = ({ user }: { user: User }) => {
+const FundPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [funds, setFunds] = useState<Fund[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newFund, setNewFund] = useState<Partial<Fund>>({ name: '', cost: 0, currentValue: 0, units: 0 });
@@ -2489,11 +2459,11 @@ const FundPage = ({ user }: { user: User }) => {
                   <td className={`p-4 text-right font-bold ${roi >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
                     {roi.toFixed(2)}%
                   </td>
-                  <td className="p-4 text-center">
-                    <button onClick={() => handleDelete(fund.id)} className="text-slate-300 hover:text-rose-500 transition-colors">
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
+                    <td className="p-4 text-center">
+                      <button onClick={() => setDeleteTarget({ type: 'funds', id: fund.id, name: fund.name })} className="text-slate-300 hover:text-rose-500 transition-colors">
+                        <Trash2 size={18} />
+                      </button>
+                    </td>
                 </tr>
               );
             })}
@@ -2504,7 +2474,7 @@ const FundPage = ({ user }: { user: User }) => {
   );
 };
 
-const StockPage = ({ user }: { user: User }) => {
+const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [funds, setFunds] = useState<Fund[]>([]);
   const [isAdding, setIsAdding] = useState(false);
@@ -2699,12 +2669,8 @@ const StockPage = ({ user }: { user: User }) => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'stocks', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'stocks');
-    }
+  const handleDelete = async (id: string, name: string) => {
+    setDeleteTarget({ type: 'stocks', id, name });
   };
 
   const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
@@ -3191,7 +3157,7 @@ const StockPage = ({ user }: { user: User }) => {
           return (
             <div key={stock.id} className={`bg-white p-6 rounded-xl shadow-sm border ${selectedStocks.has(stock.id) ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-200'} relative group`}>
               <input type="checkbox" checked={selectedStocks.has(stock.id)} onChange={() => toggleStockSelection(stock.id)} className="absolute top-4 left-4" />
-              <button onClick={() => handleDelete(stock.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onClick={() => handleDelete(stock.id, `${stock.symbol} ${stock.name}`)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Trash2 size={18} />
               </button>
               <div className="flex justify-between items-start mb-4 ml-6">
@@ -3226,7 +3192,7 @@ const StockPage = ({ user }: { user: User }) => {
   );
 };
 
-const DashboardPage = ({ user }: { user: User }) => {
+const DashboardPage = ({ user, summary }: { user: User, summary: any }) => {
   const [data, setData] = useState({
     banks: [] as BankAccount[],
     stocks: [] as Stock[],
@@ -3254,21 +3220,20 @@ const DashboardPage = ({ user }: { user: User }) => {
     return () => { unsubBanks(); unsubStocks(); unsubFunds(); unsubCards(); };
   }, [user.uid]);
 
-  const bankTotal = data.banks.reduce((sum, a) => sum + (a.type === 'loan' ? -a.balance : a.balance), 0);
-  const stockTotal = data.stocks.reduce((sum, s) => {
-    const val = s.shares * s.currentPrice;
-    return sum + (s.source === 'Firstrade' ? val * usdRate : val);
-  }, 0);
-  const fundTotal = data.funds.reduce((sum, f) => sum + f.currentValue, 0);
-  const cardDebt = data.cards.reduce((sum, c) => sum + (c.currentBalance || 0), 0);
+  // Use values directly from the pre-calculated global summary for consistency
+  const bankTotal = summary.banks;
+  const stockTotal = summary.stocks;
+  const fundTotal = summary.funds;
+  const cardDebt = summary.debt;
+  const totalLoan = summary.loans;
   
-  const totalAssets = bankTotal + stockTotal + fundTotal - cardDebt;
+  const totalAssets = bankTotal + stockTotal + fundTotal - cardDebt - totalLoan;
 
   const chartData = [
     { name: '銀行存款', value: Math.max(0, bankTotal), color: '#6366f1' },
     { name: '股票投資', value: Math.max(0, stockTotal), color: '#10b981' },
     { name: '基金投資', value: Math.max(0, fundTotal), color: '#f59e0b' },
-    { name: '信用卡負債', value: Math.max(0, cardDebt), color: '#ef4444' },
+    { name: '負債 (卡/貸)', value: Math.max(0, cardDebt + totalLoan), color: '#ef4444' },
   ].filter(d => d.value > 0);
 
   return (
@@ -3310,16 +3275,18 @@ const DashboardPage = ({ user }: { user: User }) => {
           </h3>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" />
-                <YAxis />
+              <RechartsPieChart>
+                <Pie data={chartData} dataKey="value" innerRadius={60} outerRadius={100} paddingAngle={5}>
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
                 <Tooltip 
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: number) => [`$${value.toLocaleString()}`, '金額']}
+                  formatter={(value: number) => [`$${Math.round(value).toLocaleString()}`, '金額']}
                 />
-                <Area type="monotone" dataKey="value" stroke="#6366f1" fill="#6366f1" fillOpacity={0.1} />
-              </AreaChart>
+                <Legend />
+              </RechartsPieChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -3334,9 +3301,9 @@ const DashboardPage = ({ user }: { user: User }) => {
                 <div className="w-2 h-10 rounded-full" style={{ backgroundColor: item.color }} />
                 <div className="flex-1">
                   <p className="text-sm font-bold text-slate-700">{item.name}</p>
-                  <p className="text-xs text-slate-400">{((item.value / totalAssets) * 100).toFixed(1)}%</p>
+                  <p className="text-xs text-slate-400">{Math.round((item.value / totalAssets) * 100)}%</p>
                 </div>
-                <p className="font-bold text-slate-800">${item.value.toLocaleString()}</p>
+                <p className="font-bold text-slate-800">${Math.round(item.value).toLocaleString()}</p>
               </div>
             ))}
           </div>
@@ -3692,7 +3659,7 @@ const CalculationBreakdown = ({ tax, result, std }: { tax: Partial<TaxRecord>, r
   );
 };
 
-const TaxPage = ({ user }: { user: User }) => {
+const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [viewMode, setViewMode] = useState<'calculator' | 'records' | 'standards'>('calculator');
   const [taxes, setTaxes] = useState<TaxRecord[]>([]);
   const [standards, setStandards] = useState<TaxStandard[]>([]);
@@ -3811,45 +3778,23 @@ const TaxPage = ({ user }: { user: User }) => {
     }
   };
 
-  const handleDeleteTax = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteTax = async (id: string, name: string, e: React.MouseEvent | React.TouchEvent) => {
+    e?.stopPropagation();
     console.log('Delete button clicked for ID:', id);
     if (!id) {
       window.alert('錯誤：無法獲取紀錄 ID');
       return;
     }
     
-    if (window.confirm(`確定要永久刪除此年度稅務紀錄嗎？\n(ID: ${id})`)) {
-      try {
-        console.log(`正在執行刪除動作, path: taxes/${id}`);
-        await deleteDoc(doc(db, 'taxes', id));
-        console.log('刪除成功');
-        window.alert('紀錄已成功刪除');
-      } catch (err) {
-        console.error('刪除稅務紀錄失敗:', err);
-        handleFirestoreError(err, OperationType.DELETE, 'taxes');
-      }
-    } else {
-      console.log('使用者取消刪除');
-    }
+    setDeleteTarget({ type: 'taxes', id, name: `${name} 年度稅務紀錄` });
   };
 
-  const handleDeleteStandard = async (id: string) => {
+  const handleDeleteStandard = async (id: string, year: string | number) => {
     if (!id) {
       window.alert('錯誤：無法獲取參數 ID');
       return;
     }
-    
-    if (window.confirm(`確定要刪除此年度稅務參數嗎？\n(這將影響該年度的計算準確性)`)) {
-      try {
-        console.log(`正在刪除稅務參數: ${id}`);
-        await deleteDoc(doc(db, 'taxStandards', id));
-        window.alert('年度參數已刪除');
-      } catch (err) {
-        console.error('刪除稅務參數失敗:', err);
-        handleFirestoreError(err, OperationType.DELETE, 'taxStandards');
-      }
-    }
+    setDeleteTarget({ type: 'taxStandards', id, name: `${year} 年度稅務參數` });
   };
 
   const calculateResult = (record: Partial<TaxRecord>) => {
@@ -3985,7 +3930,7 @@ const TaxPage = ({ user }: { user: User }) => {
                     <button onClick={() => { setNewStandard(std); setIsAddingStandard(true); }} className="p-2 text-slate-400 hover:text-indigo-600">
                       <Edit2 size={18} />
                     </button>
-                    <button onClick={() => handleDeleteStandard(std.id)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="刪除年度參數">
+                    <button onClick={() => handleDeleteStandard(std.id, std.year)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="刪除年度參數">
                       <Trash2 size={18} />
                     </button>
                   </div>
@@ -4220,7 +4165,7 @@ const TaxPage = ({ user }: { user: User }) => {
                     </div>
                     <button 
                       type="button"
-                      onClick={(e) => handleDeleteTax(tax.id, e)} 
+                      onClick={(e) => handleDeleteTax(tax.id, String(tax.year), e)} 
                       className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
                       title="刪除紀錄"
                     >
@@ -4428,7 +4373,7 @@ const TaxPage = ({ user }: { user: User }) => {
   );
 };
 
-const BudgetPage = ({ user }: { user: User }) => {
+const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newBudget, setNewBudget] = useState<Partial<Budget>>({ category: '', allocated: 0, spent: 0, year: new Date().getFullYear() });
@@ -4455,12 +4400,8 @@ const BudgetPage = ({ user }: { user: User }) => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'budgets', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'budgets');
-    }
+  const handleDelete = async (id: string, name: string) => {
+    setDeleteTarget({ type: 'budgets', id, name });
   };
 
   return (
@@ -4493,7 +4434,7 @@ const BudgetPage = ({ user }: { user: User }) => {
           const percent = (budget.spent / budget.allocated) * 100;
           return (
             <div key={budget.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 group relative">
-              <button onClick={() => handleDelete(budget.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onClick={() => handleDelete(budget.id, budget.category)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Trash2 size={18} />
               </button>
               <div className="flex justify-between items-end mb-4">
@@ -4559,7 +4500,36 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   // Global Summary States
-  const [summary, setSummary] = useState({ banks: 0, stocks: 0, funds: 0, debt: 0 });
+  const [summary, setSummary] = useState({ banks: 0, stocks: 0, funds: 0, debt: 0, loans: 0, stockBreakdown: { total: 0, firstrade: 0, cathay: 0 } });
+  const [deleteTarget, setDeleteTarget] = useState<{ type: string, id: string, name: string } | null>(null);
+
+  // Custom Modal Component
+  const ConfirmationModal = ({ isOpen, onClose, onConfirm, message }: { isOpen: boolean, onClose: () => void, onConfirm: () => void, message: string }) => {
+    if (!isOpen) return null;
+    return (
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl text-center">
+          <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertCircle size={24} />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800 mb-2">確認刪除</h3>
+          <p className="text-slate-600 mb-6">{message}</p>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="flex-1 py-3 px-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200">取消</button>
+            <button 
+              onClick={async () => {
+                await onConfirm();
+                onClose();
+              }} 
+              className="flex-1 py-3 px-4 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-700 active:scale-95 transition-transform"
+            >
+              確認刪除
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Data Migration from LocalStorage to Firestore
   useEffect(() => {
@@ -4614,10 +4584,26 @@ export default function App() {
     const targetUids = getAppTargetUids(user);
     
     const unsubBanks = onSnapshot(query(collection(db, 'bankAccounts'), where('uid', 'in', targetUids)), s => {
-      setSummary(prev => ({ ...prev, banks: s.docs.reduce((acc, d) => acc + (d.data().balance || 0), 0) }));
+      const data = s.docs.map(d => d.data());
+      const assets = data.filter(d => d.type !== 'loan').reduce((acc, d) => acc + (d.balance || 0), 0);
+      const loans = data.filter(d => d.type === 'loan').reduce((acc, d) => acc + (d.balance || d.loanRemaining || 0), 0);
+      setSummary(prev => ({ ...prev, banks: assets, loans: loans }));
     });
     const unsubStocks = onSnapshot(query(collection(db, 'stocks'), where('uid', 'in', targetUids)), s => {
-      setSummary(prev => ({ ...prev, stocks: s.docs.reduce((acc, d) => acc + (d.data().shares * d.data().currentPrice || 0), 0) }));
+      setSummary(prev => {
+        const stocks = s.docs.reduce((acc, d) => {
+          const val = (d.data().shares * d.data().currentPrice || 0);
+          const isUsd = d.data().source === 'Firstrade';
+          const convVal = isUsd ? val * 32.5 : val;
+          return {
+            ...acc,
+            total: acc.total + convVal,
+            firstrade: acc.firstrade + (isUsd ? convVal : 0),
+            cathay: acc.cathay + (d.data().source === 'Cathay' ? convVal : 0)
+          };
+        }, { total: 0, firstrade: 0, cathay: 0 });
+        return { ...prev, stocks: stocks.total, stockBreakdown: stocks };
+      });
     });
     const unsubFunds = onSnapshot(query(collection(db, 'funds'), where('uid', 'in', targetUids)), s => {
       setSummary(prev => ({ ...prev, funds: s.docs.reduce((acc, d) => acc + (d.data().currentValue || 0), 0) }));
@@ -4700,15 +4686,16 @@ export default function App() {
 
   const renderContent = () => {
     if (!user) return null;
+    const pageProps = { user, setDeleteTarget };
     switch (activeTab) {
-      case 'dashboard': return <DashboardPage user={user} />;
-      case 'salary': return <SalaryPage user={user} />;
-      case 'credit-cards': return <CreditCardPage user={user} />;
-      case 'banks': return <BankPage user={user} />;
-      case 'stocks': return <StockPage user={user} />;
-      case 'budget': return <BudgetPage user={user} />;
-      case 'tax': return <TaxPage user={user} />;
-      default: return <DashboardPage user={user} />;
+      case 'dashboard': return <DashboardPage user={user} summary={summary} />;
+      case 'salary': return <SalaryPage {...pageProps} />;
+      case 'credit-cards': return <CreditCardPage {...pageProps} />;
+      case 'banks': return <BankPage {...pageProps} />;
+      case 'stocks': return <StockPage {...pageProps} />;
+      case 'budget': return <BudgetPage {...pageProps} />;
+      case 'tax': return <TaxPage {...pageProps} />;
+      default: return <DashboardPage user={user} summary={summary} />;
     }
   };
 
@@ -4739,22 +4726,22 @@ export default function App() {
           </div>
 
           <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 space-y-3">
-            <div>
-              <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">目前總資產</p>
-              <p className="text-xl font-black text-indigo-700">${(summary.banks + summary.stocks + summary.funds - summary.debt).toLocaleString()}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-[10px]">
               <div>
-                <p className="text-slate-400 font-bold">存款/投資</p>
-                <p className="font-bold text-emerald-600">${(summary.banks + summary.stocks + summary.funds).toLocaleString()}</p>
+                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">目前淨資產</p>
+                <p className="text-xl font-black text-indigo-700">${Math.round(summary.banks + summary.stocks + summary.funds - (summary.debt + summary.loans)).toLocaleString()}</p>
               </div>
-              <div>
-                <p className="text-slate-400 font-bold">負債 (信貸/卡)</p>
-                <p className="text-rose-500 font-bold">${summary.debt.toLocaleString()}</p>
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div>
+                  <p className="text-slate-400 font-bold">存款/投資</p>
+                  <p className="font-bold text-emerald-600">${Math.round(summary.banks + summary.stocks + summary.funds).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-bold">總負債</p>
+                  <p className="text-rose-500 font-bold">${Math.round(summary.debt + summary.loans).toLocaleString()}</p>
+                </div>
               </div>
             </div>
-          </div>
-
+          
           <nav className="flex flex-col gap-1 overflow-y-auto">
             {TABS.map((tab) => {
               const Icon = {
@@ -4843,6 +4830,21 @@ export default function App() {
             </div>
           </div>
         )}
+        <ConfirmationModal 
+          isOpen={!!deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={async () => {
+            if (deleteTarget) {
+              try {
+                await deleteDoc(doc(db, deleteTarget.type, deleteTarget.id));
+                window.alert('紀錄已刪除');
+              } catch (err) {
+                handleFirestoreError(err, OperationType.DELETE, deleteTarget.type);
+              }
+            }
+          }}
+          message={`確定要永久刪除此紀錄嗎？\n(${deleteTarget?.name || '未命名'})`}
+        />
 
         {/* Main Content */}
         <main className="flex-1 p-6 md:p-10 overflow-y-auto bg-slate-50">
