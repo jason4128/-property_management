@@ -2605,8 +2605,15 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
         const data = JSON.parse(jsonMatch[0]);
         setAiResult(data);
       }
-    } catch (error) {
-      console.error("AI Recognition Error:", error);
+    } catch (error: any) {
+      const errorText = typeof error === 'string' ? error : (error?.message || JSON.stringify(error));
+      if (errorText.includes('The document has no pages')) {
+        console.warn("AI Recognition Error (Expected):", "The document has no pages.");
+        alert('辨識失敗: 圖片內容空白或無法讀取。請上傳有效的截圖。');
+      } else {
+        console.error("AI Recognition Error:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+        alert(`辨識失敗: ${errorText}`);
+      }
     } finally {
       setIsAIProcessing(false);
     }
@@ -3704,8 +3711,14 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
             setIsAdding(true);
           }
         } catch (err: any) {
-          console.error("Tax document AI failed:", err);
-          alert(`辨識失敗: ${err.message}`);
+          const errorText = typeof err === 'string' ? err : (err?.message || JSON.stringify(err));
+          if (errorText.includes('The document has no pages')) {
+            console.warn("Tax document AI failed (Expected):", "The document has no pages.");
+            alert('辨識失敗: 文件內容空白或為無法讀取的格式。請確保您上傳的是清晰的圖片或有效的 PDF 文件。');
+          } else {
+            console.error("Tax document AI failed:", JSON.stringify(err, Object.getOwnPropertyNames(err)));
+            alert(`辨識失敗: ${errorText}`);
+          }
         } finally {
           setIsAnalyzing(false);
         }
@@ -3736,8 +3749,14 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
             setIsAddingStandard(true);
           }
         } catch (err: any) {
-          console.error("Tax standard AI failed:", err);
-          alert(`辨識失敗: ${err.message}`);
+          const errorText = typeof err === 'string' ? err : (err?.message || JSON.stringify(err));
+          if (errorText.includes('The document has no pages')) {
+            console.warn("Tax standard AI failed (Expected):", "The document has no pages.");
+            alert('辨識失敗: 文件內容空白或為無法讀取的格式。請確保您上傳的是清晰的圖片或有效的 PDF 文件。');
+          } else {
+            console.error("Tax standard AI failed:", JSON.stringify(err, Object.getOwnPropertyNames(err)));
+            alert(`辨識失敗: ${errorText}`);
+          }
         } finally {
           setIsAnalyzingStandard(false);
         }
