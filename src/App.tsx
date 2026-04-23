@@ -15,6 +15,8 @@ import {
   Trash2,
   RefreshCw,
   ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   Calculator,
   Camera,
   Save,
@@ -4515,6 +4517,7 @@ const GenericPage = ({ title, icon: Icon, type }: { title: string, icon: any, ty
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('tax');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [user, setUser] = useState<any>({ uid: 'default-user', email: 'guest@example.com' });
   const [loading, setLoading] = useState(true);
 
@@ -4732,19 +4735,48 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className="h-screen bg-slate-50 flex flex-col md:flex-row overflow-hidden">
+      <div className="h-screen bg-slate-50 flex flex-col md:flex-row overflow-hidden relative">
+        {/* Mobile Toggle (only visible when sidebar is closed on small screens if we wanted, but let's stick to desktop focus) */}
+        {!isSidebarOpen && (
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="fixed top-4 left-4 z-50 p-3 bg-white border border-slate-200 rounded-xl shadow-xl text-indigo-600 hover:bg-slate-50 transition-all active:scale-95"
+            title="開啟功能選單"
+          >
+            <PanelLeftOpen size={24} />
+          </button>
+        )}
+
         {/* Sidebar */}
-        <aside className="w-full md:w-64 bg-white border-r border-slate-200 p-6 flex flex-col gap-8 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
-              <Calculator size={24} />
+        <motion.aside 
+          initial={false}
+          animate={{ 
+            width: isSidebarOpen ? (window.innerWidth < 768 ? '100%' : '256px') : '0px',
+            padding: isSidebarOpen ? '24px' : '0px',
+            opacity: isSidebarOpen ? 1 : 0
+          }}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          className="bg-white border-r border-slate-200 flex flex-col gap-8 flex-shrink-0 overflow-hidden relative"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200 flex-shrink-0">
+                <Calculator size={24} />
+              </div>
+              <h1 className="text-xl font-bold text-slate-800 leading-tight whitespace-nowrap">
+                財務管理<br/><span className="text-indigo-600">系統</span>
+              </h1>
             </div>
-            <h1 className="text-xl font-bold text-slate-800 leading-tight">
-              財務管理<br/><span className="text-indigo-600">系統</span>
-            </h1>
+            <button 
+              onClick={() => setIsSidebarOpen(false)}
+              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex-shrink-0"
+              title="隱藏側邊欄"
+            >
+              <PanelLeftClose size={20} />
+            </button>
           </div>
 
-          <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 space-y-3">
+          <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 space-y-3 min-w-[200px]">
               <div>
                 <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">目前淨資產</p>
                 <p className="text-xl font-black text-indigo-700">${Math.round(summary.banks + summary.stocks + summary.funds - (summary.debt + summary.loans)).toLocaleString()}</p>
@@ -4791,7 +4823,7 @@ export default function App() {
             })}
           </nav>
 
-          <div className="mt-auto space-y-2">
+          <div className="mt-auto space-y-2 min-w-[200px]">
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
               <p className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-1">目前身份</p>
               <div className="flex items-center justify-between gap-2 overflow-hidden">
@@ -4828,7 +4860,7 @@ export default function App() {
               匯入舊帳號資料
             </button>
           </div>
-        </aside>
+        </motion.aside>
 
         {/* API Key Modal */}
         {isApiKeyModalOpen && (
@@ -4866,7 +4898,7 @@ export default function App() {
         />
 
         {/* Main Content */}
-        <main className="flex-1 p-6 md:p-10 overflow-y-auto bg-slate-50">
+        <main className="flex-1 p-6 md:p-10 overflow-y-auto bg-slate-50 relative">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
