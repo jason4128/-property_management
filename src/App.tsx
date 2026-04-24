@@ -31,15 +31,20 @@ import {
   Info,
   LayoutDashboard,
   FileText,
-  AlertCircle
+  AlertCircle,
+  CheckCircle2,
+  Copy,
+  ChevronLeft,
+  GripVertical
 } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { TABS, TabId } from './constants';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid, AreaChart, Area, BarChart, Bar, Cell as RechartsCell } from 'recharts';
 import { 
   SalaryRecord, 
   CreditCard, 
+  CreditCardBill,
   BankAccount, 
   Fund, 
   Stock, 
@@ -1799,97 +1804,407 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
 
 const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [cards, setCards] = useState<CreditCard[]>([]);
-  const [isAdding, setIsAdding] = useState(false);
+  const [bills, setBills] = useState<CreditCardBill[]>([]);
+  const [isAddingCard, setIsAddingCard] = useState(false);
+  const [isAddingBill, setIsAddingBill] = useState(false);
+  const [editingBill, setEditingBill] = useState<{ cardId: string, month: string, amount: number } | null>(null);
+  
+  // AI Recognition State
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [aiImage, setAiImage] = useState<string | null>(null);
+  const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [newCard, setNewCard] = useState<Partial<CreditCard>>({
     name: '', bank: '', statementDate: 1, dueDate: 1, limit: 0, currentBalance: 0
   });
 
   useEffect(() => {
     const targetUids = getAppTargetUids(user);
-    const q = query(collection(db, 'creditCards'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubCards = onSnapshot(query(collection(db, 'creditCards')), (snapshot) => {
       const data = snapshot.docs
         .map(doc => ({ ...doc.data(), id: doc.id } as CreditCard))
         .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setCards(data);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'creditCards');
     });
-    return () => unsubscribe();
+
+    const unsubBills = onSnapshot(query(collection(db, 'creditCardBills')), (snapshot) => {
+      const data = snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as CreditCardBill))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
+      setBills(data);
+    });
+
+    return () => { unsubCards(); unsubBills(); };
   }, [user.uid]);
 
-  const handleAdd = async () => {
+  const handleAddCard = async () => {
     try {
-      const card = { ...newCard, uid: user.uid };
-      await addDoc(collection(db, 'creditCards'), card);
-      setIsAdding(false);
+      await addDoc(collection(db, 'creditCards'), { ...newCard, uid: user.uid });
+      setIsAddingCard(false);
+      setNewCard({ name: '', bank: '', statementDate: 1, dueDate: 1, limit: 0, currentBalance: 0 });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'creditCards');
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    setDeleteTarget({ type: 'creditCards', id, name });
+  const handleSaveBill = async () => {
+    if (!editingBill) return;
+    try {
+      const existing = bills.find(b => b.cardId === editingBill.cardId && b.month === editingBill.month);
+      if (existing) {
+        await updateDoc(doc(db, 'creditCardBills', existing.id), { amount: editingBill.amount });
+      } else {
+        await addDoc(collection(db, 'creditCardBills'), { ...editingBill, uid: user.uid });
+      }
+      setEditingBill(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'creditCardBills');
+    }
+  };
+
+  const handleAIProcess = async () => {
+    if (!aiImage) return;
+    setIsAIProcessing(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const prompt = `你是一個專業的財務數據分析師。請分析這張信用卡帳單或消費截圖，並提取出該月份的應繳總額。
+如果是多張卡片或多個月份，請嘗試對應到系統中的卡片名稱。
+系統現有的卡片列表：${cards.map(c => `${c.bank}${c.name} (ID: ${c.id})`).join(', ')}
+
+請嚴格按照以下 JSON 格式回傳：
+{
+  "bills": [
+    { "month": "YYYY-MM", "cardId": "對應的卡片ID", "amount": 1234 }
+  ]
+}
+注意：月份請依照 YYYY-MM 格式，金額請為純數字。如果無法確切對應卡片，請盡量推測。`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: {
+          parts: [
+            { inlineData: { mimeType: "image/png", data: aiImage.split(',')[1] } },
+            { text: prompt }
+          ]
+        },
+        config: { responseMimeType: "application/json" }
+      });
+
+      const result = JSON.parse(response.text || '{}');
+      if (result.bills && Array.isArray(result.bills)) {
+        for (const bill of result.bills) {
+          const existing = bills.find(b => b.cardId === bill.cardId && b.month === bill.month);
+          if (existing) {
+            await updateDoc(doc(db, 'creditCardBills', existing.id), { amount: bill.amount });
+          } else if (bill.cardId && bill.month) {
+            await addDoc(collection(db, 'creditCardBills'), { ...bill, uid: user.uid });
+          }
+        }
+        alert('AI 辨識並匯入完成！');
+      }
+      setIsAIModalOpen(false);
+      setAiImage(null);
+    } catch (error) {
+      console.error('AI Error:', error);
+      alert('AI 辨識失敗，請檢查網路或 API 金鑰。');
+    } finally {
+      setIsAIProcessing(false);
+    }
+  };
+
+  const months = useMemo(() => {
+    const monthsSet = new Set<string>();
+    bills.forEach(b => monthsSet.add(b.month));
+    
+    // Ensure current month is visible
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    monthsSet.add(currentMonth);
+
+    // Generate intermediate months if needed or just sort
+    return Array.from(monthsSet).sort().reverse();
+  }, [bills]);
+
+  const toMinguoMonth = (isoMonth: string) => {
+    const [y, m] = isoMonth.split('-').map(Number);
+    return `${y - 1911}年${m}月`;
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-800">信用卡管理</h2>
-        <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
-          <Plus size={20} /> 新增卡片
-        </button>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">信用卡帳單管理</h2>
+          <p className="text-sm text-slate-500 mt-1">點擊儲存格輸入每月應繳金額</p>
+        </div>
+        <div className="flex gap-2">
+          <button 
+            onClick={async () => {
+              if (!confirm('確定要初始化截圖中的銀行卡片嗎？')) return;
+              const seedCards: Partial<CreditCard>[] = [
+                { bank: '台新銀行', name: '信用', statementDate: 2, dueDate: 17, limit: 150000 },
+                { bank: '國泰世華銀行', name: '信用', statementDate: 3, dueDate: 18, limit: 200000 },
+                { bank: '星展銀行', name: '信用', statementDate: 3, dueDate: 18, limit: 180000 },
+                { bank: '玉山銀行', name: '信用', statementDate: 3, dueDate: 18, limit: 150000 },
+                { bank: '聯邦銀行', name: '信用', statementDate: 3, dueDate: 18, limit: 120000 },
+                { bank: '富邦銀行', name: '信用', statementDate: 4, dueDate: 19, limit: 160000 },
+                { bank: '華南銀行', name: '信用', statementDate: 5, dueDate: 20, limit: 100000 },
+                { bank: '兆豐銀行', name: '信用', statementDate: 24, dueDate: 9, limit: 100000 },
+                { bank: '滙豐銀行', name: '信用', statementDate: 1, dueDate: 16, limit: 200000 }
+              ];
+              for (const c of seedCards) {
+                await addDoc(collection(db, 'creditCards'), { ...c, uid: user.uid, currentBalance: 0 });
+              }
+            }}
+            className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-lg hover:bg-slate-200 transition-colors text-sm font-bold"
+          >
+            <Sparkles size={16} /> 初始化預設銀行
+          </button>
+          <button 
+            onClick={() => setIsAIModalOpen(true)}
+            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors shadow-lg"
+          >
+            <Sparkles size={20} /> AI 辨識帳單
+          </button>
+          <button 
+            onClick={() => setIsAddingCard(true)} 
+            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-lg"
+          >
+            <Plus size={20} /> 新增卡片
+          </button>
+        </div>
       </div>
 
-      {isAdding && (
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" placeholder="卡片名稱" className="p-2 border rounded-md" value={newCard.name ?? ""} onChange={e => setNewCard({...newCard, name: e.target.value})} />
-            <input type="text" placeholder="銀行" className="p-2 border rounded-md" value={newCard.bank ?? ""} onChange={e => setNewCard({...newCard, bank: e.target.value})} />
-            <input type="number" placeholder="額度" className="p-2 border rounded-md" value={newCard.limit ?? 0} onChange={e => setNewCard({...newCard, limit: Number(e.target.value)})} />
-            <input type="number" placeholder="目前未出帳金額" className="p-2 border rounded-md" value={newCard.currentBalance ?? 0} onChange={e => setNewCard({...newCard, currentBalance: Number(e.target.value)})} />
+      {isAddingCard && (
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-md border border-indigo-100 space-y-4">
+          <h3 className="font-bold text-slate-800">新增信用卡參數</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400 uppercase">銀行</label>
+              <input type="text" placeholder="台新, 國泰..." className="w-full p-2 border rounded-md" value={newCard.bank ?? ""} onChange={e => setNewCard({...newCard, bank: e.target.value})} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400 uppercase">卡片/名稱</label>
+              <input type="text" placeholder="玫瑰, 英雄聯盟..." className="w-full p-2 border rounded-md" value={newCard.name ?? ""} onChange={e => setNewCard({...newCard, name: e.target.value})} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400 uppercase">結帳日</label>
+              <input type="number" min="1" max="31" className="w-full p-2 border rounded-md" value={newCard.statementDate ?? 1} onChange={e => setNewCard({...newCard, statementDate: Number(e.target.value)})} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400 uppercase">付款日</label>
+              <input type="number" min="1" max="31" className="w-full p-2 border rounded-md" value={newCard.dueDate ?? 1} onChange={e => setNewCard({...newCard, dueDate: Number(e.target.value)})} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400 uppercase">額度</label>
+              <input type="number" className="w-full p-2 border rounded-md" value={newCard.limit ?? 0} onChange={e => setNewCard({...newCard, limit: Number(e.target.value)})} />
+            </div>
           </div>
-          <div className="flex justify-end gap-3">
-            <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
-            <button onClick={handleAdd} className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">儲存</button>
+          <div className="flex justify-end gap-3 pt-2 border-t">
+            <button onClick={() => setIsAddingCard(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
+            <button onClick={handleAddCard} className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 font-bold">儲存卡片</button>
           </div>
         </motion.div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {cards.map(card => (
-          <div key={card.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 relative group">
-            <button onClick={() => handleDelete(card.id, card.name)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Trash2 size={18} />
-            </button>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600">
-                <CreditCardIcon size={20} />
-              </div>
-              <div>
-                <h3 className="font-bold text-slate-800">{card.name}</h3>
-                <p className="text-xs text-slate-500">{card.bank}</p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">目前餘額</span>
-                <span className="font-semibold text-slate-800">${card.currentBalance.toLocaleString()}</span>
-              </div>
-              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                <div 
-                  className="bg-indigo-500 h-full" 
-                  style={{ width: `${Math.min((card.currentBalance / card.limit) * 100, 100)}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-xs text-slate-400">
-                <span>額度: ${card.limit.toLocaleString()}</span>
-                <span>{Math.round((card.currentBalance / card.limit) * 100)}%</span>
-              </div>
-            </div>
-          </div>
-        ))}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead className="bg-amber-400 text-slate-900 border-b-2 border-slate-300">
+            <tr>
+              <th className="p-3 text-sm font-black border-r border-slate-300 sticky left-0 z-10 bg-amber-400 w-32">日期</th>
+              {cards.map(card => (
+                <th key={card.id} className="p-3 text-center border-r border-slate-300 min-w-[120px] group relative">
+                  <div className="flex flex-col items-center justify-center">
+                    <span className="text-[12px] font-black">{card.bank}{card.name}</span>
+                    <span className="text-[10px] opacity-70">結帳{card.statementDate}日</span>
+                  </div>
+                  <button 
+                    onClick={() => setDeleteTarget({ type: 'creditCards', id: card.id, name: `${card.bank} ${card.name}` })}
+                    className="absolute -top-1 -right-1 p-1 bg-white text-rose-500 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X size={12} />
+                  </button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="bg-amber-300/30">
+            {months.map(month => (
+              <tr key={month} className="border-b border-slate-300 hover:bg-amber-200/50 transition-colors">
+                <td className="p-3 text-sm font-bold border-r border-slate-300 sticky left-0 z-10 bg-amber-300/30 backdrop-blur-sm whitespace-nowrap">
+                  {toMinguoMonth(month)}
+                </td>
+                {cards.map(card => {
+                  const bill = bills.find(b => b.cardId === card.id && b.month === month);
+                  const isEditing = editingBill?.cardId === card.id && editingBill?.month === month;
+                  
+                  return (
+                    <td 
+                      key={`${card.id}-${month}`} 
+                      className="p-3 text-right border-r border-slate-300 font-mono text-slate-800 transition-all cursor-pointer hover:bg-white/40"
+                      onClick={() => !isEditing && setEditingBill({ cardId: card.id, month, amount: bill?.amount || 0 })}
+                    >
+                      {isEditing ? (
+                        <div className="flex items-center gap-1">
+                          <input 
+                            autoFocus
+                            type="number" 
+                            className="w-full bg-white border border-indigo-500 rounded p-1 text-right text-sm"
+                            value={editingBill.amount}
+                            onChange={e => setEditingBill({ ...editingBill, amount: Number(e.target.value) })}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') handleSaveBill();
+                              if (e.key === 'Escape') setEditingBill(null);
+                            }}
+                            onBlur={handleSaveBill}
+                          />
+                        </div>
+                      ) : (
+                        <span className={bill?.amount ? 'font-bold' : 'text-slate-400 opacity-30 italic'}>
+                          {bill?.amount ? bill.amount.toLocaleString() : '0'}
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            {/* Row for adding new month */}
+            <tr className="border-b border-slate-300">
+               <td className="p-3 border-r border-slate-300">
+                  <button 
+                    onClick={() => {
+                      const [lastY, lastM] = (months[0] || '2024-03').split('-').map(Number);
+                      let nextY = lastY;
+                      let nextM = lastM + 1;
+                      if (nextM > 12) { nextM = 1; nextY++; }
+                      const newMonth = `${nextY}-${String(nextM).padStart(2, '0')}`;
+                      setEditingBill({ cardId: '', month: newMonth, amount: 0 }); // Just to trigger a new empty row if needed, but we derive months from data. 
+                      // Actually better to just have a helper to inject a month into the set.
+                      setBills(prev => [...prev, { id: 'temp', cardId: 'temp', month: newMonth, amount: 0 }]);
+                    }}
+                    className="text-[10px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                  >
+                    <Plus size={12} /> 新增月份
+                  </button>
+               </td>
+               {cards.map(card => <td key={card.id} className="border-r border-slate-300" />)}
+            </tr>
+          </tbody>
+        </table>
       </div>
+      
+      <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 flex gap-3 items-start">
+        <Info size={20} className="text-amber-500 flex-shrink-0 mt-0.5" />
+        <div className="text-xs text-amber-800 space-y-1">
+          <p className="font-bold">操作提示：</p>
+          <ul className="list-disc list-inside space-x-0">
+            <li>直接點擊單元格即可輸入該月應繳金額，按下 Enter 或點擊外部即可自動儲存。</li>
+            <li>「日期」欄位將根據截圖樣式以民國年度呈現。</li>
+            <li>結帳日顯示在標題列，方便對帳。</li>
+            <li>使用「AI 辨識帳單」功能，可以上傳帳單截圖自動填入對應卡片的金額。</li>
+          </ul>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {isAIModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-emerald-50/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600">
+                    <Sparkles size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-800">AI 帳單智慧辨識</h3>
+                    <p className="text-xs text-slate-500">上傳截圖，AI 自動解析金額</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsAIModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-8 space-y-6">
+                {!aiImage ? (
+                  <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-3xl p-10 hover:border-emerald-300 hover:bg-emerald-50/30 transition-all cursor-pointer group">
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      id="bill-upload" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => setAiImage(reader.result as string);
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    <label htmlFor="bill-upload" className="flex flex-col items-center cursor-pointer w-full h-full">
+                      <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-emerald-100 group-hover:text-emerald-500 transition-colors mb-4">
+                        <Camera size={32} />
+                      </div>
+                      <p className="text-slate-600 font-bold">點擊或拖放帳單截圖</p>
+                      <p className="text-[10px] text-slate-400 mt-2">支援 PNG, JPG 格式</p>
+                    </label>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-200 shadow-inner bg-slate-50">
+                      <img src={aiImage} className="w-full h-full object-contain" alt="Bill Preview" />
+                      <button 
+                        onClick={() => setAiImage(null)}
+                        className="absolute top-2 right-2 p-1.5 bg-rose-500 text-white rounded-lg shadow-lg hover:bg-rose-600 transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                    <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex gap-3">
+                      <Info size={20} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-[11px] text-emerald-800 leading-relaxed font-medium">
+                        提示：請確保截圖中包含卡片名稱（或銀行名稱）及該月應繳總額，AI 將自動比對系統中的卡片清單。
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+                <button 
+                  onClick={() => setIsAIModalOpen(false)}
+                  className="flex-1 px-6 py-3 font-bold text-slate-600 hover:bg-white rounded-2xl border border-slate-200 transition-all"
+                >
+                  取消
+                </button>
+                <button 
+                  onClick={handleAIProcess}
+                  disabled={!aiImage || isAIProcessing}
+                  className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 font-bold text-white rounded-2xl transition-all shadow-lg ${!aiImage || isAIProcessing ? 'bg-slate-300' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'}`}
+                >
+                  {isAIProcessing ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin" />
+                      <span>正在智慧解析...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={20} />
+                      <span>開始 AI 解析</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -2437,109 +2752,6 @@ ${text}
   );
 };
 
-const FundPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
-  const [funds, setFunds] = useState<Fund[]>([]);
-  const [isAdding, setIsAdding] = useState(false);
-  const [newFund, setNewFund] = useState<Partial<Fund>>({ name: '', cost: 0, currentValue: 0, units: 0 });
-
-  useEffect(() => {
-    const targetUids = getAppTargetUids(user);
-    const q = query(collection(db, 'funds'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs
-        .map(doc => ({ ...doc.data(), id: doc.id } as Fund))
-        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
-      setFunds(data);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'funds');
-    });
-    return () => unsubscribe();
-  }, [user.uid]);
-
-  const handleAdd = async () => {
-    try {
-      const fund = { ...newFund, uid: user.uid };
-      await addDoc(collection(db, 'funds'), fund);
-      setIsAdding(false);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'funds');
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'funds', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'funds');
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-800">基金投資</h2>
-        <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
-          <Plus size={20} /> 新增基金
-        </button>
-      </div>
-
-      {isAdding && (
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" placeholder="基金名稱" className="p-2 border rounded-md" value={newFund.name ?? ""} onChange={e => setNewFund({...newFund, name: e.target.value})} />
-            <input type="number" placeholder="持有單位數" className="p-2 border rounded-md" value={newFund.units ?? 0} onChange={e => setNewFund({...newFund, units: Number(e.target.value)})} />
-            <input type="number" placeholder="投資成本" className="p-2 border rounded-md" value={newFund.cost ?? 0} onChange={e => setNewFund({...newFund, cost: Number(e.target.value)})} />
-            <input type="number" placeholder="目前市值" className="p-2 border rounded-md" value={newFund.currentValue ?? 0} onChange={e => setNewFund({...newFund, currentValue: Number(e.target.value)})} />
-          </div>
-          <div className="flex justify-end gap-3">
-            <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
-            <button onClick={handleAdd} className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">儲存</button>
-          </div>
-        </motion.div>
-      )}
-
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th className="p-4 text-slate-600">基金名稱</th>
-              <th className="p-4 text-slate-600 text-right">投資成本</th>
-              <th className="p-4 text-slate-600 text-right">目前市值</th>
-              <th className="p-4 text-slate-600 text-right">損益</th>
-              <th className="p-4 text-slate-600 text-right">報酬率</th>
-              <th className="p-4 text-slate-600 text-center">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {funds.map(fund => {
-              const profit = fund.currentValue - fund.cost;
-              const roi = (profit / fund.cost) * 100;
-              return (
-                <tr key={fund.id} className="border-t border-slate-100">
-                  <td className="p-4 font-medium text-slate-800">{fund.name}</td>
-                  <td className="p-4 text-right text-slate-600">${fund.cost.toLocaleString()}</td>
-                  <td className="p-4 text-right text-slate-800 font-semibold">${fund.currentValue.toLocaleString()}</td>
-                  <td className={`p-4 text-right font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                    {profit >= 0 ? '+' : ''}{profit.toLocaleString()}
-                  </td>
-                  <td className={`p-4 text-right font-bold ${roi >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                    {roi.toFixed(2)}%
-                  </td>
-                    <td className="p-4 text-center">
-                      <button onClick={() => setDeleteTarget({ type: 'funds', id: fund.id, name: fund.name })} className="text-slate-300 hover:text-rose-500 transition-colors">
-                        <Trash2 size={18} />
-                      </button>
-                    </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
-
 const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [funds, setFunds] = useState<Fund[]>([]);
@@ -2716,25 +2928,38 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
           });
 
           const years = Object.keys(yearDivs).map(Number).sort((a, b) => b - a);
-          const maxYear = years[0];
-          const lastYear = maxYear - 1;
-
-          let thisYearDivs = yearDivs[maxYear] || [];
-          let lastYearDivs = yearDivs[lastYear] || [];
+          const currentYear = new Date().getFullYear();
           
-          let frequencyCount = lastYearDivs.length;
+          // Use the most recent year with data
+          const maxYear = years[0];
+          const lastYear = years[1];
+
+          let frequencyCount = 0;
+          if (yearDivs[maxYear]) frequencyCount = Math.max(frequencyCount, yearDivs[maxYear].length);
+          if (lastYear && yearDivs[lastYear]) frequencyCount = Math.max(frequencyCount, yearDivs[lastYear].length);
+          
           if (frequencyCount >= 10) freqStr = '月配';
           else if (frequencyCount >= 3) freqStr = '季配';
           else if (frequencyCount == 2) freqStr = '半年配';
           else if (frequencyCount == 1) freqStr = '年配';
-          
-          let predictedDiv = thisYearDivs.reduce((sum, d) => sum + d.amount, 0);
-          if (lastYearDivs.length > 0 && thisYearDivs.length < lastYearDivs.length) {
-            lastYearDivs.sort((a,b) => a.date - b.date);
-            const missingCount = lastYearDivs.length - thisYearDivs.length;
-            const missingFromLastYear = lastYearDivs.slice(-missingCount);
-            predictedDiv += missingFromLastYear.reduce((sum, d) => sum + d.amount, 0);
+
+          let predictedDiv = 0;
+          if (maxYear === currentYear) {
+            // Current year is partially through, use partial sum + missing periods from last year
+            const thisYearDivs = yearDivs[maxYear];
+            predictedDiv = thisYearDivs.reduce((sum, d) => sum + d.amount, 0);
+            
+            if (lastYear && yearDivs[lastYear] && thisYearDivs.length < yearDivs[lastYear].length) {
+              const lastYearDivs = [...yearDivs[lastYear]].sort((a,b) => a.date - b.date);
+              const missingCount = yearDivs[lastYear].length - thisYearDivs.length;
+              const missingFromLastYear = lastYearDivs.slice(-missingCount);
+              predictedDiv += missingFromLastYear.reduce((sum, d) => sum + d.amount, 0);
+            }
+          } else {
+            // Data for current year is missing, fallback to the latest full year's total
+            predictedDiv = yearDivs[maxYear].reduce((sum, d) => sum + d.amount, 0);
           }
+          
           expectedDiv = predictedDiv;
         }
 
@@ -4895,30 +5120,156 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
 
 const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [salaries, setSalaries] = useState<SalaryRecord[]>([]);
   const [isAdding, setIsAdding] = useState(false);
-  const [newBudget, setNewBudget] = useState<Partial<Budget>>({ category: '', allocated: 0, spent: 0, year: new Date().getFullYear() });
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [newBudget, setNewBudget] = useState<Partial<Budget>>({ 
+    category: '', 
+    allocated: 0, 
+    spent: 0, 
+    year: selectedYear,
+    frequency: 'annually',
+    isPaid: false
+  });
+
+  const filteredBudgets = useMemo(() => {
+    return budgets
+      .filter(b => b.year === selectedYear)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }, [budgets, selectedYear]);
+
+  const handleReorder = async (newOrder: Budget[]) => {
+    // Optimistic UI update is handled by Reorder.Group internally if using its state,
+    // but here budgets is from Firestore. We need to be careful.
+    // If we update budgets state directly, onSnapshot might overwrite it.
+    // Let's just update Firestore.
+    try {
+      const batchPromises = newOrder.map((item, index) => {
+        if (item.order === index) return Promise.resolve();
+        return updateDoc(doc(db, 'budgets', item.id), { order: index });
+      });
+      await Promise.all(batchPromises);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'budgets');
+    }
+  };
+
+  const hasPreviousYearData = useMemo(() => {
+    return budgets.some(b => b.year === selectedYear - 1);
+  }, [budgets, selectedYear]);
 
   useEffect(() => {
     const targetUids = getAppTargetUids(user);
-    const q = query(collection(db, 'budgets'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const bUnsubscribe = onSnapshot(collection(db, 'budgets'), (snapshot) => {
       const data = snapshot.docs
         .map(doc => ({ ...doc.data(), id: doc.id } as Budget))
         .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setBudgets(data);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'budgets');
     });
-    return () => unsubscribe();
+
+    const sUnsubscribe = onSnapshot(collection(db, 'salaryRecords'), (snapshot) => {
+      const data = snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as SalaryRecord))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
+      setSalaries(data);
+    });
+
+    return () => {
+      bUnsubscribe();
+      sUnsubscribe();
+    };
   }, [user.uid]);
+
+  const stats = useMemo(() => {
+    const yearlyItems = filteredBudgets.filter(b => b.frequency !== 'monthly');
+    const monthlyItems = filteredBudgets.filter(b => b.frequency === 'monthly');
+
+    const yearlyTotal = yearlyItems.reduce((sum, b) => sum + b.allocated, 0);
+    const monthlyTotal = monthlyItems.reduce((sum, b) => sum + b.allocated, 0);
+    const yearlyEquivalentTotal = yearlyTotal + (monthlyTotal * 12);
+    
+    const totalSpent = filteredBudgets.reduce((sum, b) => {
+      if (b.frequency === 'monthly') return sum + (b.spent * 12); 
+      return sum + b.spent;
+    }, 0);
+
+    const yearStr = selectedYear.toString();
+    const currentYearSalaries = salaries.filter(s => s.date.startsWith(yearStr));
+    let avgMonthlyIncome = 0;
+    if (currentYearSalaries.length > 0) {
+      const totalIncome = currentYearSalaries.reduce((sum, r) => {
+        const income = (r.basicPay || 0) + (r.professionalAllowance || 0) + (r.medicalIncentive || 0) + (r.overtimePay || 0) + (r.yearEndBonus || 0) + (r.performanceBonus || 0) + (r.otherIncome || 0);
+        const deduction = (r.civilServiceInsurance || 0) + (r.healthInsurance || 0) + (r.pensionFund || 0) + (r.otherDeduction || 0);
+        return sum + (income - deduction);
+      }, 0);
+      avgMonthlyIncome = totalIncome / currentYearSalaries.length;
+    } else if (salaries.length > 0) {
+      const latest = [...salaries].sort((a,b) => b.date.localeCompare(a.date))[0];
+      const income = (latest.basicPay || 0) + (latest.professionalAllowance || 0) + (latest.medicalIncentive || 0) + (latest.overtimePay || 0) + (latest.yearEndBonus || 0) + (latest.performanceBonus || 0) + (latest.otherIncome || 0);
+      const deduction = (latest.civilServiceInsurance || 0) + (latest.healthInsurance || 0) + (latest.pensionFund || 0) + (latest.otherDeduction || 0);
+      avgMonthlyIncome = income - deduction;
+    }
+
+    const monthlyExpense = (yearlyTotal / 12) + monthlyTotal;
+    const canSave = avgMonthlyIncome - monthlyExpense;
+
+    return {
+      yearlyTotal,
+      monthlyTotal,
+      yearlyEquivalentTotal,
+      totalSpent,
+      remaining: yearlyEquivalentTotal - totalSpent,
+      avgMonthlyIncome,
+      monthlyExpense,
+      canSave
+    };
+  }, [filteredBudgets, salaries, selectedYear]);
 
   const handleAdd = async () => {
     try {
-      const budget = { ...newBudget, uid: user.uid };
+      const budget = { 
+        ...newBudget, 
+        uid: user.uid,
+        year: selectedYear,
+        spent: newBudget.isPaid ? (newBudget.allocated || 0) : (newBudget.spent || 0),
+        frequency: newBudget.frequency || 'annually',
+        isPaid: newBudget.isPaid || false,
+        order: filteredBudgets.length
+      };
       await addDoc(collection(db, 'budgets'), budget);
       setIsAdding(false);
+      setNewBudget({ category: '', allocated: 0, spent: 0, year: selectedYear, frequency: 'annually', isPaid: false });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'budgets');
+    }
+  };
+
+  const handleCloneLastYear = async () => {
+    if (!window.confirm(`確認要從 ${selectedYear - 1} 年複製預算項目到 ${selectedYear} 年嗎？`)) return;
+    try {
+      const lastYearBudgets = [...budgets]
+        .filter(b => b.year === selectedYear - 1)
+        .sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
+        
+      const batchPromises = lastYearBudgets.map((b, index) => {
+        const { id, ...data } = b;
+        return addDoc(collection(db, 'budgets'), { ...data, year: selectedYear, spent: 0, isPaid: false, order: index });
+      });
+      await Promise.all(batchPromises);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'budgets');
+    }
+  };
+
+  const togglePaid = async (budget: Budget) => {
+    try {
+      const newPaid = !budget.isPaid;
+      await updateDoc(doc(db, 'budgets', budget.id), {
+        isPaid: newPaid,
+        spent: newPaid ? budget.allocated : 0
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'budgets');
     }
   };
 
@@ -4926,66 +5277,167 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
     setDeleteTarget({ type: 'budgets', id, name });
   };
 
+  const freqLabels: any = { monthly: '每月', quarterly: '每季', 'semi-annually': '每半年', annually: '每年' };
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-800">年度支出預算</h2>
-        <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
-          <Plus size={20} /> 新增預算項目
-        </button>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">年度支出預算</h2>
+          <div className="flex items-center gap-2 mt-2">
+            <button onClick={() => setSelectedYear(selectedYear - 1)} className="p-1 hover:bg-slate-100 rounded text-slate-500">
+              <ChevronLeft size={20} />
+            </button>
+            <span className="text-lg font-bold text-indigo-600">{selectedYear} 年</span>
+            <button onClick={() => setSelectedYear(selectedYear + 1)} className="p-1 hover:bg-slate-100 rounded text-slate-500">
+              <ChevronRight size={20} />
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {filteredBudgets.length === 0 && hasPreviousYearData && (
+            <button onClick={handleCloneLastYear} className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-100 transition-colors shadow-sm">
+              <Copy size={20} /> 複製上年度
+            </button>
+          )}
+          <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-lg">
+            <Plus size={20} /> 新增預算項目
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">年度總預算</p>
+          <p className="text-2xl font-black text-slate-900">${Math.floor(stats.yearlyEquivalentTotal).toLocaleString()}</p>
+          <div className="flex justify-between text-[11px] mt-2 font-bold text-slate-500">
+            <span>已支出: ${Math.floor(stats.totalSpent).toLocaleString()}</span>
+            <span>剩餘: ${Math.floor(stats.remaining).toLocaleString()}</span>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">每月預計支出</p>
+          <p className="text-2xl font-black text-indigo-600">${Math.floor(stats.monthlyExpense).toLocaleString()}</p>
+          <p className="text-[10px] text-slate-400 mt-1 font-medium">包含年度項目摊提 (${Math.floor(stats.yearlyTotal/12).toLocaleString()}/月)</p>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">平均月實領薪資</p>
+          <p className="text-2xl font-black text-emerald-600">${Math.floor(stats.avgMonthlyIncome).toLocaleString()}</p>
+          <p className="text-[10px] text-slate-400 mt-1 font-medium">基於 {selectedYear} 年薪資紀錄</p>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-indigo-600/20 bg-indigo-50/10 shadow-sm">
+          <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-1">預計每月可存款額</p>
+          <p className={`text-2xl font-black ${stats.canSave >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+            ${Math.floor(stats.canSave).toLocaleString()}
+          </p>
+          <p className="text-[10px] text-slate-400 mt-1 font-medium">薪資 - 每月預算分配</p>
+        </div>
       </div>
 
       {isAdding && (
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" placeholder="類別 (如: 旅遊, 保險)" className="p-2 border rounded-md" value={newBudget.category ?? ""} onChange={e => setNewBudget({...newBudget, category: e.target.value})} />
-            <input type="number" placeholder="預算金額" className="p-2 border rounded-md" value={newBudget.allocated ?? 0} onChange={e => setNewBudget({...newBudget, allocated: Number(e.target.value)})} />
-            <input type="number" placeholder="已支出" className="p-2 border rounded-md" value={newBudget.spent ?? 0} onChange={e => setNewBudget({...newBudget, spent: Number(e.target.value)})} />
-            <input type="number" placeholder="年份" className="p-2 border rounded-md" value={newBudget.year ?? 0} onChange={e => setNewBudget({...newBudget, year: Number(e.target.value)})} />
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-md border border-indigo-100 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400 uppercase">項目名稱</label>
+              <input type="text" placeholder="如: 保險, 房租" className="w-full p-2 border rounded-md" value={newBudget.category ?? ""} onChange={e => setNewBudget({...newBudget, category: e.target.value})} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400 uppercase">頻率</label>
+              <select className="w-full p-2 border rounded-md bg-white text-sm" value={newBudget.frequency ?? 'annually'} onChange={e => setNewBudget({...newBudget, frequency: e.target.value as any})}>
+                <option value="annually">每年 (一次性)</option>
+                <option value="monthly">每月 (循環)</option>
+                <option value="quarterly">每季</option>
+                <option value="semi-annually">每半年</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400 uppercase">單次預算金額</label>
+              <input type="number" className="w-full p-2 border rounded-md" value={newBudget.allocated ?? 0} onChange={e => setNewBudget({...newBudget, allocated: Number(e.target.value)})} />
+            </div>
+            <div className="flex items-end pb-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={newBudget.isPaid ?? false} onChange={e => setNewBudget({...newBudget, isPaid: e.target.checked})} className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500" />
+                <span className="text-sm font-medium text-slate-600">已支付 (標記為完全支出)</span>
+              </label>
+            </div>
           </div>
-          <div className="flex justify-end gap-3">
+          <div className="flex justify-end gap-3 pt-2 border-t">
             <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
-            <button onClick={handleAdd} className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">儲存</button>
+            <button onClick={handleAdd} className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 font-bold">儲存</button>
           </div>
         </motion.div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {budgets.map(budget => {
-          const remaining = budget.allocated - budget.spent;
-          const percent = (budget.spent / budget.allocated) * 100;
-          return (
-            <div key={budget.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 group relative">
-              <button onClick={() => handleDelete(budget.id, budget.category)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Trash2 size={18} />
-              </button>
-              <div className="flex justify-between items-end mb-4">
-                <div>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">{budget.year} 預算</p>
-                  <h3 className="text-xl font-bold text-slate-800">{budget.category}</h3>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm text-slate-500">剩餘</p>
-                  <p className={`text-lg font-bold ${remaining >= 0 ? 'text-slate-800' : 'text-rose-500'}`}>
-                    ${remaining.toLocaleString()}
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full transition-all duration-500 ${percent > 90 ? 'bg-rose-500' : percent > 70 ? 'bg-amber-500' : 'bg-indigo-500'}`} 
-                    style={{ width: `${Math.min(percent, 100)}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-xs font-medium">
-                  <span className="text-slate-500">已支出: ${budget.spent.toLocaleString()}</span>
-                  <span className="text-slate-500">預算: ${budget.allocated.toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <table className="w-full text-left">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr>
+              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest pl-10">項目</th>
+              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-center">頻率</th>
+              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-right">預算金額</th>
+              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-right whitespace-nowrap">換算每年</th>
+              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-right">已支出</th>
+              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-center">狀態</th>
+              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-center">操作</th>
+            </tr>
+          </thead>
+          <Reorder.Group 
+            as="tbody" 
+            axis="y" 
+            values={filteredBudgets} 
+            onReorder={handleReorder}
+            className="divide-y divide-slate-100"
+          >
+            {filteredBudgets.map(budget => {
+              const yearlyEquiv = budget.frequency === 'monthly' ? budget.allocated * 12 : budget.allocated;
+              return (
+                <Reorder.Item 
+                  key={budget.id} 
+                  value={budget}
+                  as="tr"
+                  className={`group hover:bg-slate-50/50 transition-colors ${budget.isPaid ? 'bg-emerald-50/10' : ''} cursor-grab active:cursor-grabbing`}
+                >
+                  <td className="p-2 py-2.5 font-bold text-slate-800 relative pl-10">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <GripVertical size={16} />
+                    </div>
+                    {budget.category}
+                  </td>
+                  <td className="p-2 py-2.5 text-center">
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${budget.frequency === 'monthly' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-600'}`}>
+                      {freqLabels[budget.frequency || 'annually']}
+                    </span>
+                  </td>
+                  <td className="p-2 py-2.5 text-right font-mono text-slate-600 text-sm font-medium">${budget.allocated.toLocaleString()}</td>
+                  <td className="p-2 py-2.5 text-right font-mono font-bold text-indigo-600 text-sm">${yearlyEquiv.toLocaleString()}</td>
+                  <td className="p-2 py-2.5 text-right font-mono text-slate-900 font-bold text-sm">
+                    {budget.isPaid ? `$${budget.allocated.toLocaleString()}` : `$${budget.spent.toLocaleString()}`}
+                  </td>
+                  <td className="p-2 py-2.5 text-center">
+                    <button onClick={() => togglePaid(budget)} className={`p-1 rounded-lg transition-all ${budget.isPaid ? 'text-emerald-600 bg-emerald-100' : 'text-slate-300 bg-slate-50 hover:text-emerald-500'}`}>
+                      <CheckCircle2 size={18} />
+                    </button>
+                  </td>
+                  <td className="p-2 py-2.5 text-center">
+                    <button onClick={() => handleDelete(budget.id, budget.category)} className="p-1 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </Reorder.Item>
+              );
+            })}
+          </Reorder.Group>
+          {filteredBudgets.length > 0 && (
+            <tfoot className="bg-slate-50/80 font-bold border-t-2 border-slate-200">
+               <tr>
+                 <td colSpan={3} className="p-4 text-right text-slate-500">合計年度總預算:</td>
+                 <td className="p-4 text-right text-indigo-700 text-lg">${Math.floor(stats.yearlyEquivalentTotal).toLocaleString()}</td>
+                 <td className="p-4 text-right text-slate-700">${Math.floor(stats.totalSpent).toLocaleString()}</td>
+                 <td colSpan={2} />
+               </tr>
+            </tfoot>
+          )}
+        </table>
       </div>
     </div>
   );
@@ -5219,7 +5671,6 @@ export default function App() {
       case 'credit-cards': return <CreditCardPage {...pageProps} />;
       case 'banks': return <BankPage {...pageProps} />;
       case 'stocks': return <StockPage {...pageProps} />;
-      case 'funds': return <FundPage {...pageProps} />;
       case 'budget': return <BudgetPage {...pageProps} />;
       case 'tax': return <TaxPage {...pageProps} />;
       default: return <DashboardPage user={user} summary={summary} />;

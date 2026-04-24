@@ -83,16 +83,18 @@
     },
     "Budget": {
       "title": "Budget",
-      "description": "Monthly budget allocation",
+      "description": "Yearly budget allocation with frequency and status",
       "type": "object",
       "properties": {
         "uid": { "type": "string", "description": "The user ID of the owner" },
         "category": { "type": "string", "description": "Budget category" },
         "allocated": { "type": "number", "description": "Allocated amount" },
         "spent": { "type": "number", "description": "Spent amount" },
-        "year": { "type": "number", "description": "Year" }
+        "year": { "type": "number", "description": "Year" },
+        "frequency": { "type": "string", "enum": ["monthly", "quarterly", "semi-annually", "annually"], "description": "Frequency of the expense" },
+        "isPaid": { "type": "boolean", "description": "Whether the budget has been fully spent/paid" }
       },
-      "required": ["uid", "category", "allocated", "spent", "year"]
+      "required": ["uid", "category", "allocated", "spent", "year", "frequency", "isPaid"]
     },
     "YearlyStandard": {
       "title": "YearlyStandard",

@@ -47,12 +47,21 @@ export interface YearlyStandard {
 export interface CreditCard {
   id: string;
   uid?: string;
-  name: string;
-  bank: string;
-  statementDate: number;
-  dueDate: number;
+  name: string; // e.g. 玫瑰卡, 中信英雄聯盟...
+  bank: string; // e.g. 台新, 國泰...
+  statementDate: number; // 結帳日 (1-31)
+  dueDate: number;       // 最後付款日 (1-31)
   limit: number;
   currentBalance: number;
+  color?: string; // Optional for UI
+}
+
+export interface CreditCardBill {
+  id: string;
+  uid?: string;
+  cardId: string;
+  month: string; // YYYY-MM
+  amount: number;
 }
 
 export interface BankAccount {
@@ -157,4 +166,7 @@ export interface Budget {
   allocated: number;
   spent: number;
   year: number;
+  frequency: 'monthly' | 'quarterly' | 'semi-annually' | 'annually';
+  isPaid: boolean;
+  order?: number;
 }
