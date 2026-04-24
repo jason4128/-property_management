@@ -89,17 +89,22 @@ enum OperationType {
 }
 
 const getAppTargetUids = (user: any) => {
-  const base = ['default-user', 'local_default_user', 'guest-user', 'guest', 'anonymous', 'local_user'];
+  const base = [
+    'default-user', 
+    'local_default_user', 
+    'guest-user', 
+    'guest', 
+    'anonymous', 
+    'local_user', 
+    'jason2134@gmail.com', 
+    'guest@example.com'
+  ];
   
-  // Also include the user email from metadata as a fallback if they are that user
-  const emailWhitelist = ['jason2134@gmail.com'];
-  
-  const email = user?.email && user.email !== 'guest@example.com' ? user.email : null;
+  const email = user?.email && !base.includes(user.email) ? user.email : null;
   const currentAuthEmail = auth.currentUser?.email;
   
   return Array.from(new Set([
     ...base, 
-    ...emailWhitelist,
     user?.uid, 
     auth.currentUser?.uid,
     email,
@@ -604,9 +609,11 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
 
   useEffect(() => {
     const targetUids = getAppTargetUids(user);
-    const q = query(collection(db, 'salaryRecords'), where('uid', 'in', targetUids));
+    const q = query(collection(db, 'salaryRecords'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as SalaryRecord));
+      const data = snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as SalaryRecord))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setRecords(data);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'salaryRecords');
@@ -616,9 +623,11 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
 
   useEffect(() => {
     const targetUids = getAppTargetUids(user);
-    const q = query(collection(db, 'yearlyStandards'), where('uid', 'in', targetUids));
+    const q = query(collection(db, 'yearlyStandards'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as YearlyStandard));
+      const data = snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as YearlyStandard))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setYearlyStandards(data);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'yearlyStandards');
@@ -1748,9 +1757,11 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
 
   useEffect(() => {
     const targetUids = getAppTargetUids(user);
-    const q = query(collection(db, 'creditCards'), where('uid', 'in', targetUids));
+    const q = query(collection(db, 'creditCards'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as CreditCard));
+      const data = snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as CreditCard))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setCards(data);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'creditCards');
@@ -1856,9 +1867,11 @@ const BankPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (tar
 
   useEffect(() => {
     const targetUids = getAppTargetUids(user);
-    const q = query(collection(db, 'bankAccounts'), where('uid', 'in', targetUids));
+    const q = query(collection(db, 'bankAccounts'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as BankAccount));
+      const data = snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as BankAccount))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setAccounts(data);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'bankAccounts');
@@ -2046,7 +2059,7 @@ ${text}
               <Calculator size={20} />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">預估年利息</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">預計年度領息總計</p>
               <p className="text-lg font-black text-indigo-600">${Math.round(totalInterest).toLocaleString()}</p>
             </div>
           </div>
@@ -2382,9 +2395,11 @@ const FundPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (tar
 
   useEffect(() => {
     const targetUids = getAppTargetUids(user);
-    const q = query(collection(db, 'funds'), where('uid', 'in', targetUids));
+    const q = query(collection(db, 'funds'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Fund));
+      const data = snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as Fund))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setFunds(data);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'funds');
@@ -2545,9 +2560,11 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
 
   useEffect(() => {
     const targetUids = getAppTargetUids(user);
-    const q = query(collection(db, 'stocks'), where('uid', 'in', targetUids));
+    const q = query(collection(db, 'stocks'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Stock));
+      const data = snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as Stock))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setStocks(data);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'stocks');
@@ -2557,9 +2574,11 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
 
   useEffect(() => {
     const targetUids = getAppTargetUids(user);
-    const q = query(collection(db, 'funds'), where('uid', 'in', targetUids));
+    const q = query(collection(db, 'funds'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Fund));
+      const data = snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as Fund))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setFunds(data);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'funds');
@@ -2626,9 +2645,12 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
     try {
       const targetUids = user.uid === 'default-user' ? ['default-user', 'local_default_user'] : ['default-user', 'local_default_user', user.uid];
       if (source === 'FundRich') {
-        const q = query(collection(db, 'funds'), where('source', '==', source), where('uid', 'in', targetUids));
+        const q = query(collection(db, 'funds'), where('source', '==', source));
         const snapshot = await getDocs(q);
-        const batchDelete = snapshot.docs.map(fundDoc => deleteDoc(doc(db, 'funds', fundDoc.id)));
+        const targetUids = getAppTargetUids(user);
+        const batchDelete = snapshot.docs
+          .filter(d => !d.data().uid || targetUids.includes(d.data().uid))
+          .map(fundDoc => deleteDoc(doc(db, 'funds', fundDoc.id)));
         await Promise.all(batchDelete);
 
         const batchAdd = aiResult.map(item => {
@@ -3214,17 +3236,37 @@ const DashboardPage = ({ user, summary }: { user: User, summary: any }) => {
   useEffect(() => {
     const targetUids = getAppTargetUids(user);
     
-    const unsubBanks = onSnapshot(query(collection(db, 'bankAccounts'), where('uid', 'in', targetUids)), s => 
-      setData(prev => ({ ...prev, banks: s.docs.map(d => ({ ...d.data(), id: d.id } as BankAccount)) }))
+    const unsubBanks = onSnapshot(query(collection(db, 'bankAccounts')), s => 
+      setData(prev => ({ 
+        ...prev, 
+        banks: s.docs
+          .map(d => ({ ...d.data(), id: d.id } as BankAccount))
+          .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid))
+      }))
     );
-    const unsubStocks = onSnapshot(query(collection(db, 'stocks'), where('uid', 'in', targetUids)), s => 
-      setData(prev => ({ ...prev, stocks: s.docs.map(d => ({ ...d.data(), id: d.id } as Stock)) }))
+    const unsubStocks = onSnapshot(query(collection(db, 'stocks')), s => 
+      setData(prev => ({ 
+        ...prev, 
+        stocks: s.docs
+          .map(d => ({ ...d.data(), id: d.id } as Stock))
+          .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid))
+      }))
     );
-    const unsubFunds = onSnapshot(query(collection(db, 'funds'), where('uid', 'in', targetUids)), s => 
-      setData(prev => ({ ...prev, funds: s.docs.map(d => ({ ...d.data(), id: d.id } as Fund)) }))
+    const unsubFunds = onSnapshot(query(collection(db, 'funds')), s => 
+      setData(prev => ({ 
+        ...prev, 
+        funds: s.docs
+          .map(d => ({ ...d.data(), id: d.id } as Fund))
+          .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid))
+      }))
     );
-    const unsubCards = onSnapshot(query(collection(db, 'creditCards'), where('uid', 'in', targetUids)), s => 
-      setData(prev => ({ ...prev, cards: s.docs.map(d => ({ ...d.data(), id: d.id } as CreditCard)) }))
+    const unsubCards = onSnapshot(query(collection(db, 'creditCards')), s => 
+      setData(prev => ({ 
+        ...prev, 
+        cards: s.docs
+          .map(d => ({ ...d.data(), id: d.id } as CreditCard))
+          .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid))
+      }))
     );
     return () => { unsubBanks(); unsubStocks(); unsubFunds(); unsubCards(); };
   }, [user.uid]);
@@ -3672,6 +3714,8 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
   const [viewMode, setViewMode] = useState<'calculator' | 'records' | 'standards'>('calculator');
   const [taxes, setTaxes] = useState<TaxRecord[]>([]);
   const [standards, setStandards] = useState<TaxStandard[]>([]);
+  const [salaryRecords, setSalaryRecords] = useState<SalaryRecord[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newTax, setNewTax] = useState<Partial<TaxRecord>>(INITIAL_TAX_RECORD);
   const [isAddingStandard, setIsAddingStandard] = useState(false);
@@ -3682,14 +3726,66 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
 
   useEffect(() => {
     const targetUids = getAppTargetUids(user);
-    const unsubTaxes = onSnapshot(query(collection(db, 'taxes'), where('uid', 'in', targetUids)), s => 
-      setTaxes(s.docs.map(d => ({ ...d.data(), id: d.id } as TaxRecord)).sort((a,b) => b.year - a.year))
-    );
-    const unsubStds = onSnapshot(query(collection(db, 'taxStandards'), where('uid', 'in', targetUids)), s => 
-      setStandards(s.docs.map(d => ({ ...d.data(), id: d.id } as TaxStandard)).sort((a,b) => b.year - a.year))
-    );
-    return () => { unsubTaxes(); unsubStds(); };
+    const unsubTaxes = onSnapshot(query(collection(db, 'taxes')), s => {
+      const data = s.docs
+        .map(d => ({ ...d.data(), id: d.id } as TaxRecord))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid))
+        .sort((a,b) => b.year - a.year);
+      setTaxes(data);
+    });
+    const unsubStds = onSnapshot(query(collection(db, 'taxStandards')), s => {
+      const data = s.docs
+        .map(d => ({ ...d.data(), id: d.id } as TaxStandard))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid))
+        .sort((a,b) => b.year - a.year);
+      setStandards(data);
+    });
+
+    const unsubSalary = onSnapshot(query(collection(db, 'salaryRecords')), s => {
+      const data = s.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as SalaryRecord))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
+      setSalaryRecords(data);
+    });
+
+    const unsubBanks = onSnapshot(query(collection(db, 'bankAccounts')), s => {
+      const data = s.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as BankAccount))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
+      setBankAccounts(data);
+    });
+
+    return () => { unsubTaxes(); unsubStds(); unsubSalary(); unsubBanks(); };
   }, [user.uid]);
+
+  const fetchSalaryFromRecords = (year: number) => {
+    const westernYearPrefix = (year + 1911).toString();
+    const rocYearPrefix = year.toString();
+    const annualTaxableSalary = salaryRecords
+      .filter(r => r.date.startsWith(westernYearPrefix + '-') || r.date.startsWith(rocYearPrefix + '-'))
+      .reduce((sum, r) => sum + (r.taxableIncome || 0), 0);
+    
+    if (annualTaxableSalary > 0) {
+      setNewTax(prev => ({ ...prev, salaryUser: annualTaxableSalary }));
+    } else {
+      alert(`找不到 ${year} 年度的薪資應稅所得紀錄。`);
+    }
+  };
+
+  const fetchInterestFromBanks = () => {
+    const totalExpectedInterest = bankAccounts.reduce((sum, acc) => {
+      if (acc.interestRate && acc.balance > 0 && acc.type !== 'loan') {
+        return sum + (acc.balance * (acc.interestRate / 100));
+      }
+      return sum;
+    }, 0);
+
+    if (totalExpectedInterest > 0) {
+      setNewTax(prev => ({ ...prev, interestIncome: Math.round(totalExpectedInterest) }));
+    } else {
+      alert(`目前帳戶中無預估利息資料（請檢查銀行存款中的利率與餘額設定）。`);
+    }
+  };
 
   const handleAIUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -4234,7 +4330,16 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
                   <h4 className="text-xs font-black text-indigo-600 uppercase tracking-widest border-l-4 border-indigo-600 pl-3">所得來源 (年收入)</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400">本人薪資總額</label>
+                      <div className="flex justify-between items-end">
+                        <label className="text-[10px] font-bold text-slate-400">本人薪資總額</label>
+                        <button 
+                          onClick={() => fetchSalaryFromRecords(newTax.parameterYear || newTax.year || 113)}
+                          className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded transition-colors"
+                          title="從薪資紀錄帶入"
+                        >
+                          帶入 {newTax.parameterYear || newTax.year || 113} 年薪資
+                        </button>
+                      </div>
                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.salaryUser} onChange={e => setNewTax({...newTax, salaryUser: Number(e.target.value)})} />
                     </div>
                     {newTax.isMarried && (
@@ -4248,7 +4353,16 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.profitIncome} onChange={e => setNewTax({...newTax, profitIncome: Number(e.target.value)})} />
                     </div>
                     <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400">利息所得 (金融機構)</label>
+                      <div className="flex justify-between items-end">
+                        <label className="text-[10px] font-bold text-slate-400">利息所得 (金融機構)</label>
+                        <button 
+                          onClick={fetchInterestFromBanks}
+                          className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded transition-colors"
+                          title="帶入銀行預計年度利息"
+                        >
+                          帶入預計利息
+                        </button>
+                      </div>
                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.interestIncome} onChange={e => setNewTax({...newTax, interestIncome: Number(e.target.value)})} />
                     </div>
                     <div className="space-y-1">
@@ -4401,9 +4515,11 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
 
   useEffect(() => {
     const targetUids = getAppTargetUids(user);
-    const q = query(collection(db, 'budgets'), where('uid', 'in', targetUids));
+    const q = query(collection(db, 'budgets'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Budget));
+      const data = snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as Budget))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setBudgets(data);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'budgets');
@@ -4516,7 +4632,7 @@ const GenericPage = ({ title, icon: Icon, type }: { title: string, icon: any, ty
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabId>('tax');
+  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [user, setUser] = useState<any>({ uid: 'default-user', email: 'guest@example.com' });
   const [loading, setLoading] = useState(true);
@@ -4605,33 +4721,51 @@ export default function App() {
     
     const targetUids = getAppTargetUids(user);
     
-    const unsubBanks = onSnapshot(query(collection(db, 'bankAccounts'), where('uid', 'in', targetUids)), s => {
-      const data = s.docs.map(d => d.data());
+    const unsubBanks = onSnapshot(query(collection(db, 'bankAccounts')), s => {
+      const allData = s.docs.map(d => d.data());
+      const data = allData.filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       const assets = data.filter(d => d.type !== 'loan').reduce((acc, d) => acc + (d.balance || 0), 0);
       const loans = data.filter(d => d.type === 'loan').reduce((acc, d) => acc + (d.balance || d.loanRemaining || 0), 0);
       setSummary(prev => ({ ...prev, banks: assets, loans: loans }));
+    }, err => {
+      console.warn("Banks Snapshot Permission Error (Expected if just logged out):", err);
     });
-    const unsubStocks = onSnapshot(query(collection(db, 'stocks'), where('uid', 'in', targetUids)), s => {
+    const unsubStocks = onSnapshot(query(collection(db, 'stocks')), s => {
       setSummary(prev => {
-        const stocks = s.docs.reduce((acc, d) => {
-          const val = (d.data().shares * d.data().currentPrice || 0);
-          const isUsd = d.data().source === 'Firstrade';
+        const stocks = s.docs
+          .map(d => d.data())
+          .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid))
+          .reduce((acc, d) => {
+          const val = (d.shares * d.currentPrice || 0);
+          const isUsd = d.source === 'Firstrade';
           const convVal = isUsd ? val * 32.5 : val;
           return {
             ...acc,
             total: acc.total + convVal,
             firstrade: acc.firstrade + (isUsd ? convVal : 0),
-            cathay: acc.cathay + (d.data().source === 'Cathay' ? convVal : 0)
+            cathay: acc.cathay + (d.source === 'Cathay' ? convVal : 0)
           };
         }, { total: 0, firstrade: 0, cathay: 0 });
         return { ...prev, stocks: stocks.total, stockBreakdown: stocks };
       });
+    }, err => {
+      console.warn("Stocks Snapshot Permission Error:", err);
     });
-    const unsubFunds = onSnapshot(query(collection(db, 'funds'), where('uid', 'in', targetUids)), s => {
-      setSummary(prev => ({ ...prev, funds: s.docs.reduce((acc, d) => acc + (d.data().currentValue || 0), 0) }));
+    const unsubFunds = onSnapshot(query(collection(db, 'funds')), s => {
+      const data = s.docs
+        .map(d => d.data())
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
+      setSummary(prev => ({ ...prev, funds: data.reduce((acc, d) => acc + (d.currentValue || 0), 0) }));
+    }, err => {
+      console.warn("Funds Snapshot Permission Error:", err);
     });
-    const unsubDebt = onSnapshot(query(collection(db, 'creditCards'), where('uid', 'in', targetUids)), s => {
-      setSummary(prev => ({ ...prev, debt: s.docs.reduce((acc, d) => acc + (d.data().currentBalance || 0), 0) }));
+    const unsubDebt = onSnapshot(query(collection(db, 'creditCards')), s => {
+      const data = s.docs
+        .map(d => d.data())
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
+      setSummary(prev => ({ ...prev, debt: data.reduce((acc, d) => acc + (d.currentBalance || 0), 0) }));
+    }, err => {
+      console.warn("Debt Snapshot Permission Error:", err);
     });
     
     return () => {
@@ -4654,35 +4788,6 @@ export default function App() {
 
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
-  const [isMigrating, setIsMigrating] = useState(false);
-
-  const migrateData = async () => {
-    if (!window.confirm('確定要將 jason2134@gmail.com 的資料匯入至目前帳號嗎？')) return;
-    
-    setIsMigrating(true);
-    let totalMigrated = 0;
-    const collectionsToMigrate = [
-      'salaryRecords', 'creditCards', 'bankAccounts', 'funds', 
-      'stocks', 'budgets', 'yearlyStandards', 'taxes', 'taxStandards'
-    ];
-    
-    try {
-      for (const colName of collectionsToMigrate) {
-        const q = query(collection(db, colName), where('uid', '==', 'jason2134@gmail.com'));
-        const snapshot = await getDocs(q);
-        
-        for (const d of snapshot.docs) {
-          await updateDoc(doc(db, colName, d.id), { uid: user.uid });
-          totalMigrated++;
-        }
-      }
-      alert(`遷移完成！共移動了 ${totalMigrated} 筆資料至目前帳號（${user.email || '訪客'}）。`);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, 'migration');
-    } finally {
-      setIsMigrating(false);
-    }
-  };
 
   const saveApiKey = () => {
     localStorage.setItem('GEMINI_API_KEY', apiKeyInput);
@@ -4850,14 +4955,6 @@ export default function App() {
             >
               <Settings size={20} />
               設定 API Key
-            </button>
-            <button 
-              onClick={migrateData}
-              disabled={isMigrating}
-              className="w-full flex items-center gap-3 px-4 py-3 text-amber-600 hover:bg-amber-50 rounded-xl transition-all font-medium disabled:opacity-50"
-            >
-              {isMigrating ? <Loader2 size={20} className="animate-spin" /> : <RefreshCw size={20} />}
-              匯入舊帳號資料
             </button>
           </div>
         </motion.aside>

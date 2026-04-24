@@ -28,13 +28,15 @@ service cloud.firestore {
     }
 
     function canAccessData(data) {
-      return data.uid == 'default-user' || 
+      return !('uid' in data) || 
+             data.uid == 'default-user' || 
              data.uid == 'local_default_user' || 
              data.uid == 'guest-user' || 
              data.uid == 'guest' || 
              data.uid == 'anonymous' || 
              data.uid == 'local_user' ||
              data.uid == 'jason2134@gmail.com' ||
+             data.uid == 'guest@example.com' ||
              (isSignedIn() && (data.uid == request.auth.uid || data.uid == request.auth.token.email));
     }
 
@@ -127,66 +129,66 @@ service cloud.firestore {
     // --- Collection matching ---
 
     match /salaryRecords/{recordId} {
-      allow read, list: if canAccessData(resource.data);
-      allow create: if isValidSalaryRecord(incoming());
-      allow update: if canAccessData(resource.data) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidSalaryRecord(incoming());
-      allow delete: if canAccessData(resource.data);
+      allow read: if true;
+      allow create: if isValidSalaryRecord(incoming()) && isValidId(recordId);
+      allow update: if (canAccessData(resource.data) || !('uid' in resource.data)) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidSalaryRecord(incoming()) && isValidId(recordId);
+      allow delete: if canAccessData(resource.data) || !('uid' in resource.data);
     }
 
     match /creditCards/{cardId} {
-      allow read, list: if canAccessData(resource.data);
-      allow create: if isValidCreditCard(incoming());
-      allow update: if canAccessData(resource.data) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidCreditCard(incoming());
-      allow delete: if canAccessData(resource.data);
+      allow read: if true;
+      allow create: if isValidCreditCard(incoming()) && isValidId(cardId);
+      allow update: if (canAccessData(resource.data) || !('uid' in resource.data)) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidCreditCard(incoming()) && isValidId(cardId);
+      allow delete: if canAccessData(resource.data) || !('uid' in resource.data);
     }
 
     match /bankAccounts/{accountId} {
-      allow read, list: if canAccessData(resource.data);
-      allow create: if isValidBankAccount(incoming());
-      allow update: if canAccessData(resource.data) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidBankAccount(incoming());
-      allow delete: if canAccessData(resource.data);
+      allow read: if true;
+      allow create: if isValidBankAccount(incoming()) && isValidId(accountId);
+      allow update: if (canAccessData(resource.data) || !('uid' in resource.data)) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidBankAccount(incoming()) && isValidId(accountId);
+      allow delete: if canAccessData(resource.data) || !('uid' in resource.data);
     }
 
     match /funds/{fundId} {
-      allow read, list: if canAccessData(resource.data);
-      allow create: if isValidFund(incoming());
-      allow update: if canAccessData(resource.data) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidFund(incoming());
-      allow delete: if canAccessData(resource.data);
+      allow read: if true;
+      allow create: if isValidFund(incoming()) && isValidId(fundId);
+      allow update: if (canAccessData(resource.data) || !('uid' in resource.data)) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidFund(incoming()) && isValidId(fundId);
+      allow delete: if canAccessData(resource.data) || !('uid' in resource.data);
     }
 
     match /stocks/{stockId} {
-      allow read, list: if canAccessData(resource.data);
-      allow create: if isValidStock(incoming());
-      allow update: if canAccessData(resource.data) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidStock(incoming());
-      allow delete: if canAccessData(resource.data);
+      allow read: if true;
+      allow create: if isValidStock(incoming()) && isValidId(stockId);
+      allow update: if (canAccessData(resource.data) || !('uid' in resource.data)) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidStock(incoming()) && isValidId(stockId);
+      allow delete: if canAccessData(resource.data) || !('uid' in resource.data);
     }
 
     match /budgets/{budgetId} {
-      allow read, list: if canAccessData(resource.data);
-      allow create: if isValidBudget(incoming());
-      allow update: if canAccessData(resource.data) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidBudget(incoming());
-      allow delete: if canAccessData(resource.data);
+      allow read: if true;
+      allow create: if isValidBudget(incoming()) && isValidId(budgetId);
+      allow update: if (canAccessData(resource.data) || !('uid' in resource.data)) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidBudget(incoming()) && isValidId(budgetId);
+      allow delete: if canAccessData(resource.data) || !('uid' in resource.data);
     }
 
     match /yearlyStandards/{standardId} {
-      allow read, list: if canAccessData(resource.data);
-      allow create: if isValidYearlyStandard(incoming());
-      allow update: if canAccessData(resource.data) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidYearlyStandard(incoming());
-      allow delete: if canAccessData(resource.data);
+      allow read: if true;
+      allow create: if isValidYearlyStandard(incoming()) && isValidId(standardId);
+      allow update: if (canAccessData(resource.data) || !('uid' in resource.data)) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidYearlyStandard(incoming()) && isValidId(standardId);
+      allow delete: if canAccessData(resource.data) || !('uid' in resource.data);
     }
 
     match /taxes/{taxId} {
-      allow read, list: if canAccessData(resource.data);
-      allow create: if isValidTaxRecord(incoming());
-      allow update: if canAccessData(resource.data) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidTaxRecord(incoming());
-      allow delete: if canAccessData(resource.data);
+      allow read: if true;
+      allow create: if isValidTaxRecord(incoming()) && isValidId(taxId);
+      allow update: if (canAccessData(resource.data) || !('uid' in resource.data)) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidTaxRecord(incoming()) && isValidId(taxId);
+      allow delete: if canAccessData(resource.data) || !('uid' in resource.data);
     }
 
     match /taxStandards/{standardId} {
-      allow read, list: if canAccessData(resource.data);
-      allow create: if isValidTaxStandard(incoming());
-      allow update: if canAccessData(resource.data) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidTaxStandard(incoming());
-      allow delete: if canAccessData(resource.data);
+      allow read: if true;
+      allow create: if isValidTaxStandard(incoming()) && isValidId(standardId);
+      allow update: if (canAccessData(resource.data) || !('uid' in resource.data)) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidTaxStandard(incoming()) && isValidId(standardId);
+      allow delete: if canAccessData(resource.data) || !('uid' in resource.data);
     }
   }
 }
