@@ -635,6 +635,55 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
     return () => unsubscribe();
   }, [user.uid]);
 
+  const handleManualAddClick = () => {
+    if (records.length > 0) {
+      const sortedRecords = [...records].sort((a, b) => b.date.localeCompare(a.date));
+      const latestRecord = sortedRecords[0];
+      const [year, month] = latestRecord.date.split('-');
+      let nextMonth = parseInt(month, 10) + 1;
+      let nextYear = parseInt(year, 10);
+      if (nextMonth > 12) {
+        nextMonth = 1;
+        nextYear += 1;
+      }
+      const nextDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+      
+      const { id, uid, ...recordData } = latestRecord as any;
+      
+      setNewRecord({
+        ...recordData,
+        date: nextDate,
+        yearEndBonus: 0,
+        performanceBonus: 0,
+        overtimePay: 0,
+        otherIncome: 0,
+        retroactivePay: 0
+      });
+    } else {
+      setNewRecord({
+        date: new Date().toISOString().slice(0, 7),
+        rank: '',
+        salaryPoint: 0,
+        basicPay: 0,
+        professionalAllowance: 0,
+        medicalIncentive: 0,
+        overtimePay: 0,
+        yearEndBonus: 0,
+        performanceBonus: 0,
+        otherIncome: 0,
+        retroactivePay: 0,
+        expectedBasicPay: 0,
+        expectedProfessionalAllowance: 0,
+        civilServiceInsurance: 0,
+        healthInsurance: 0,
+        pensionFund: 0,
+        otherDeduction: 0,
+        taxableIncome: 0
+      });
+    }
+    setIsAdding(true);
+  };
+
   const handleAdd = async () => {
     try {
       const record = {
@@ -883,7 +932,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
             <Calculator size={20} /> AI 智慧辨識
           </button>
           <button 
-            onClick={() => setIsAdding(true)}
+            onClick={handleManualAddClick}
             className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
           >
             <Plus size={20} /> 手動新增
