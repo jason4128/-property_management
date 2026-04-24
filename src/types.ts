@@ -5,6 +5,7 @@
 
 export interface SalaryRecord {
   id: string;
+  uid?: string;
   date: string; // YYYY-MM
   rank: string; // 職等
   salaryPoint: number; // 俸點
@@ -37,6 +38,7 @@ export interface SalaryRecord {
 
 export interface YearlyStandard {
   id: string;
+  uid?: string;
   year: string; // YYYY
   basicPay: number;
   professionalAllowance: number;
@@ -44,6 +46,7 @@ export interface YearlyStandard {
 
 export interface CreditCard {
   id: string;
+  uid?: string;
   name: string;
   bank: string;
   statementDate: number;
@@ -54,6 +57,7 @@ export interface CreditCard {
 
 export interface BankAccount {
   id: string;
+  uid?: string;
   name: string;
   bankName: string;
   balance: number;
@@ -68,6 +72,7 @@ export interface BankAccount {
 
 export interface Fund {
   id: string;
+  uid?: string;
   name: string;
   cost: number;
   currentValue: number;
@@ -133,6 +138,7 @@ export interface TaxRecord {
 
 export interface Stock {
   id: string;
+  uid?: string;
   symbol: string;
   name: string;
   shares: number;
@@ -143,6 +149,7 @@ export interface Stock {
 
 export interface Budget {
   id: string;
+  uid?: string;
   category: string;
   allocated: number;
   spent: number;

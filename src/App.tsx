@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, Component, ReactNode } from 'react';
+import React, { useState, useEffect, useMemo, Component, ReactNode } from 'react';
 import { 
   Wallet, 
   CreditCard as CreditCardIcon, 
@@ -458,7 +458,7 @@ const EditableCell = ({
         type={type === "number" ? "text" : type}
         inputMode={type === "number" ? "numeric" : undefined}
         className={`w-full p-1 border border-indigo-500 rounded outline-none ${className}`}
-        value={type === "number" && tempValue === 0 ? "" : tempValue}
+        value={(type === "number" && tempValue === 0) ? "" : (tempValue ?? "")}
         onChange={(e) => {
           if (type === "number") {
             const val = e.target.value.replace(/[^\d]/g, '');
@@ -1117,7 +1117,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         type="text"
                         placeholder="例如：114"
                         className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                        value={newYearlyStandard.year}
+                        value={newYearlyStandard.year ?? ""}
                         onChange={e => setNewYearlyStandard({...newYearlyStandard, year: e.target.value})}
                       />
                     </div>
@@ -1128,7 +1128,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         inputMode="numeric"
                         placeholder="請輸入金額"
                         className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                        value={newYearlyStandard.basicPay}
+                        value={newYearlyStandard.basicPay ?? ""}
                         onChange={e => {
                           const val = e.target.value.replace(/[^\d]/g, '');
                           setNewYearlyStandard({...newYearlyStandard, basicPay: val});
@@ -1142,7 +1142,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         inputMode="numeric"
                         placeholder="請輸入金額"
                         className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                        value={newYearlyStandard.professionalAllowance}
+                        value={newYearlyStandard.professionalAllowance ?? ""}
                         onChange={e => {
                           const val = e.target.value.replace(/[^\d]/g, '');
                           setNewYearlyStandard({...newYearlyStandard, professionalAllowance: val});
@@ -1247,7 +1247,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
               <input 
                 type="month" 
                 className="w-full mt-1 p-2 border rounded-md"
-                value={newRecord.date}
+                value={newRecord.date ?? ""}
                 onChange={e => setNewRecord({...newRecord, date: e.target.value})}
               />
             </div>
@@ -1258,7 +1258,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                 list="rank-options"
                 className="w-full mt-1 p-2 border rounded-md"
                 placeholder="例如：七年功二"
-                value={newRecord.rank}
+                value={newRecord.rank ?? ""}
                 onChange={e => {
                   const rank = e.target.value;
                   const point = rankToPointMap[rank];
@@ -1282,7 +1282,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
               <label className="block text-sm font-bold text-slate-700">俸點</label>
               <select 
                 className="w-full mt-1 p-2 border rounded-md"
-                value={newRecord.salaryPoint}
+                value={newRecord.salaryPoint ?? ""}
                 onChange={e => setNewRecord({...newRecord, salaryPoint: Number(e.target.value)})}
               >
                 <option value="">選擇俸點</option>
@@ -1534,7 +1534,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                 <input 
                   type="number" 
                   className="w-full mt-1 p-2 border rounded-md"
-                  value={newRecord.taxableIncome}
+                  value={newRecord.taxableIncome ?? 0}
                   onChange={e => setNewRecord({...newRecord, taxableIncome: Number(e.target.value)})}
                 />
               </div>
@@ -1795,10 +1795,10 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
       {isAdding && (
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" placeholder="卡片名稱" className="p-2 border rounded-md" value={newCard.name} onChange={e => setNewCard({...newCard, name: e.target.value})} />
-            <input type="text" placeholder="銀行" className="p-2 border rounded-md" value={newCard.bank} onChange={e => setNewCard({...newCard, bank: e.target.value})} />
-            <input type="number" placeholder="額度" className="p-2 border rounded-md" value={newCard.limit} onChange={e => setNewCard({...newCard, limit: Number(e.target.value)})} />
-            <input type="number" placeholder="目前未出帳金額" className="p-2 border rounded-md" value={newCard.currentBalance} onChange={e => setNewCard({...newCard, currentBalance: Number(e.target.value)})} />
+            <input type="text" placeholder="卡片名稱" className="p-2 border rounded-md" value={newCard.name ?? ""} onChange={e => setNewCard({...newCard, name: e.target.value})} />
+            <input type="text" placeholder="銀行" className="p-2 border rounded-md" value={newCard.bank ?? ""} onChange={e => setNewCard({...newCard, bank: e.target.value})} />
+            <input type="number" placeholder="額度" className="p-2 border rounded-md" value={newCard.limit ?? 0} onChange={e => setNewCard({...newCard, limit: Number(e.target.value)})} />
+            <input type="number" placeholder="目前未出帳金額" className="p-2 border rounded-md" value={newCard.currentBalance ?? 0} onChange={e => setNewCard({...newCard, currentBalance: Number(e.target.value)})} />
           </div>
           <div className="flex justify-end gap-3">
             <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
@@ -2437,10 +2437,10 @@ const FundPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (tar
       {isAdding && (
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" placeholder="基金名稱" className="p-2 border rounded-md" value={newFund.name} onChange={e => setNewFund({...newFund, name: e.target.value})} />
-            <input type="number" placeholder="持有單位數" className="p-2 border rounded-md" value={newFund.units} onChange={e => setNewFund({...newFund, units: Number(e.target.value)})} />
-            <input type="number" placeholder="投資成本" className="p-2 border rounded-md" value={newFund.cost} onChange={e => setNewFund({...newFund, cost: Number(e.target.value)})} />
-            <input type="number" placeholder="目前市值" className="p-2 border rounded-md" value={newFund.currentValue} onChange={e => setNewFund({...newFund, currentValue: Number(e.target.value)})} />
+            <input type="text" placeholder="基金名稱" className="p-2 border rounded-md" value={newFund.name ?? ""} onChange={e => setNewFund({...newFund, name: e.target.value})} />
+            <input type="number" placeholder="持有單位數" className="p-2 border rounded-md" value={newFund.units ?? 0} onChange={e => setNewFund({...newFund, units: Number(e.target.value)})} />
+            <input type="number" placeholder="投資成本" className="p-2 border rounded-md" value={newFund.cost ?? 0} onChange={e => setNewFund({...newFund, cost: Number(e.target.value)})} />
+            <input type="number" placeholder="目前市值" className="p-2 border rounded-md" value={newFund.currentValue ?? 0} onChange={e => setNewFund({...newFund, currentValue: Number(e.target.value)})} />
           </div>
           <div className="flex justify-end gap-3">
             <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
@@ -3166,11 +3166,11 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       {isAdding && (
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" placeholder="股票代號" className="p-2 border rounded-md" value={newStock.symbol} onChange={e => setNewStock({...newStock, symbol: e.target.value})} />
-            <input type="text" placeholder="股票名稱" className="p-2 border rounded-md" value={newStock.name} onChange={e => setNewStock({...newStock, name: e.target.value})} />
-            <input type="number" placeholder="持有股數" className="p-2 border rounded-md" value={newStock.shares} onChange={e => setNewStock({...newStock, shares: Number(e.target.value)})} />
-            <input type="number" placeholder="平均成本" className="p-2 border rounded-md" value={newStock.averageCost} onChange={e => setNewStock({...newStock, averageCost: Number(e.target.value)})} />
-            <input type="number" placeholder="目前股價" className="p-2 border rounded-md" value={newStock.currentPrice} onChange={e => setNewStock({...newStock, currentPrice: Number(e.target.value)})} />
+            <input type="text" placeholder="股票代號" className="p-2 border rounded-md" value={newStock.symbol ?? ""} onChange={e => setNewStock({...newStock, symbol: e.target.value})} />
+            <input type="text" placeholder="股票名稱" className="p-2 border rounded-md" value={newStock.name ?? ""} onChange={e => setNewStock({...newStock, name: e.target.value})} />
+            <input type="number" placeholder="持有股數" className="p-2 border rounded-md" value={newStock.shares ?? 0} onChange={e => setNewStock({...newStock, shares: Number(e.target.value)})} />
+            <input type="number" placeholder="平均成本" className="p-2 border rounded-md" value={newStock.averageCost ?? 0} onChange={e => setNewStock({...newStock, averageCost: Number(e.target.value)})} />
+            <input type="number" placeholder="目前股價" className="p-2 border rounded-md" value={newStock.currentPrice ?? 0} onChange={e => setNewStock({...newStock, currentPrice: Number(e.target.value)})} />
           </div>
           <div className="flex justify-end gap-3">
             <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
@@ -3316,6 +3316,11 @@ const DashboardPage = ({ user, summary }: { user: User, summary: any }) => {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">信用卡負債</p>
           <p className="text-2xl font-bold text-rose-500">${Math.round(cardDebt).toLocaleString()}</p>
+        </div>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">預計年度領息總計</p>
+          <p className="text-2xl font-bold text-amber-600">${Math.round(data.banks.reduce((sum, acc) => (acc.interestRate && acc.balance > 0 && acc.type !== 'loan') ? sum + (acc.balance * (acc.interestRate / 100)) : sum, 0)).toLocaleString()}</p>
+          <p className="text-[10px] text-slate-400 mt-1">※ 依各帳戶利率估算</p>
         </div>
       </div>
 
@@ -3474,7 +3479,19 @@ const INITIAL_TAX_RECORD: Partial<TaxRecord> = {
 };
 
 // --- Tax Calculation Display Component ---
-const CalculationBreakdown = ({ tax, result, std }: { tax: Partial<TaxRecord>, result: any, std: TaxStandard }) => {
+const CalculationBreakdown = ({ 
+  tax, 
+  result, 
+  std, 
+  optimalDividend,
+  onApplyDividend 
+}: { 
+  tax: Partial<TaxRecord>, 
+  result: any, 
+  std: TaxStandard,
+  optimalDividend?: { bestDiv: number, minTax: number, saving: number },
+  onApplyDividend?: (val: number) => void
+}) => {
   return (
     <div className="space-y-8 bg-slate-50/50 p-6 rounded-3xl border border-slate-100 overflow-x-auto">
       <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
@@ -3626,7 +3643,7 @@ const CalculationBreakdown = ({ tax, result, std }: { tax: Partial<TaxRecord>, r
       {/* 5. 股利抵減 */}
       <section className="space-y-3">
         <h4 className="text-sm font-bold text-slate-700 bg-slate-200/50 px-3 py-1 rounded-md inline-block">★ 股利及盈餘可抵減稅額</h4>
-        <div className="bg-white p-4 rounded-xl border border-slate-200">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-4">
            <div className="flex items-center gap-3 text-xs">
               <span className="bg-slate-100 p-2 rounded-lg">股利總額 ${ (tax.profitIncome || 0).toLocaleString() }</span>
               <span className="font-bold text-slate-400">×</span>
@@ -3637,6 +3654,25 @@ const CalculationBreakdown = ({ tax, result, std }: { tax: Partial<TaxRecord>, r
               <span className="font-bold text-slate-400">等於</span>
               <span className="bg-emerald-100 p-2 rounded-lg font-bold text-emerald-700">${ result.divCredit.toLocaleString() }</span>
            </div>
+
+           {optimalDividend && optimalDividend.saving > 0 && (
+             <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl space-y-2">
+               <div className="flex justify-between items-center">
+                 <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">💡 稅務優化建議</p>
+                 <button 
+                  onClick={() => onApplyDividend?.(optimalDividend.bestDiv)}
+                  className="text-[10px] font-bold text-white bg-emerald-600 px-3 py-1 rounded-lg hover:bg-emerald-700 transition-colors shadow-sm"
+                 >
+                   套用建議金額
+                 </button>
+               </div>
+               <div className="text-xs text-slate-600 leading-relaxed">
+                 若將營利所得 (含股利) 調整為 <span className="font-black text-emerald-700">${optimalDividend.bestDiv.toLocaleString()}</span>，
+                 預估應補(退)稅額將降至 <span className="font-black text-emerald-700">${Math.round(optimalDividend.minTax).toLocaleString()}</span>，
+                 較目前可節省 <span className="underline decoration-2 underline-offset-2 font-black text-emerald-700">${Math.round(optimalDividend.saving).toLocaleString()}</span>。
+               </div>
+             </div>
+           )}
         </div>
       </section>
 
@@ -3990,6 +4026,29 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
 
   const currentResult = calculateResult(newTax);
 
+  const optimalDividendInfo = useMemo(() => {
+    let bestDiv = 0;
+    let minTax = Infinity;
+    
+    // Iterate to find the dividend amount that minimizes tax due
+    // Range: 0 to 1,500,000 (enough to cover the 80k credit cap and some room)
+    // Using a reasonably granular step for performance vs accuracy
+    for (let d = 0; d <= 1500000; d += 1000) {
+      const res = calculateResult({ ...newTax, profitIncome: d });
+      if (res.finalTaxDue < minTax) {
+        minTax = res.finalTaxDue;
+        bestDiv = d;
+      }
+    }
+    
+    const saving = currentResult.finalTaxDue - minTax;
+    return {
+      bestDiv,
+      minTax,
+      saving: saving > 1 ? saving : 0
+    };
+  }, [newTax, standards]); // Re-calculate when data or standards change
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -4069,8 +4128,12 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
 
           <AnimatePresence>
             {isAddingStandard && (
-              <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl p-8">
+              <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+              >
+                <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl p-8">
                    <div className="flex justify-between items-center mb-8">
                     <h3 className="text-2xl font-black text-slate-800">編輯年度參數</h3>
                     <button onClick={() => setIsAddingStandard(false)} className="p-2 hover:bg-slate-50 rounded-full"><X /></button>
@@ -4079,51 +4142,51 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                      <div className="space-y-2">
                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">年度 (民國)</label>
-                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.year} onChange={e => setNewStandard({...newStandard, year: Number(e.target.value)})} />
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.year ?? 0} onChange={e => setNewStandard({...newStandard, year: Number(e.target.value)})} />
                      </div>
                      <div className="space-y-2">
                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">一般免稅額</label>
-                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.exemptionBase} onChange={e => setNewStandard({...newStandard, exemptionBase: Number(e.target.value)})} />
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.exemptionBase ?? 0} onChange={e => setNewStandard({...newStandard, exemptionBase: Number(e.target.value)})} />
                      </div>
                      <div className="space-y-2">
                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">免稅額 (70歲+)</label>
-                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.exemptionSenior} onChange={e => setNewStandard({...newStandard, exemptionSenior: Number(e.target.value)})} />
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.exemptionSenior ?? 0} onChange={e => setNewStandard({...newStandard, exemptionSenior: Number(e.target.value)})} />
                      </div>
                      <div className="space-y-2">
                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">標扣 (單身)</label>
-                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.standardDeductionSingle} onChange={e => setNewStandard({...newStandard, standardDeductionSingle: Number(e.target.value)})} />
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.standardDeductionSingle ?? 0} onChange={e => setNewStandard({...newStandard, standardDeductionSingle: Number(e.target.value)})} />
                      </div>
                      <div className="space-y-2">
                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">標扣 (有配偶)</label>
-                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.standardDeductionMarried} onChange={e => setNewStandard({...newStandard, standardDeductionMarried: Number(e.target.value)})} />
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.standardDeductionMarried ?? 0} onChange={e => setNewStandard({...newStandard, standardDeductionMarried: Number(e.target.value)})} />
                      </div>
                      <div className="space-y-2">
                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">薪資扣除額</label>
-                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.salaryDeductionUnit} onChange={e => setNewStandard({...newStandard, salaryDeductionUnit: Number(e.target.value)})} />
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.salaryDeductionUnit ?? 0} onChange={e => setNewStandard({...newStandard, salaryDeductionUnit: Number(e.target.value)})} />
                      </div>
                      <div className="space-y-2">
                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">儲蓄扣除額上限</label>
-                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.savingsDeductionLimit} onChange={e => setNewStandard({...newStandard, savingsDeductionLimit: Number(e.target.value)})} />
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.savingsDeductionLimit ?? 0} onChange={e => setNewStandard({...newStandard, savingsDeductionLimit: Number(e.target.value)})} />
                      </div>
                      <div className="space-y-2">
                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">基本生活費</label>
-                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.basicLivingExpenseUnit} onChange={e => setNewStandard({...newStandard, basicLivingExpenseUnit: Number(e.target.value)})} />
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.basicLivingExpenseUnit ?? 0} onChange={e => setNewStandard({...newStandard, basicLivingExpenseUnit: Number(e.target.value)})} />
                      </div>
                      <div className="space-y-2">
                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">身障特扣</label>
-                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.disabilityDeductionUnit} onChange={e => setNewStandard({...newStandard, disabilityDeductionUnit: Number(e.target.value)})} />
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.disabilityDeductionUnit ?? 0} onChange={e => setNewStandard({...newStandard, disabilityDeductionUnit: Number(e.target.value)})} />
                      </div>
                      <div className="space-y-2">
                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">教育學費特扣</label>
-                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.educationDeductionUnit} onChange={e => setNewStandard({...newStandard, educationDeductionUnit: Number(e.target.value)})} />
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.educationDeductionUnit ?? 0} onChange={e => setNewStandard({...newStandard, educationDeductionUnit: Number(e.target.value)})} />
                      </div>
                      <div className="space-y-2">
                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">幼兒學前特扣</label>
-                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.preschoolDeductionUnit} onChange={e => setNewStandard({...newStandard, preschoolDeductionUnit: Number(e.target.value)})} />
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.preschoolDeductionUnit ?? 0} onChange={e => setNewStandard({...newStandard, preschoolDeductionUnit: Number(e.target.value)})} />
                      </div>
                      <div className="space-y-2">
                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">長期照顧特扣</label>
-                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.longTermCareDeductionUnit} onChange={e => setNewStandard({...newStandard, longTermCareDeductionUnit: Number(e.target.value)})} />
+                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newStandard.longTermCareDeductionUnit ?? 0} onChange={e => setNewStandard({...newStandard, longTermCareDeductionUnit: Number(e.target.value)})} />
                      </div>
                    </div>
 
@@ -4202,6 +4265,7 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
                                      setNewStandard({...newStandard, taxBrackets: brackets});
                                    }}
                                    className="p-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
+                                   title="刪除級距"
                                  >
                                    <Trash2 size={16} />
                                  </button>
@@ -4212,39 +4276,29 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
                        </table>
                      </div>
                    </div>
-
-                   <div className="mt-8 flex justify-end gap-3 pt-6 border-t font-medium">
-                     <button onClick={() => setIsAddingStandard(false)} className="px-6 py-2 text-slate-500 hover:bg-slate-50 rounded-xl transition-all">取消</button>
-                     <button onClick={handleSaveStandard} className="px-8 py-2 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all">儲存參數</button>
-                   </div>
-                </motion.div>
-              </div>
+                    <div className="grid grid-cols-2 gap-4 mt-8">
+                      <button 
+                        onClick={handleSaveStandard}
+                        className="col-span-2 py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl shadow-indigo-100 hover:bg-slate-700 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Save size={20} /> 儲存年度參數
+                      </button>
+                    </div>
+                </div>
+              </motion.div>
             )}
           </AnimatePresence>
         </div>
       )}
+
       {viewMode === 'records' && (
         <div className="space-y-6">
           <div className="flex justify-between items-center">
-            <h3 className="font-bold text-slate-800 text-lg">申報歷史紀錄</h3>
-            <div className="flex gap-3">
-              <div className="flex items-center gap-2 bg-slate-100 px-3 py-2 rounded-xl text-xs font-bold text-slate-500">
-                <span>辨識年度:</span>
-                <select 
-                  className="bg-transparent border-none p-0 focus:ring-0 text-indigo-600"
-                  value={aiScanYear}
-                  onChange={e => setAiScanYear(Number(e.target.value))}
-                >
-                  {[115, 114, 113, 112, 111, 110].map(y => <option key={y} value={y}>{y}年度</option>)}
-                </select>
-              </div>
-              <label className="flex items-center gap-2 bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl border border-emerald-100 cursor-pointer hover:bg-emerald-100 transition-all font-bold text-sm">
-                <Sparkles size={16} /> {isAnalyzing ? '分析中...' : 'AI 辨識匯入'}
-                <input type="file" className="hidden" accept=".pdf,image/*" onChange={handleAIUpload} disabled={isAnalyzing} />
-              </label>
+            <h3 className="font-bold text-slate-800 text-lg">申報紀錄</h3>
+            <div className="flex items-center gap-4">
               <button 
                 onClick={() => { 
-                  setNewTax({...INITIAL_TAX_RECORD, year: aiScanYear, parameterYear: aiScanYear}); 
+                  setNewTax({ ...INITIAL_TAX_RECORD, year: 113, parameterYear: 113 }); 
                   setIsAdding(true); 
                   setViewMode('calculator'); 
                 }} 
@@ -4340,17 +4394,19 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
                           帶入 {newTax.parameterYear || newTax.year || 113} 年薪資
                         </button>
                       </div>
-                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.salaryUser} onChange={e => setNewTax({...newTax, salaryUser: Number(e.target.value)})} />
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.salaryUser ?? 0} onChange={e => setNewTax({...newTax, salaryUser: Number(e.target.value)})} />
                     </div>
                     {newTax.isMarried && (
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-400">配偶薪資總額</label>
-                        <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.salarySpouse} onChange={e => setNewTax({...newTax, salarySpouse: Number(e.target.value)})} />
+                        <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.salarySpouse ?? 0} onChange={e => setNewTax({...newTax, salarySpouse: Number(e.target.value)})} />
                       </div>
                     )}
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400">營利所得 (含股利 54C)</label>
-                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.profitIncome} onChange={e => setNewTax({...newTax, profitIncome: Number(e.target.value)})} />
+                      <div className="flex justify-between items-end">
+                        <label className="text-[10px] font-bold text-slate-400">營利所得 (含股利 54C)</label>
+                      </div>
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.profitIncome ?? 0} onChange={e => setNewTax({...newTax, profitIncome: Number(e.target.value)})} />
                     </div>
                     <div className="space-y-1">
                       <div className="flex justify-between items-end">
@@ -4363,11 +4419,11 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
                           帶入預計利息
                         </button>
                       </div>
-                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.interestIncome} onChange={e => setNewTax({...newTax, interestIncome: Number(e.target.value)})} />
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.interestIncome ?? 0} onChange={e => setNewTax({...newTax, interestIncome: Number(e.target.value)})} />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400">其他所得 (租賃/執業/中獎等)</label>
-                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.otherIncome} onChange={e => setNewTax({...newTax, otherIncome: Number(e.target.value)})} />
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.otherIncome ?? 0} onChange={e => setNewTax({...newTax, otherIncome: Number(e.target.value)})} />
                     </div>
                   </div>
                 </section>
@@ -4377,11 +4433,11 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400">一般免稅人數 (含本人/配偶/70歲以下)</label>
-                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.exemptionsCount} onChange={e => setNewTax({...newTax, exemptionsCount: Number(e.target.value)})} />
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.exemptionsCount ?? 0} onChange={e => setNewTax({...newTax, exemptionsCount: Number(e.target.value)})} />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400">70歲以上扶養人數</label>
-                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.exemptionsSeniorCount} onChange={e => setNewTax({...newTax, exemptionsSeniorCount: Number(e.target.value)})} />
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.exemptionsSeniorCount ?? 0} onChange={e => setNewTax({...newTax, exemptionsSeniorCount: Number(e.target.value)})} />
                     </div>
                   </div>
                 </section>
@@ -4391,26 +4447,26 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400">身障人數</label>
-                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl text-center" value={newTax.disabilityCount} onChange={e => setNewTax({...newTax, disabilityCount: Number(e.target.value)})} />
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl text-center" value={newTax.disabilityCount ?? 0} onChange={e => setNewTax({...newTax, disabilityCount: Number(e.target.value)})} />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400">幼兒人數</label>
-                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl text-center" value={newTax.preschoolCount} onChange={e => setNewTax({...newTax, preschoolCount: Number(e.target.value)})} />
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl text-center" value={newTax.preschoolCount ?? 0} onChange={e => setNewTax({...newTax, preschoolCount: Number(e.target.value)})} />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400">教育人數</label>
-                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl text-center" value={newTax.educationCount} onChange={e => setNewTax({...newTax, educationCount: Number(e.target.value)})} />
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl text-center" value={newTax.educationCount ?? 0} onChange={e => setNewTax({...newTax, educationCount: Number(e.target.value)})} />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400">長照人數</label>
-                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl text-center" value={newTax.longTermCareCount} onChange={e => setNewTax({...newTax, longTermCareCount: Number(e.target.value)})} />
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl text-center" value={newTax.longTermCareCount ?? 0} onChange={e => setNewTax({...newTax, longTermCareCount: Number(e.target.value)})} />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400">列舉扣除額 (如保險、醫療、捐贈等)</label>
                       <div className="relative">
-                        <input type="number" className={`w-full p-3 bg-slate-50 border rounded-xl ${currentResult.isItemized ? 'border-emerald-500 ring-2 ring-emerald-100' : ''}`} value={newTax.itemizedDeduction} onChange={e => setNewTax({...newTax, itemizedDeduction: Number(e.target.value)})} />
+                        <input type="number" className={`w-full p-3 bg-slate-50 border rounded-xl ${currentResult.isItemized ? 'border-emerald-500 ring-2 ring-emerald-100' : ''}`} value={newTax.itemizedDeduction ?? 0} onChange={e => setNewTax({...newTax, itemizedDeduction: Number(e.target.value)})} />
                         {currentResult.isItemized && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded shadow-sm">已採用</span>}
                       </div>
                       <p className="text-[9px] text-slate-400 mt-1">
@@ -4419,11 +4475,11 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400">扣繳稅額 (各項收入已扣)</label>
-                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.withholding} onChange={e => setNewTax({...newTax, withholding: Number(e.target.value)})} />
+                      <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.withholding ?? 0} onChange={e => setNewTax({...newTax, withholding: Number(e.target.value)})} />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400">備註</label>
-                      <input type="text" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.note} onChange={e => setNewTax({...newTax, note: e.target.value})} placeholder="例如：112年度申報結果" />
+                      <input type="text" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.note ?? ""} onChange={e => setNewTax({...newTax, note: e.target.value})} placeholder="例如：112年度申報結果" />
                     </div>
                   </div>
                 </section>
@@ -4476,6 +4532,19 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
                 </div>
               </div>
 
+              {optimalDividendInfo.saving > 0 && (
+                <div className="bg-white/10 p-3 rounded-xl border border-white/20 space-y-2">
+                  <div className="flex items-center gap-2 text-[10px] font-bold text-indigo-100 italic">
+                    <Sparkles size={12} /> 稅務優化提醒
+                  </div>
+                  <p className="text-xs text-indigo-50 leading-relaxed">
+                    若股利調整為 <span className="font-bold underline">${optimalDividendInfo.bestDiv.toLocaleString()}</span>，
+                    預估稅額可再降至 <span className="font-bold text-emerald-300">${Math.round(optimalDividendInfo.minTax).toLocaleString()}</span>
+                    （省下約 <span className="font-bold">${Math.round(optimalDividendInfo.saving).toLocaleString()}</span>）。
+                  </p>
+                </div>
+              )}
+
               <button 
                 onClick={handleSaveTax}
                 className="w-full py-4 bg-white text-indigo-600 font-black rounded-2xl shadow-lg hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
@@ -4497,11 +4566,13 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
 
       {(viewMode === 'calculator' || isAdding) && (
         <div className="mt-8">
-           <CalculationBreakdown 
-             tax={newTax} 
-             result={currentResult} 
-             std={standards.find(s => s.year === newTax.year) || (DEFAULT_TAX_STANDARDS as TaxStandard)} 
-           />
+            <CalculationBreakdown 
+              tax={newTax} 
+              result={currentResult} 
+              std={standards.find(s => s.year === (newTax.parameterYear || newTax.year || 113)) || (PRESET_TAX_STANDARDS.find(s => s.year === (newTax.parameterYear || newTax.year || 113)) || (DEFAULT_TAX_STANDARDS as TaxStandard))} 
+              optimalDividend={optimalDividendInfo}
+              onApplyDividend={(val) => setNewTax(prev => ({ ...prev, profitIncome: val }))}
+            />
         </div>
       )}
     </div>
@@ -4553,10 +4624,10 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
       {isAdding && (
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" placeholder="類別 (如: 旅遊, 保險)" className="p-2 border rounded-md" value={newBudget.category} onChange={e => setNewBudget({...newBudget, category: e.target.value})} />
-            <input type="number" placeholder="預算金額" className="p-2 border rounded-md" value={newBudget.allocated} onChange={e => setNewBudget({...newBudget, allocated: Number(e.target.value)})} />
-            <input type="number" placeholder="已支出" className="p-2 border rounded-md" value={newBudget.spent} onChange={e => setNewBudget({...newBudget, spent: Number(e.target.value)})} />
-            <input type="number" placeholder="年份" className="p-2 border rounded-md" value={newBudget.year} onChange={e => setNewBudget({...newBudget, year: Number(e.target.value)})} />
+            <input type="text" placeholder="類別 (如: 旅遊, 保險)" className="p-2 border rounded-md" value={newBudget.category ?? ""} onChange={e => setNewBudget({...newBudget, category: e.target.value})} />
+            <input type="number" placeholder="預算金額" className="p-2 border rounded-md" value={newBudget.allocated ?? 0} onChange={e => setNewBudget({...newBudget, allocated: Number(e.target.value)})} />
+            <input type="number" placeholder="已支出" className="p-2 border rounded-md" value={newBudget.spent ?? 0} onChange={e => setNewBudget({...newBudget, spent: Number(e.target.value)})} />
+            <input type="number" placeholder="年份" className="p-2 border rounded-md" value={newBudget.year ?? 0} onChange={e => setNewBudget({...newBudget, year: Number(e.target.value)})} />
           </div>
           <div className="flex justify-end gap-3">
             <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
@@ -4633,9 +4704,24 @@ const GenericPage = ({ title, icon: Icon, type }: { title: string, icon: any, ty
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
   const [user, setUser] = useState<any>({ uid: 'default-user', email: 'guest@example.com' });
   const [loading, setLoading] = useState(true);
+
+  // Handle window resize for sidebar
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+      if (window.innerWidth < 768 && isSidebarOpen) {
+        setIsSidebarOpen(false);
+      } else if (window.innerWidth >= 768 && !isSidebarOpen) {
+        setIsSidebarOpen(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isSidebarOpen]);
 
   // Global Summary States
   const [summary, setSummary] = useState({ banks: 0, stocks: 0, funds: 0, debt: 0, loans: 0, stockBreakdown: { total: 0, firstrade: 0, cathay: 0 } });
@@ -4722,7 +4808,7 @@ export default function App() {
     const targetUids = getAppTargetUids(user);
     
     const unsubBanks = onSnapshot(query(collection(db, 'bankAccounts')), s => {
-      const allData = s.docs.map(d => d.data());
+      const allData = s.docs.map(d => d.data() as BankAccount);
       const data = allData.filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       const assets = data.filter(d => d.type !== 'loan').reduce((acc, d) => acc + (d.balance || 0), 0);
       const loans = data.filter(d => d.type === 'loan').reduce((acc, d) => acc + (d.balance || d.loanRemaining || 0), 0);
@@ -4732,28 +4818,27 @@ export default function App() {
     });
     const unsubStocks = onSnapshot(query(collection(db, 'stocks')), s => {
       setSummary(prev => {
-        const stocks = s.docs
-          .map(d => d.data())
-          .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid))
+        const stocksResult = s.docs
+          .map(d => d.data() as Stock)
+          .filter(r => user?.email === 'guest@example.com' || !(r as any).uid || targetUids.includes((r as any).uid))
           .reduce((acc, d) => {
           const val = (d.shares * d.currentPrice || 0);
           const isUsd = d.source === 'Firstrade';
           const convVal = isUsd ? val * 32.5 : val;
           return {
-            ...acc,
             total: acc.total + convVal,
             firstrade: acc.firstrade + (isUsd ? convVal : 0),
             cathay: acc.cathay + (d.source === 'Cathay' ? convVal : 0)
           };
         }, { total: 0, firstrade: 0, cathay: 0 });
-        return { ...prev, stocks: stocks.total, stockBreakdown: stocks };
+        return { ...prev, stocks: stocksResult.total, stockBreakdown: stocksResult };
       });
     }, err => {
       console.warn("Stocks Snapshot Permission Error:", err);
     });
     const unsubFunds = onSnapshot(query(collection(db, 'funds')), s => {
       const data = s.docs
-        .map(d => d.data())
+        .map(d => d.data() as Fund)
         .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setSummary(prev => ({ ...prev, funds: data.reduce((acc, d) => acc + (d.currentValue || 0), 0) }));
     }, err => {
@@ -4761,7 +4846,7 @@ export default function App() {
     });
     const unsubDebt = onSnapshot(query(collection(db, 'creditCards')), s => {
       const data = s.docs
-        .map(d => d.data())
+        .map(d => d.data() as CreditCard)
         .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setSummary(prev => ({ ...prev, debt: data.reduce((acc, d) => acc + (d.currentBalance || 0), 0) }));
     }, err => {
@@ -4820,6 +4905,7 @@ export default function App() {
       case 'credit-cards': return <CreditCardPage {...pageProps} />;
       case 'banks': return <BankPage {...pageProps} />;
       case 'stocks': return <StockPage {...pageProps} />;
+      case 'funds': return <FundPage {...pageProps} />;
       case 'budget': return <BudgetPage {...pageProps} />;
       case 'tax': return <TaxPage {...pageProps} />;
       default: return <DashboardPage user={user} summary={summary} />;
@@ -4841,27 +4927,30 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="h-screen bg-slate-50 flex flex-col md:flex-row overflow-hidden relative">
-        {/* Mobile Toggle (only visible when sidebar is closed on small screens if we wanted, but let's stick to desktop focus) */}
-        {!isSidebarOpen && (
-          <button 
-            onClick={() => setIsSidebarOpen(true)}
-            className="fixed top-4 left-4 z-50 p-3 bg-white border border-slate-200 rounded-xl shadow-xl text-indigo-600 hover:bg-slate-50 transition-all active:scale-95"
-            title="開啟功能選單"
-          >
-            <PanelLeftOpen size={24} />
-          </button>
-        )}
+        {/* Mobile Sidebar Overlay */}
+        <AnimatePresence>
+          {isSidebarOpen && windowWidth < 768 && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSidebarOpen(false)}
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[50]"
+            />
+          )}
+        </AnimatePresence>
 
         {/* Sidebar */}
         <motion.aside 
           initial={false}
           animate={{ 
-            width: isSidebarOpen ? (window.innerWidth < 768 ? '100%' : '256px') : '0px',
-            padding: isSidebarOpen ? '24px' : '0px',
-            opacity: isSidebarOpen ? 1 : 0
+            x: windowWidth < 768 && !isSidebarOpen ? '-100%' : 0,
+            width: windowWidth < 768 ? '280px' : (isSidebarOpen ? '256px' : '0px'),
+            padding: isSidebarOpen || windowWidth < 768 ? '24px' : '0px',
+            opacity: isSidebarOpen || windowWidth < 768 ? 1 : 0
           }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="bg-white border-r border-slate-200 flex flex-col gap-8 flex-shrink-0 overflow-hidden relative"
+          className={`bg-white border-r border-slate-200 flex flex-col gap-8 flex-shrink-0 overflow-hidden z-[60] fixed inset-y-0 left-0 md:relative md:inset-auto`}
         >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 overflow-hidden">
@@ -4914,7 +5003,10 @@ export default function App() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    setActiveTab(tab.id as TabId);
+                    if (window.innerWidth < 768) setIsSidebarOpen(false);
+                  }}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                     activeTab === tab.id 
                       ? 'bg-indigo-50 text-indigo-600 font-semibold shadow-sm' 
@@ -4943,11 +5035,6 @@ export default function App() {
                   </button>
                 )}
               </div>
-              {user.email === 'guest@example.com' && (
-                <p className="text-[9px] text-slate-400 mt-1 leading-tight">
-                  ※ 登入失敗？請點擊右上的「在新分頁中開啟」
-                </p>
-              )}
             </div>
             <button 
               onClick={() => setIsApiKeyModalOpen(true)}
@@ -4961,7 +5048,7 @@ export default function App() {
 
         {/* API Key Modal */}
         {isApiKeyModalOpen && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
               <h3 className="text-lg font-bold">設定 Gemini API Key</h3>
               <input 
@@ -4978,6 +5065,7 @@ export default function App() {
             </div>
           </div>
         )}
+        
         <ConfirmationModal 
           isOpen={!!deleteTarget}
           onClose={() => setDeleteTarget(null)}
@@ -4985,7 +5073,6 @@ export default function App() {
             if (deleteTarget) {
               try {
                 await deleteDoc(doc(db, deleteTarget.type, deleteTarget.id));
-                window.alert('紀錄已刪除');
               } catch (err) {
                 handleFirestoreError(err, OperationType.DELETE, deleteTarget.type);
               }
@@ -4994,20 +5081,72 @@ export default function App() {
           message={`確定要永久刪除此紀錄嗎？\n(${deleteTarget?.name || '未命名'})`}
         />
 
-        {/* Main Content */}
-        <main className="flex-1 p-6 md:p-10 overflow-y-auto bg-slate-50 relative">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, x: 10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -10 }}
-              transition={{ duration: 0.2 }}
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col min-w-0 bg-slate-50 relative">
+          {/* Header for mobile */}
+          <header className="md:hidden bg-white border-b border-slate-200 px-4 py-3 flex shrink-0 items-center justify-between z-40">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
+                <Calculator size={18} />
+              </div>
+              <span className="font-bold text-slate-800">財務管理系統</span>
+            </div>
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-2 text-indigo-600 bg-indigo-50 rounded-lg"
             >
+              <PanelLeftOpen size={20} />
+            </button>
+          </header>
+
+          <main className="flex-1 p-4 md:p-10 overflow-y-auto relative pb-24 md:pb-10">
+            <div className="max-w-7xl mx-auto w-full">
               {renderContent()}
-            </motion.div>
-          </AnimatePresence>
-        </main>
+            </div>
+          </main>
+
+          {/* Bottom Navigation (Mobile Only) */}
+          <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-200 px-2 py-3 flex justify-around items-center z-40 pb-safe shadow-[0_-4px_20px_0_rgba(0,0,0,0.05)]">
+            {TABS.slice(0, 5).map((tab) => {
+              const Icon = {
+                LayoutDashboard,
+                Wallet,
+                CreditCard: CreditCardIcon,
+                Building2,
+                TrendingUp,
+                BarChart3,
+                PieChart,
+                FileText
+              }[tab.icon as string];
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as TabId)}
+                  className={`flex flex-col items-center gap-1 flex-1 py-1 rounded-xl transition-all ${
+                    activeTab === tab.id 
+                      ? 'text-indigo-600' 
+                      : 'text-slate-400'
+                  }`}
+                >
+                  <div className={`p-1 rounded-lg ${activeTab === tab.id ? 'bg-indigo-50' : ''}`}>
+                    {Icon && <Icon size={22} />}
+                  </div>
+                  <span className="text-[10px] font-bold">{tab.label.slice(0, 2)}</span>
+                </button>
+              );
+            })}
+            <button
+               onClick={() => setIsSidebarOpen(true)}
+               className="flex flex-col items-center gap-1 flex-1 text-slate-400"
+            >
+               <div className="p-1">
+                 <Plus size={22} />
+               </div>
+               <span className="text-[10px] font-bold">更多</span>
+            </button>
+          </nav>
+        </div>
       </div>
     </ErrorBoundary>
   );
