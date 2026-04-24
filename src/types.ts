@@ -145,6 +145,9 @@ export interface Stock {
   averageCost: number;
   currentPrice: number;
   source?: 'Cathay' | 'Firstrade';
+  expectedDividendPerShare?: number; // 預估每股股利 (TWD 或 USD depending on market, 但主打台股)
+  dividendRatio54C?: number; // 54C 占比 (0-100)
+  dividendFrequency?: string; // 年配, 半年配, 季配, 月配
 }
 
 export interface Budget {

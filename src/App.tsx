@@ -2558,52 +2558,205 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
   const [aiResult, setAiResult] = useState<any[] | null>(null);
 
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
+  const [isRefreshingDividends, setIsRefreshingDividends] = useState(false);
+  const [refreshStatus, setRefreshStatus] = useState<string | null>(null);
 
   const handleRefreshPrices = async () => {
-    const symbols = stocks.map(s => s.symbol).filter(Boolean);
-    if (symbols.length === 0) return;
+    const symbols = stocks.map(s => s.symbol.trim()).filter(Boolean);
+    if (symbols.length === 0) {
+      alert('無可更新的股票代號。');
+      return;
+    }
     
     setIsRefreshingPrices(true);
+    setRefreshStatus('正在準備更新現價...');
     try {
-      let latestData;
-      try {
-        const response = await fetch(`/api/stocks/quotes?symbols=${symbols.join(',')}`);
-        if (!response.ok) throw new Error();
-        latestData = await response.json();
-      } catch (e) {
-        // Fallback for static hosting (GitHub Pages)
-        console.warn('Backend API unavailable, attempting CORS proxy fallback...');
-        const fetchWithProxy = async (sym: string) => {
-          const target = /^\d{4,6}$/.test(sym) ? `${sym}.TW` : sym;
-          const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
-          const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-          const res = await fetch(proxyUrl);
-          const json = await res.json();
-          const result = JSON.parse(json.contents);
-          return result.quoteResponse?.result?.[0];
-        };
-        const results = await Promise.all(symbols.map(fetchWithProxy));
-        latestData = results.filter(Boolean).map(r => ({ ...r, symbol: r.symbol.replace(/\.TW$|\.TWO$/, '') }));
+      const fetchPrice = async (sym: string) => {
+        const isTaiwan = /^\d{4,6}$/.test(sym);
+        const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
+        let quote = null;
+
+        for (const target of targets) {
+          try {
+            const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
+            const proxies = [
+              (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+              (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+              (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+            ];
+            
+            for (const proxy of proxies) {
+              try {
+                const response = await fetch(proxy(url));
+                if (response.ok) {
+                  const rawJson = await response.json();
+                  const parsed = rawJson.contents ? JSON.parse(rawJson.contents) : rawJson;
+                  if (parsed.quoteResponse?.result?.[0]) {
+                    quote = parsed.quoteResponse.result[0];
+                    break;
+                  }
+                }
+              } catch (e) {}
+            }
+            if (quote) break;
+          } catch (e) {}
+        }
+        return { sym, quote };
+      };
+
+      const results = [];
+      const batchSize = 5;
+      for (let i = 0; i < symbols.length; i += batchSize) {
+        setRefreshStatus(`獲取現價 (${i + 1}/${symbols.length})...`);
+        const batch = symbols.slice(i, i + batchSize);
+        const batchResults = await Promise.all(batch.map(fetchPrice));
+        results.push(...batchResults);
       }
       
+      setRefreshStatus('更新資料庫...');
       const updates = stocks.map(async (stock) => {
-        const found = latestData.find((d: any) => 
-          d.symbol === stock.symbol || 
-          d.symbol === `${stock.symbol}.TW` || 
-          d.symbol === `${stock.symbol}.TWO`
-        );
-        if (found && found.regularMarketPrice) {
+        const result = results.find(r => r.sym === stock.symbol);
+        if (result?.quote?.regularMarketPrice) {
           await updateDoc(doc(db, 'stocks', stock.id), {
-            currentPrice: found.regularMarketPrice
+            currentPrice: result.quote.regularMarketPrice
           });
         }
       });
       await Promise.all(updates);
+      alert('現價更新完成。');
     } catch (err) {
-      console.error('Refresh prices error:', err);
-      alert('更新股價失敗。如果您是使用 GitHub Pages，可能是因為跨網域代理伺服器暫時無法連線。');
+      console.error(err);
+      alert('更新現價失敗。');
     } finally {
       setIsRefreshingPrices(false);
+      setRefreshStatus(null);
+    }
+  };
+
+  const handleRefreshDividends = async () => {
+    const symbols = stocks.map(s => s.symbol.trim()).filter(Boolean);
+    if (symbols.length === 0) return;
+
+    setIsRefreshingDividends(true);
+    setRefreshStatus('正在分析股利數據...');
+    try {
+      const fetchDividends = async (sym: string) => {
+        const isTaiwan = /^\d{4,6}$/.test(sym);
+        const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
+        let chartData = null;
+        let quote = null;
+
+        for (const target of targets) {
+          try {
+            const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
+            const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${target}?interval=1mo&range=5y&events=div`;
+            
+            const proxies = [
+              (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+              (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+              (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+            ];
+
+            for (const proxy of proxies) {
+              try {
+                if (!quote) {
+                  const qRes = await fetch(proxy(quoteUrl));
+                  if (qRes.ok) {
+                    const qJson = await qRes.json();
+                    const qParsed = qJson.contents ? JSON.parse(qJson.contents) : qJson;
+                    quote = qParsed.quoteResponse?.result?.[0];
+                  }
+                }
+
+                if (!chartData) {
+                  const cRes = await fetch(proxy(chartUrl));
+                  if (cRes.ok) {
+                    const cJson = await cRes.json();
+                    const cParsed = cJson.contents ? JSON.parse(cJson.contents) : cJson;
+                    chartData = cParsed.chart?.result?.[0];
+                  }
+                }
+                
+                if (chartData && quote) break;
+              } catch (e) {
+                // Ignore single proxy failure
+              }
+            }
+
+            if (chartData || quote) break;
+          } catch (e) {}
+        }
+        return { sym, quote, chartData };
+      };
+
+      const results = [];
+      const batchSize = 3;
+      for (let i = 0; i < symbols.length; i += batchSize) {
+        setRefreshStatus(`抓取股利歷史 (${i + 1}/${symbols.length})...`);
+        const batch = symbols.slice(i, i + batchSize);
+        const batchResults = await Promise.all(batch.map(fetchDividends));
+        results.push(...batchResults);
+      }
+
+      const updates = stocks.map(async (stock) => {
+        const result = results.find(r => r.sym === stock.symbol);
+        if (!result) return;
+
+        let expectedDiv = 0;
+        let freqStr = '不定期';
+
+        const dividends = result.chartData?.events?.dividends;
+        if (dividends && Object.keys(dividends).length > 0) {
+          const yearDivs: Record<number, any[]> = {};
+          Object.values(dividends).forEach((div: any) => {
+             const date = new Date(div.date * 1000);
+             const year = date.getFullYear();
+             if (!yearDivs[year]) yearDivs[year] = [];
+             yearDivs[year].push({ amount: div.amount, date: div.date });
+          });
+
+          const years = Object.keys(yearDivs).map(Number).sort((a, b) => b - a);
+          const maxYear = years[0];
+          const lastYear = maxYear - 1;
+
+          let thisYearDivs = yearDivs[maxYear] || [];
+          let lastYearDivs = yearDivs[lastYear] || [];
+          
+          let frequencyCount = lastYearDivs.length;
+          if (frequencyCount >= 10) freqStr = '月配';
+          else if (frequencyCount >= 3) freqStr = '季配';
+          else if (frequencyCount == 2) freqStr = '半年配';
+          else if (frequencyCount == 1) freqStr = '年配';
+          
+          let predictedDiv = thisYearDivs.reduce((sum, d) => sum + d.amount, 0);
+          if (lastYearDivs.length > 0 && thisYearDivs.length < lastYearDivs.length) {
+            lastYearDivs.sort((a,b) => a.date - b.date);
+            const missingCount = lastYearDivs.length - thisYearDivs.length;
+            const missingFromLastYear = lastYearDivs.slice(-missingCount);
+            predictedDiv += missingFromLastYear.reduce((sum, d) => sum + d.amount, 0);
+          }
+          expectedDiv = predictedDiv;
+        }
+
+        if (expectedDiv === 0 && result.quote?.trailingAnnualDividendRate) {
+          expectedDiv = result.quote.trailingAnnualDividendRate;
+        }
+
+        if (expectedDiv > 0) {
+          await updateDoc(doc(db, 'stocks', stock.id), {
+            expectedDividendPerShare: expectedDiv,
+            dividendFrequency: freqStr
+          });
+        }
+      });
+      await Promise.all(updates);
+      alert('預估股利分析完成。');
+    } catch (err) {
+      console.error(err);
+      alert('股利更新失敗。');
+    } finally {
+      setIsRefreshingDividends(false);
+      setRefreshStatus(null);
     }
   };
 
@@ -2832,18 +2985,31 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
     shares: f.units,
     averageCost: f.units > 0 ? f.cost / f.units : 0,
     currentPrice: f.units > 0 ? f.currentValue / f.units : 0,
-    source: (f as any).source
+    source: (f as any).source,
+    expectedDividendPerShare: 0,
+    dividendRatio54C: 0
   } as Stock))].reduce((acc, s) => {
     const isUsd = s.source === 'Firstrade';
     const cost = s.shares * s.averageCost;
     const val = s.shares * s.currentPrice;
     const profit = val - cost;
     
+    const dividend = s.shares * (s.expectedDividendPerShare || 0);
+    const div54C = dividend * ((s.dividendRatio54C || 0) / 100);
+    
     acc.totalCost += isUsd ? cost * usdRate : cost;
     acc.totalVal += isUsd ? val * usdRate : val;
     acc.totalProfit += isUsd ? profit * usdRate : profit;
+    
+    // Only calculate TWD dividends or at least foreign dividends in TWD for display
+    const divTWD = isUsd ? dividend * usdRate : dividend;
+    acc.totalDividend += divTWD;
+    if (!isUsd) {
+       acc.totalDividend54C += div54C;
+    }
+
     return acc;
-  }, { totalCost: 0, totalVal: 0, totalProfit: 0 });
+  }, { totalCost: 0, totalVal: 0, totalProfit: 0, totalDividend: 0, totalDividend54C: 0 });
 
   const toggleStockSelection = (id: string) => {
     const next = new Set(selectedStocks);
@@ -2898,11 +3064,25 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
           </button>
           <button 
             onClick={handleRefreshPrices} 
-            disabled={isRefreshingPrices || stocks.length === 0}
+            disabled={isRefreshingPrices || isRefreshingDividends || stocks.length === 0}
             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
           >
             <RefreshCw size={20} className={isRefreshingPrices ? 'animate-spin' : ''} />
-            {isRefreshingPrices ? '更新中...' : '更新即時現價'}
+            <div className="flex flex-col items-start leading-tight">
+              <span>{isRefreshingPrices ? '更新中...' : '更新即時現價'}</span>
+              {(isRefreshingPrices && refreshStatus) && <span className="text-[10px] text-blue-100 opacity-80">{refreshStatus}</span>}
+            </div>
+          </button>
+          <button 
+            onClick={handleRefreshDividends} 
+            disabled={isRefreshingPrices || isRefreshingDividends || stocks.length === 0}
+            className="flex items-center gap-2 bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition-colors disabled:opacity-50"
+          >
+            <Sparkles size={20} className={isRefreshingDividends ? 'animate-spin' : ''} />
+            <div className="flex flex-col items-start leading-tight">
+              <span>{isRefreshingDividends ? '分析中...' : 'AI 股利預測'}</span>
+              {(isRefreshingDividends && refreshStatus) && <span className="text-[10px] text-indigo-100 opacity-80">{refreshStatus}</span>}
+            </div>
           </button>
           <button 
             onClick={() => setIsAIModalOpen(true)} 
@@ -2918,14 +3098,25 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
 
       {/* Summary Table & Portfolio Total */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="font-bold text-slate-800">投資組合損益表</h3>
-          <div className="flex gap-4 text-sm">
-            <div className="text-slate-500">總成本: <span className="font-bold text-slate-800">${Math.floor(portfolioSummary.totalCost).toLocaleString()} TWD</span></div>
-            <div className="text-slate-500">總市值: <span className="font-bold text-slate-800">${Math.floor(portfolioSummary.totalVal).toLocaleString()} TWD</span></div>
-            <div className={`font-bold ${portfolioSummary.totalProfit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-              總損益: ${Math.floor(portfolioSummary.totalProfit).toLocaleString()} TWD
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4 gap-4">
+          <div>
+             <h3 className="font-bold text-slate-800">投資組合損益表</h3>
+             <p className="text-xs text-slate-500 mt-1">※ 點擊「更新即時現價」將自動從 Yahoo Finance 抓取「預估每股股利」。(54C 比例須手動設定)</p>
+          </div>
+          <div className="flex flex-col md:items-end gap-1 text-sm bg-slate-50 p-3 rounded-lg md:bg-transparent md:p-0">
+             <div className="flex flex-col md:flex-row gap-2 md:gap-4">
+              <div className="text-slate-500">總成本: <span className="font-bold text-slate-800">${Math.floor(portfolioSummary.totalCost).toLocaleString()} TWD</span></div>
+              <div className="text-slate-500">總市值: <span className="font-bold text-slate-800">${Math.floor(portfolioSummary.totalVal).toLocaleString()} TWD</span></div>
+              <div className={`font-bold ${portfolioSummary.totalProfit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                總損益: ${Math.floor(portfolioSummary.totalProfit).toLocaleString()} TWD
+              </div>
             </div>
+            {(portfolioSummary.totalDividend > 0) && (
+              <div className="flex gap-4 mt-1 border-t border-slate-100 pt-1">
+                <div className="text-slate-500">預估年度總股利: <span className="font-bold text-indigo-600">${Math.floor(portfolioSummary.totalDividend).toLocaleString()} TWD</span></div>
+                <div className="text-slate-500">預估 54C 總額: <span className="font-bold text-indigo-600">${Math.floor(portfolioSummary.totalDividend54C).toLocaleString()} TWD</span></div>
+              </div>
+            )}
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -2951,6 +3142,8 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                 <th className="px-4 py-3">股數/單位</th>
                 <th className="px-4 py-3">成本</th>
                 <th className="px-4 py-3">市值</th>
+                <th className="px-4 py-3">預估股利</th>
+                <th className="px-4 py-3">發放頻率</th>
                 <th className="px-4 py-3">損益</th>
               </tr>
             </thead>
@@ -2977,6 +3170,17 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                     <td className="px-4 py-3">{stock.shares.toLocaleString()}</td>
                     <td className="px-4 py-3">${Math.floor(cost).toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
                     <td className="px-4 py-3">${Math.floor(val).toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
+                    <td className="px-4 py-3 font-medium text-indigo-500">
+                      {(stock.expectedDividendPerShare && stock.expectedDividendPerShare > 0) ? (
+                        <div className="flex flex-col">
+                          <span>${Math.floor(stock.shares * stock.expectedDividendPerShare).toLocaleString()} {isUsd ? 'USD' : 'TWD'}</span>
+                          <span className="text-[10px] text-slate-400 font-normal">(${stock.expectedDividendPerShare.toFixed(2)} / 股)</span>
+                        </div>
+                      ) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500">
+                      {stock.dividendFrequency || '-'}
+                    </td>
                     <td className={`px-4 py-3 font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
                       ${Math.floor(profit).toLocaleString()} {isUsd ? 'USD' : 'TWD'}
                       {isUsd && <span className="text-xs text-slate-400 ml-1">(${Math.floor(profit * usdRate).toLocaleString()} TWD)</span>}
@@ -3006,6 +3210,8 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                     <td className="px-4 py-3">{fund.units.toLocaleString()}</td>
                     <td className="px-4 py-3">${Math.floor(cost).toLocaleString()} TWD</td>
                     <td className="px-4 py-3">${Math.floor(val).toLocaleString()} TWD</td>
+                    <td className="px-4 py-3">-</td>
+                    <td className="px-4 py-3">-</td>
                     <td className={`px-4 py-3 font-bold ${profit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
                       ${Math.floor(profit).toLocaleString()} TWD
                     </td>
@@ -3072,8 +3278,52 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                     </div>
                   </>
                 ) : (
-                  <div className="text-center py-10 text-slate-500">無法取得即時資料</div>
+                  <div className="text-center py-10 text-slate-500">無法取得即時資料，顯示庫存資訊</div>
                 )}
+
+                <div className="border-t border-slate-100 pt-6 mt-6">
+                  <h4 className="font-bold text-slate-800 mb-4">庫存資訊與設定</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="space-y-1">
+                      <label className="text-slate-500">預估每股股利 (TWD/USD)</label>
+                      <input 
+                        type="number" 
+                        value={selectedStock.expectedDividendPerShare ?? ''} 
+                        onChange={async (e) => {
+                          const val = Number(e.target.value);
+                          const updated = { ...selectedStock, expectedDividendPerShare: val };
+                          setSelectedStock(updated);
+                          await updateDoc(doc(db, 'stocks', selectedStock.id), { expectedDividendPerShare: val });
+                        }}
+                        className="w-full p-2 border rounded-md"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-slate-500">54C 占比 (%)</label>
+                      <input 
+                        type="number" 
+                        value={selectedStock.dividendRatio54C ?? ''} 
+                        onChange={async (e) => {
+                          const val = Number(e.target.value);
+                          const updated = { ...selectedStock, dividendRatio54C: val };
+                          setSelectedStock(updated);
+                          await updateDoc(doc(db, 'stocks', selectedStock.id), { dividendRatio54C: val });
+                        }}
+                        className="w-full p-2 border rounded-md"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-4 flex justify-between items-center bg-indigo-50 p-3 rounded-lg">
+                    <div>
+                      <div className="text-xs text-indigo-600">預估年度總股利</div>
+                      <div className="font-bold text-indigo-700">${Math.floor(selectedStock.shares * (selectedStock.expectedDividendPerShare || 0)).toLocaleString()}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-indigo-600">發放頻率</div>
+                      <div className="font-bold text-indigo-700">{selectedStock.dividendFrequency || '不定期'}</div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </motion.div>
           </div>
@@ -3220,6 +3470,12 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
             <input type="number" placeholder="持有股數" className="p-2 border rounded-md" value={newStock.shares ?? 0} onChange={e => setNewStock({...newStock, shares: Number(e.target.value)})} />
             <input type="number" placeholder="平均成本" className="p-2 border rounded-md" value={newStock.averageCost ?? 0} onChange={e => setNewStock({...newStock, averageCost: Number(e.target.value)})} />
             <input type="number" placeholder="目前股價" className="p-2 border rounded-md" value={newStock.currentPrice ?? 0} onChange={e => setNewStock({...newStock, currentPrice: Number(e.target.value)})} />
+            <input type="number" placeholder="預估每股股利 (TWD)" className="p-2 border rounded-md" value={newStock.expectedDividendPerShare ?? ""} onChange={e => setNewStock({...newStock, expectedDividendPerShare: Number(e.target.value) || undefined})} />
+            <input type="number" placeholder="54C 占比 (例如：50) %" className="p-2 border rounded-md" value={newStock.dividendRatio54C ?? ""} onChange={e => setNewStock({...newStock, dividendRatio54C: Number(e.target.value) || undefined})} />
+            <select className="p-2 border rounded-md" value={newStock.source ?? "Cathay"} onChange={e => setNewStock({...newStock, source: e.target.value as any})}>
+              <option value="Cathay">國泰 (Cathay)</option>
+              <option value="Firstrade">第一證券 (Firstrade)</option>
+            </select>
           </div>
           <div className="flex justify-end gap-3">
             <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
@@ -3263,6 +3519,15 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                   <span className="text-slate-500">目前市值</span>
                   <span className="text-slate-800 font-bold">${Math.floor(currentVal).toLocaleString()} {stock.source === 'Firstrade' ? 'USD' : 'TWD'}</span>
                 </div>
+                {(stock.expectedDividendPerShare || 0) > 0 && (
+                  <div className="flex justify-between text-sm mt-2 pt-2 border-t border-slate-50 border-dashed">
+                    <span className="text-slate-500 text-xs mt-1">預估股利/54C</span>
+                    <div className="text-right">
+                      <div className="text-indigo-600 font-bold">${Math.floor(stock.shares * (stock.expectedDividendPerShare || 0)).toLocaleString()}</div>
+                      <div className="text-indigo-400 text-xs text-opacity-80">${Math.floor(stock.shares * (stock.expectedDividendPerShare || 0) * ((stock.dividendRatio54C || 0) / 100)).toLocaleString()}</div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           );
