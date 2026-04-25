@@ -5481,79 +5481,99 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
             <ShieldCheck size={24} />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-slate-800">保險管理</h2>
-            <p className="text-sm text-slate-500">
-              目前年齡: <span className="font-bold text-indigo-600">{currentAge} 歲</span> (1988/09/27)
+            <h2 className="text-3xl font-black text-slate-800 tracking-tight">保險管理</h2>
+            <p className="text-base text-slate-500 font-medium">
+              目前年齡: <span className="font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg">{currentAge} 歲</span> <span className="text-slate-300 mx-1">|</span> 1988/09/27
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <div className="flex bg-slate-100 p-1 rounded-xl mr-2">
+        <div className="flex flex-wrap gap-3">
+          <div className="flex bg-slate-100 p-1.5 rounded-2xl">
             <button 
               onClick={() => setViewMode('table')} 
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'table' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}
+              className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${viewMode === 'table' ? 'bg-white shadow-md text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
               費率對照
             </button>
             <button 
               onClick={() => setViewMode('coverage')} 
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'coverage' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}
+              className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${viewMode === 'coverage' ? 'bg-white shadow-md text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
               保障分析
             </button>
           </div>
           <button 
             onClick={() => { setAiMode('premium'); setIsAIModalOpen(true); }} 
-            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 shadow-lg transition-colors font-bold text-sm"
+            className="flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-2xl hover:bg-emerald-700 shadow-xl shadow-emerald-100 transition-all font-bold text-sm"
           >
-            <Sparkles size={18} /> AI 辨識費率
+            <Sparkles size={20} /> AI 辨識費率
           </button>
-          <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 shadow-lg transition-colors font-bold text-sm">
-            <Plus size={18} /> 新增保險
+          <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-2.5 rounded-2xl hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all font-bold text-sm">
+            <Plus size={20} /> 新增保險
           </button>
         </div>
       </div>
 
       {isAdding && (
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-2xl shadow-md border border-indigo-100 space-y-4">
-          <h3 className="font-bold text-slate-800">新增保險產品</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <input type="text" placeholder="保險公司 (如: 全球人壽)" className="p-2 border rounded-lg text-sm" value={newInsurance.provider ?? ""} onChange={e => setNewInsurance({...newInsurance, provider: e.target.value})} />
-            <input type="text" placeholder="保險名稱 (如: XHR)" className="p-2 border rounded-lg text-sm" value={newInsurance.name ?? ""} onChange={e => setNewInsurance({...newInsurance, name: e.target.value})} />
-            <input type="text" placeholder="險種 (如: 醫療險)" className="p-2 border rounded-lg text-sm" value={newInsurance.type ?? ""} onChange={e => setNewInsurance({...newInsurance, type: e.target.value})} />
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-8 rounded-[2rem] shadow-xl border border-indigo-100 space-y-6">
+          <h3 className="text-xl font-bold text-slate-800">新增保險產品</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">保險公司</label>
+              <input type="text" placeholder="如: 全球人壽" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 transition-all font-medium text-base" value={newInsurance.provider ?? ""} onChange={e => setNewInsurance({...newInsurance, provider: e.target.value})} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">保險名稱</label>
+              <input type="text" placeholder="如: XHR" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 transition-all font-medium text-base" value={newInsurance.name ?? ""} onChange={e => setNewInsurance({...newInsurance, name: e.target.value})} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">險種</label>
+              <input type="text" placeholder="如: 醫療險" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 transition-all font-medium text-base" value={newInsurance.type ?? ""} onChange={e => setNewInsurance({...newInsurance, type: e.target.value})} />
+            </div>
           </div>
-          <div className="flex justify-end gap-3 pt-2">
-             <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">取消</button>
-             <button onClick={handleAdd} className="bg-indigo-600 text-white px-8 py-2 rounded-lg font-bold hover:bg-indigo-700 text-sm">儲存</button>
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+             <button onClick={() => setIsAdding(false)} className="px-6 py-3 text-slate-600 hover:bg-slate-100 rounded-xl font-bold transition-all">取消</button>
+             <button onClick={handleAdd} className="bg-indigo-600 text-white px-10 py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all">儲存產品</button>
           </div>
         </motion.div>
       )}
 
       {viewMode === 'table' ? (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-4 bg-indigo-50/50 border-b border-indigo-100 flex justify-between items-center">
-            <div className="flex items-center gap-4 text-xs font-bold text-indigo-700">
-               <span>年度保費總額 (目前): <span className="text-sm text-indigo-900">${(premiums.filter(p => p.age === currentAge && insurances.some(i => i.id === p.insuranceId)).reduce((sum, p) => sum + p.premium, 0)).toLocaleString()}</span></span>
+        <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-6 bg-indigo-50/50 border-b border-indigo-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex items-center gap-6">
+               <div className="flex flex-col">
+                 <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">年度保費總額 (目前)</span>
+                 <span className="text-3xl font-black text-indigo-900 tracking-tight">
+                   ${(premiums.filter(p => p.age === currentAge && insurances.some(i => i.id === p.insuranceId)).reduce((sum, p) => sum + p.premium, 0)).toLocaleString()}
+                 </span>
+               </div>
+               <div className="h-10 w-px bg-indigo-200 hidden md:block"></div>
+               <div className="flex flex-col">
+                 <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">保險產品總數</span>
+                 <span className="text-3xl font-black text-slate-800 tracking-tight">{insurances.length} 件</span>
+               </div>
             </div>
-            <p className="text-[10px] text-slate-400 italic font-medium">※ 資料同步至雲端，可隨時核對 AI 解析結果</p>
+            <p className="text-sm text-slate-400 italic font-medium max-w-xs md:text-right leading-tight">※ 資料同步至雲端，可隨時核對 AI 解析結果，點擊金額可直接修改</p>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse table-fixed">
-              <thead className="bg-slate-50 border-b border-slate-200">
+            <table className="w-full text-left border-collapse min-w-[800px]">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500">
                 <tr>
-                  <th className="p-2 text-[11px] font-black border-r border-slate-200 sticky left-0 z-10 bg-slate-50 w-16 text-center">年齡</th>
+                  <th className="p-4 text-sm font-black border-r border-slate-200 sticky left-0 z-10 bg-slate-50 w-24 text-center">年齡</th>
                   {insurances.map(ins => (
-                    <th key={ins.id} className="p-2 text-center border-r border-slate-200 group relative min-w-[80px] max-w-[100px]">
+                    <th key={ins.id} className="p-4 text-center border-r border-slate-200 group relative min-w-[120px]">
                       <div className="flex flex-col">
-                        <span className="text-[9px] text-slate-400 font-bold leading-tight truncate">{ins.provider}</span>
-                        <span className="text-[10px] font-black text-slate-800 leading-tight break-words">{ins.name}</span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">{ins.provider}</span>
+                        <span className="text-sm font-black text-slate-800 leading-tight">{ins.name}</span>
+                        <span className="text-[9px] font-bold text-indigo-500/70 mt-1">{ins.type}</span>
                       </div>
-                      <button onClick={() => setDeleteTarget({ type: 'insurances', id: ins.id, name: `${ins.provider} ${ins.name}` })} className="absolute -top-1 -right-1 p-1 bg-white text-rose-500 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
-                        <X size={10} />
+                      <button onClick={() => setDeleteTarget({ type: 'insurances', id: ins.id, name: `${ins.provider} ${ins.name}` })} className="absolute top-2 right-2 p-1.5 bg-white text-rose-500 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-all hover:scale-110">
+                        <X size={12} />
                       </button>
                     </th>
                   ))}
-                  <th className="p-2 text-center bg-indigo-50 border-r border-slate-200 w-24 text-[11px] font-black text-indigo-700">總計</th>
+                  <th className="p-4 text-center bg-indigo-50/50 border-r border-slate-200 w-32 text-sm font-black text-indigo-700">月預估 / 年總計</th>
                 </tr>
               </thead>
               <tbody>
@@ -5565,32 +5585,38 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                   const isCurrent = age === currentAge;
                   
                   return (
-                    <tr key={age} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${isCurrent ? 'bg-indigo-50/50' : ''}`}>
-                      <td className={`p-1.5 text-[11px] font-bold border-r border-slate-200 sticky left-0 z-10 text-center ${isCurrent ? 'bg-indigo-100 text-indigo-700' : 'bg-white text-slate-500'}`}>
-                        {age}
+                    <tr key={age} className={`border-b border-slate-100 hover:bg-slate-50/50 transition-colors ${isCurrent ? 'bg-indigo-50/30' : ''}`}>
+                      <td className={`p-4 text-base font-bold border-r border-slate-200 sticky left-0 z-10 text-center ${isCurrent ? 'bg-indigo-100/50 text-indigo-700 ring-2 ring-inset ring-indigo-200' : 'bg-white text-slate-500'}`}>
+                        {age} 歲
                       </td>
                       {insurances.map(ins => {
                         const pre = premiums.find(p => p.insuranceId === ins.id && p.age === age);
                         return (
-                          <td key={`${ins.id}-${age}`} className="p-1 text-right border-r border-slate-200 font-mono text-[10px]">
-                            <input 
-                              type="number"
-                              className={`w-full bg-transparent text-right focus:bg-white focus:ring-1 focus:ring-indigo-300 rounded p-0.5 outline-none font-medium ${isCurrent ? 'text-indigo-800' : ''}`}
-                              value={pre?.premium || 0}
-                              onChange={async (e) => {
-                                const val = Number(e.target.value);
-                                if (pre) {
-                                  await updateDoc(doc(db, 'insurancePremiums', pre.id), { premium: val });
-                                } else if (val > 0) {
-                                  await addDoc(collection(db, 'insurancePremiums'), { insuranceId: ins.id, age, premium: val, uid: user.uid });
-                                }
-                              }}
-                            />
+                          <td key={`${ins.id}-${age}`} className="p-3 text-right border-r border-slate-200 font-mono text-sm">
+                            <div className="flex items-center justify-end group">
+                              <span className="text-slate-300 text-[10px] mr-1 opacity-0 group-hover:opacity-100">$</span>
+                              <input 
+                                type="number"
+                                className={`w-full bg-transparent text-right focus:bg-white focus:ring-2 focus:ring-indigo-300 rounded-lg px-2 py-1.5 outline-none font-bold transition-all ${isCurrent ? 'text-indigo-800 text-lg' : 'text-slate-600'}`}
+                                value={pre?.premium || 0}
+                                onChange={async (e) => {
+                                  const val = Number(e.target.value);
+                                  if (pre) {
+                                    await updateDoc(doc(db, 'insurancePremiums', pre.id), { premium: val });
+                                  } else if (val > 0) {
+                                    await addDoc(collection(db, 'insurancePremiums'), { insuranceId: ins.id, age, premium: val, uid: user.uid });
+                                  }
+                                }}
+                              />
+                            </div>
                           </td>
                         );
                       })}
-                      <td className={`p-1.5 text-right font-mono text-[11px] font-black border-r border-slate-200 ${isCurrent ? 'text-indigo-700 bg-indigo-50' : 'text-slate-800 bg-slate-50'}`}>
-                        ${totalForAge.toLocaleString()}
+                      <td className={`p-4 text-right font-mono border-r border-slate-200 ${isCurrent ? 'text-indigo-700 bg-indigo-50/30' : 'text-slate-800 bg-slate-50/30'}`}>
+                        <div className="flex flex-col">
+                          <span className={`${isCurrent ? 'text-xl font-black' : 'text-base font-bold'}`}>${totalForAge.toLocaleString()}</span>
+                          <span className="text-[10px] font-bold text-slate-400">平均月繳 ${Math.round(totalForAge / 12).toLocaleString()}</span>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -5601,79 +5627,102 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          <div className="lg:col-span-4 space-y-3">
-            <h3 className="text-sm font-bold text-slate-500 px-1">選擇保險產品進行分析</h3>
-            {insurances.map(ins => (
-              <button 
-                key={ins.id}
-                onClick={() => setSelectedInsuranceId(ins.id)}
-                className={`w-full p-4 rounded-2xl border text-left transition-all relative overflow-hidden ${selectedInsuranceId === ins.id ? 'border-indigo-500 bg-indigo-50 shadow-md ring-1 ring-indigo-200' : 'border-slate-200 bg-white hover:border-indigo-200'}`}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 block uppercase">{ins.provider}</span>
-                    <h4 className="text-sm font-black text-slate-800">{ins.name}</h4>
-                    <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full mt-2 inline-block font-bold">{ins.type}</span>
-                  </div>
-                  {ins.coverageSummary && (
-                    <div className="w-6 h-6 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
-                      <Check size={14} />
+          <div className="lg:col-span-4 space-y-4">
+            <h3 className="text-xs font-bold text-slate-400 px-1 uppercase tracking-widest">選擇保險產品進行分析</h3>
+            <div className="space-y-3">
+              {insurances.map(ins => (
+                <button 
+                  key={ins.id}
+                  onClick={() => setSelectedInsuranceId(ins.id)}
+                  className={`w-full p-6 rounded-[1.5rem] border text-left transition-all relative overflow-hidden group ${selectedInsuranceId === ins.id ? 'border-indigo-500 bg-indigo-50 shadow-lg ring-2 ring-indigo-100 scale-[1.02]' : 'border-slate-200 bg-white hover:border-indigo-200 hover:shadow-md'}`}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-[10px] font-black text-slate-400 block uppercase tracking-widest mb-1">{ins.provider}</span>
+                      <h4 className={`text-lg font-black leading-tight transition-colors ${selectedInsuranceId === ins.id ? 'text-indigo-900' : 'text-slate-800 group-hover:text-indigo-600'}`}>{ins.name}</h4>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full mt-3 inline-block transition-colors ${selectedInsuranceId === ins.id ? 'bg-indigo-200 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>{ins.type}</span>
                     </div>
-                  )}
-                </div>
-              </button>
-            ))}
+                    {ins.coverageSummary && (
+                      <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center shadow-sm">
+                        <Check size={18} />
+                      </div>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="lg:col-span-8">
             {!selectedInsuranceId ? (
-              <div className="h-[500px] flex flex-col items-center justify-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
-                <ShieldCheck size={48} className="text-slate-200 mb-4" />
-                <p className="text-slate-400 font-bold">請從左側選擇保險產品以查看保障內容</p>
+              <div className="h-[600px] flex flex-col items-center justify-center bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200">
+                <div className="w-24 h-24 bg-white rounded-[2rem] shadow-sm flex items-center justify-center text-slate-200 mb-6">
+                  <ShieldCheck size={48} />
+                </div>
+                <p className="text-xl font-black text-slate-400">請從左側選擇保險產品</p>
+                <p className="text-sm text-slate-400 mt-2">以查看保障內容與 AI 精準分析</p>
               </div>
             ) : (
-              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[700px]">
-                <div className="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+              <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[800px] transition-all">
+                <div className="p-8 bg-slate-50/50 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div>
-                    <h3 className="text-lg font-black text-slate-800">
+                    <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1 block">保險產品詳情</span>
+                    <h3 className="text-2xl font-black text-slate-800 tracking-tight">
                       {insurances.find(i => i.id === selectedInsuranceId)?.provider} {insurances.find(i => i.id === selectedInsuranceId)?.name}
                     </h3>
-                    <p className="text-xs text-slate-500 font-medium">保障項目與理賠諮詢</p>
+                    <p className="text-sm text-slate-500 font-bold mt-1 inline-flex items-center gap-1">
+                      <Sparkles size={14} className="text-indigo-400" />
+                      保障項目與理賠諮詢分析
+                    </p>
                   </div>
                   <button 
                     onClick={() => { setAiMode('contract'); setIsAIModalOpen(true); }}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 transition-all font-bold text-xs shadow-lg"
+                    className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl hover:bg-indigo-700 transition-all font-bold text-sm shadow-xl shadow-indigo-100 active:scale-95"
                   >
-                    <FileSearch size={16} /> AI 分析契約
+                    <FileSearch size={20} /> AI 分析契約
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar">
                   {insurances.find(i => i.id === selectedInsuranceId)?.coverageSummary ? (
                     <>
-                      <div className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100 prose prose-sm max-w-none prose-indigo prose-p:leading-relaxed prose-li:my-1">
-                        <small className="text-indigo-600 font-bold uppercase tracking-widest block mb-2">AI 契約摘要</small>
-                        <Markdown>
-                          {insurances.find(i => i.id === selectedInsuranceId)?.coverageSummary || ''}
-                        </Markdown>
+                      <div className="bg-white p-8 rounded-[2rem] border-2 border-indigo-50 shadow-sm relative group overflow-hidden">
+                        <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                          <ShieldCheck size={120} />
+                        </div>
+                        <div className="relative">
+                          <div className="flex items-center gap-3 mb-6">
+                            <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black">AI</div>
+                            <span className="text-base font-black text-slate-800 uppercase tracking-widest">保障摘要報告</span>
+                          </div>
+                          <div className="prose prose-base max-w-none prose-indigo prose-p:leading-relaxed prose-li:my-2 prose-headings:font-black prose-headings:text-slate-800 prose-strong:text-indigo-600">
+                            <Markdown>
+                              {insurances.find(i => i.id === selectedInsuranceId)?.coverageSummary || ''}
+                            </Markdown>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="space-y-4 pt-4">
-                        <h4 className="text-xs font-black text-slate-400 uppercase flex items-center gap-2">
-                          <MessageSquare size={14} /> 理賠諮詢對話
-                        </h4>
-                        <div className="space-y-3">
+                      <div className="space-y-6 pt-6">
+                        <div className="flex items-center gap-4 mb-2">
+                           <div className="h-px bg-slate-100 flex-1"></div>
+                           <h4 className="text-xs font-black text-slate-300 uppercase tracking-[0.2em] flex items-center gap-2">
+                             互動諮詢
+                           </h4>
+                           <div className="h-px bg-slate-100 flex-1"></div>
+                        </div>
+                        <div className="space-y-4">
                           {chatHistory.map((msg, idx) => (
                             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                              <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
+                              <div className={`max-w-[90%] md:max-w-[75%] p-5 rounded-[1.5rem] text-base leading-relaxed font-medium ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none shadow-lg' : 'bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200'}`}>
                                 {msg.content}
                               </div>
                             </div>
                           ))}
                           {isChatting && (
                             <div className="flex justify-start">
-                              <div className="bg-slate-100 p-3 rounded-2xl rounded-tl-none flex items-center gap-2 text-slate-400 text-xs">
-                                <Loader2 className="animate-spin" size={14} /> AI 正在分析理賠可能性...
+                              <div className="bg-indigo-50/50 p-5 rounded-[1.5rem] rounded-tl-none flex items-center gap-3 text-indigo-600 font-bold text-sm border border-indigo-100">
+                                <Loader2 className="animate-spin" size={18} /> AI 正在分析契約中的理賠條款...
                               </div>
                             </div>
                           )}
@@ -5681,14 +5730,14 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                       </div>
                     </>
                   ) : (
-                    <div className="h-full flex flex-col items-center justify-center p-10 text-center space-y-4">
-                      <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-300">
-                        <FileSearch size={40} />
+                    <div className="h-full flex flex-col items-center justify-center p-12 text-center space-y-6">
+                      <div className="w-24 h-24 bg-indigo-50 rounded-[2.5rem] flex items-center justify-center text-indigo-300 animate-pulse">
+                        <FileSearch size={48} />
                       </div>
                       <div>
-                        <p className="text-slate-600 font-bold">尚未進行契約分析</p>
-                        <p className="text-xs text-slate-400 max-w-[250px] mt-1 mx-auto">
-                          請點擊右上角「AI 分析契約」，上傳截圖後即可查看保障項目並詢問理賠問題。
+                        <p className="text-2xl font-black text-slate-800 tracking-tight">尚未進行契約 AI 分析</p>
+                        <p className="text-base text-slate-400 max-w-sm mt-3 mx-auto leading-relaxed">
+                          請點擊右上角「AI 分析契約」，上傳契約理賠表截圖後即可查看保障摘要，並直接詢問 AI 關於該契約的理賠問題。
                         </p>
                       </div>
                     </div>
@@ -5696,12 +5745,12 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                 </div>
 
                 {insurances.find(i => i.id === selectedInsuranceId)?.coverageSummary && (
-                  <div className="p-4 border-t border-slate-100 bg-white">
-                    <div className="relative">
+                  <div className="p-8 border-t border-slate-100 bg-slate-50/50">
+                    <div className="relative group">
                       <input 
                         type="text" 
-                        placeholder="詢問理賠項目，如：住院5天可以賠多少？" 
-                        className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-400 transition-all text-sm"
+                        placeholder="在此輸入您的理賠疑問，例如：意外住院 5 天可以理賠多少？" 
+                        className="w-full pl-6 pr-16 py-4 bg-white border-2 border-slate-200 rounded-[1.5rem] outline-none focus:border-indigo-500 shadow-sm transition-all text-base font-medium placeholder:text-slate-300"
                         value={chatMessage}
                         onChange={e => setChatMessage(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleChat()}
@@ -5709,11 +5758,12 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                       <button 
                         onClick={handleChat}
                         disabled={!chatMessage || isChatting}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-indigo-600 text-white rounded-xl flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 transition-all"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center hover:bg-indigo-700 disabled:bg-slate-300 transition-all shadow-lg active:scale-95"
                       >
-                        <ChevronRight size={20} />
+                        <ChevronRight size={24} />
                       </button>
                     </div>
+                    <p className="text-[10px] text-slate-400 mt-3 text-center font-bold uppercase tracking-widest opacity-50">保險理賠僅供參考，實際請以保險公司合約規範為準</p>
                   </div>
                 )}
               </div>
@@ -6204,6 +6254,7 @@ const GenericPage = ({ title, icon: Icon, type }: { title: string, icon: any, ty
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+  const [activeTheme, setActiveTheme] = useState<'neo' | 'midnight' | 'minimalist'>('neo');
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
   const [user, setUser] = useState<any>({ uid: 'default-user', email: 'guest@example.com' });
@@ -6226,6 +6277,32 @@ export default function App() {
   // Global Summary States
   const [summary, setSummary] = useState({ banks: 0, stocks: 0, funds: 0, debt: 0, loans: 0, stockBreakdown: { total: 0, firstrade: 0, cathay: 0 } });
   const [deleteTarget, setDeleteTarget] = useState<{ type: string, id: string, name: string } | null>(null);
+
+  const themes = {
+    neo: {
+      bg: 'bg-slate-50',
+      sidebar: 'bg-white border-slate-200',
+      content: 'bg-white/80 backdrop-blur-md border border-white shadow-sm rounded-[2.5rem]',
+      accent: 'indigo-600',
+      text: 'text-slate-800'
+    },
+    midnight: {
+      bg: 'bg-slate-950',
+      sidebar: 'bg-slate-900 border-slate-800',
+      content: 'bg-slate-900 border border-slate-800 shadow-2xl rounded-3xl',
+      accent: 'violet-500',
+      text: 'text-slate-100'
+    },
+    minimalist: {
+      bg: 'bg-[#fcfaf7]',
+      sidebar: 'bg-white border-orange-100',
+      content: 'bg-white border border-orange-50 shadow-sm rounded-xl',
+      accent: 'amber-600',
+      text: 'text-slate-900'
+    }
+  };
+
+  const currentTheme = themes[activeTheme];
 
   // Custom Modal Component
   const ConfirmationModal = ({ isOpen, onClose, onConfirm, message }: { isOpen: boolean, onClose: () => void, onConfirm: () => void, message: string }) => {
@@ -6450,39 +6527,39 @@ export default function App() {
             opacity: isSidebarOpen || windowWidth < 768 ? 1 : 0
           }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className={`bg-white border-r border-slate-200 flex flex-col gap-8 flex-shrink-0 overflow-hidden z-[60] fixed inset-y-0 left-0 md:relative md:inset-auto`}
+          className={`${currentTheme.sidebar} flex flex-col gap-8 flex-shrink-0 overflow-hidden z-[60] fixed inset-y-0 left-0 md:relative md:inset-auto transition-colors duration-500`}
         >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 overflow-hidden">
-              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200 flex-shrink-0">
+              <div className={`w-10 h-10 ${activeTheme === 'midnight' ? 'bg-violet-600' : 'bg-indigo-600'} rounded-xl flex items-center justify-center text-white shadow-lg flex-shrink-0 transition-colors`}>
                 <Calculator size={24} />
               </div>
-              <h1 className="text-xl font-bold text-slate-800 leading-tight whitespace-nowrap">
-                財務管理<br/><span className="text-indigo-600">系統</span>
+              <h1 className={`text-xl font-bold ${currentTheme.text} leading-tight whitespace-nowrap`}>
+                財務管理<br/><span className={activeTheme === 'midnight' ? 'text-violet-400' : 'text-indigo-600'}>系統</span>
               </h1>
             </div>
             <button 
               onClick={() => setIsSidebarOpen(false)}
-              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex-shrink-0"
+              className={`p-2 ${activeTheme === 'midnight' ? 'text-slate-500 hover:text-violet-400' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'} rounded-lg transition-colors flex-shrink-0`}
               title="隱藏側邊欄"
             >
               <PanelLeftClose size={20} />
             </button>
           </div>
 
-          <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 space-y-3 min-w-[200px]">
+          <div className={`p-4 ${activeTheme === 'midnight' ? 'bg-slate-800 border-slate-700' : 'bg-indigo-50/50 border-indigo-100/50'} rounded-2xl border space-y-3 min-w-[200px] transition-colors`}>
               <div>
-                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">目前淨資產</p>
-                <p className="text-xl font-black text-indigo-700">${Math.round(summary.banks + summary.stocks + summary.funds - (summary.debt + summary.loans)).toLocaleString()}</p>
+                <p className={`text-[10px] font-bold ${activeTheme === 'midnight' ? 'text-slate-500' : 'text-indigo-400'} uppercase tracking-widest`}>目前淨資產</p>
+                <p className={`text-xl font-black ${activeTheme === 'midnight' ? 'text-violet-400 font-mono tracking-tighter' : 'text-indigo-700'}`}>${Math.round(summary.banks + summary.stocks + summary.funds - (summary.debt + summary.loans)).toLocaleString()}</p>
               </div>
               <div className="grid grid-cols-2 gap-2 text-[10px]">
                 <div>
-                  <p className="text-slate-400 font-bold">存款/投資</p>
-                  <p className="font-bold text-emerald-600">${Math.round(summary.banks + summary.stocks + summary.funds).toLocaleString()}</p>
+                  <p className="text-slate-400 font-bold text-[9px]">存款/投資</p>
+                  <p className={`font-bold ${activeTheme === 'midnight' ? 'text-emerald-400' : 'text-emerald-600'}`}>${Math.round(summary.banks + summary.stocks + summary.funds).toLocaleString()}</p>
                 </div>
                 <div>
-                  <p className="text-slate-400 font-bold">總負債</p>
-                  <p className="text-rose-500 font-bold">${Math.round(summary.debt + summary.loans).toLocaleString()}</p>
+                  <p className="text-slate-400 font-bold text-[9px]">總負債</p>
+                  <p className={`font-bold ${activeTheme === 'midnight' ? 'text-rose-400' : 'text-rose-500'}`}>${Math.round(summary.debt + summary.loans).toLocaleString()}</p>
                 </div>
               </div>
             </div>
@@ -6501,6 +6578,8 @@ export default function App() {
                 ShieldCheck
               }[tab.icon as string];
 
+              const isActive = activeTab === tab.id;
+
               return (
                 <button
                   key={tab.id}
@@ -6509,29 +6588,29 @@ export default function App() {
                     if (window.innerWidth < 768) setIsSidebarOpen(false);
                   }}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                    activeTab === tab.id 
-                      ? 'bg-indigo-50 text-indigo-600 font-semibold shadow-sm' 
-                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                    isActive 
+                      ? `${activeTheme === 'midnight' ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20' : 'bg-indigo-50 text-indigo-600 shadow-sm'} font-semibold` 
+                      : `${activeTheme === 'midnight' ? 'text-slate-500 hover:bg-slate-800 hover:text-slate-300' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`
                   }`}
                 >
                   {Icon && <Icon size={20} />}
-                  {tab.label}
+                  <span className="text-sm font-bold">{tab.label}</span>
                 </button>
               );
             })}
           </nav>
 
           <div className="mt-auto space-y-2 min-w-[200px]">
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+            <div className={`p-4 ${activeTheme === 'midnight' ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'} rounded-xl border`}>
               <p className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-1">目前身份</p>
               <div className="flex items-center justify-between gap-2 overflow-hidden">
-                <p className="text-sm font-semibold text-slate-700 truncate">{user.email || '訪客'}</p>
+                <p className={`text-sm font-semibold truncate ${currentTheme.text}`}>{user.email || '訪客'}</p>
                 {user.email !== 'guest@example.com' ? (
                   <button onClick={() => signOut(auth)} className="text-slate-400 hover:text-rose-500 transition-colors" title="登出">
                     <LogOut size={16} />
                   </button>
                 ) : (
-                  <button onClick={handleLogin} className="text-indigo-600 hover:text-indigo-700 transition-colors" title="登入">
+                  <button onClick={handleLogin} className={`text-${activeTheme === 'midnight' ? 'violet-400' : 'indigo-600'} hover:opacity-80 transition-all`} title="登入">
                     <LogIn size={16} />
                   </button>
                 )}
@@ -6539,7 +6618,7 @@ export default function App() {
             </div>
             <button 
               onClick={() => setIsApiKeyModalOpen(true)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl transition-all font-medium"
+              className={`w-full flex items-center gap-3 px-4 py-3 ${activeTheme === 'midnight' ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-50'} rounded-xl transition-all font-medium`}
             >
               <Settings size={20} />
               設定 API Key
@@ -6583,14 +6662,14 @@ export default function App() {
         />
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0 bg-slate-50 relative">
+        <div className={`flex-1 flex flex-col min-w-0 ${currentTheme.bg} relative transition-colors duration-500`}>
           {/* Header for mobile */}
-          <header className="md:hidden bg-white border-b border-slate-200 px-4 py-3 flex shrink-0 items-center justify-between z-40">
+          <header className={`md:hidden ${activeTheme === 'midnight' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} px-4 py-3 flex shrink-0 items-center justify-between z-40 transition-colors`}>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
+              <div className={`w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white`}>
                 <Calculator size={18} />
               </div>
-              <span className="font-bold text-slate-800">財務管理系統</span>
+              <span className={`font-bold ${currentTheme.text}`}>財務管理系統</span>
             </div>
             <button 
               onClick={() => setIsSidebarOpen(true)}
@@ -6600,8 +6679,43 @@ export default function App() {
             </button>
           </header>
 
+          <header className="hidden md:flex justify-between items-center p-6 pb-0 max-w-7xl mx-auto w-full">
+            <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-widest ${activeTheme === 'midnight' ? 'text-slate-500' : 'text-slate-400'}`}>
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+              雲端同步作業中
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <div className={`flex p-1 rounded-2xl border ${activeTheme === 'midnight' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} shadow-sm`}>
+                {(['neo', 'midnight', 'minimalist'] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setActiveTheme(t)}
+                    className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                      activeTheme === t 
+                        ? 'bg-slate-900 text-white shadow-lg' 
+                        : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                  >
+                    {t === 'neo' ? '數位科技' : t === 'midnight' ? '專業深夜' : '極簡紙張'}
+                  </button>
+                ))}
+              </div>
+              
+              <div className={`flex items-center gap-3 p-2 pr-6 rounded-2xl border border-white/10 ${activeTheme === 'midnight' ? 'bg-slate-800/50' : 'bg-white/50'} backdrop-blur-md shadow-sm`}>
+                <div className={`w-10 h-10 ${activeTheme === 'midnight' ? 'bg-slate-700 text-slate-300' : 'bg-indigo-100 text-indigo-600'} rounded-xl flex items-center justify-center font-black`}>
+                  {user.email?.[0].toUpperCase()}
+                </div>
+                <div className="text-left hidden md:block">
+                  <p className={`text-[10px] font-bold ${currentTheme.text}`}>{user.email?.split('@')[0]}</p>
+                  <p className="text-[9px] font-bold text-indigo-500 uppercase">總管理員</p>
+                </div>
+              </div>
+            </div>
+          </header>
+
           <main className="flex-1 p-4 md:p-10 overflow-y-auto relative pb-24 md:pb-10">
-            <div className="max-w-7xl mx-auto w-full">
+            <div className={`max-w-7xl mx-auto w-full ${currentTheme.content} p-6 md:p-10 transition-all duration-500`}>
               {renderContent()}
             </div>
           </main>
