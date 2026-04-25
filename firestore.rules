@@ -37,7 +37,11 @@ service cloud.firestore {
              data.uid == 'local_user' ||
              data.uid == 'jason2134@gmail.com' ||
              data.uid == 'guest@example.com' ||
-             (isSignedIn() && (data.uid == request.auth.uid || data.uid == request.auth.token.email));
+             (isSignedIn() && (
+               data.uid == request.auth.uid || 
+               data.uid == request.auth.token.email ||
+               request.auth.token.email == 'jason2134@gmail.com'
+             ));
     }
 
     match /test/connection {
@@ -79,6 +83,21 @@ service cloud.firestore {
              data.cardId is string &&
              data.month is string &&
              data.amount is number;
+    }
+
+    function isValidInsurance(data) {
+      return data.uid is string &&
+             canAccessData(data) &&
+             data.name is string &&
+             data.name.size() <= 200;
+    }
+
+    function isValidInsurancePremium(data) {
+      return data.uid is string &&
+             canAccessData(data) &&
+             data.insuranceId is string &&
+             data.age is number &&
+             data.premium is number;
     }
 
     function isValidBankAccount(data) {
@@ -156,6 +175,20 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidCreditCardBill(incoming()) && isValidId(billId);
       allow update: if (canAccessData(resource.data) || !('uid' in resource.data)) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidCreditCardBill(incoming()) && isValidId(billId);
+      allow delete: if canAccessData(resource.data) || !('uid' in resource.data);
+    }
+
+    match /insurances/{id} {
+      allow read: if true;
+      allow create: if isValidInsurance(incoming()) && isValidId(id);
+      allow update: if (canAccessData(resource.data) || !('uid' in resource.data)) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidInsurance(incoming()) && isValidId(id);
+      allow delete: if canAccessData(resource.data) || !('uid' in resource.data);
+    }
+
+    match /insurancePremiums/{id} {
+      allow read: if true;
+      allow create: if isValidInsurancePremium(incoming()) && isValidId(id);
+      allow update: if (canAccessData(resource.data) || !('uid' in resource.data)) && (incoming().uid == existing().uid || canAccessData(incoming())) && isValidInsurancePremium(incoming()) && isValidId(id);
       allow delete: if canAccessData(resource.data) || !('uid' in resource.data);
     }
 

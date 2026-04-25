@@ -9,6 +9,7 @@ export const TABS = [
   { id: 'credit-cards', label: '信用卡', icon: 'CreditCard' },
   { id: 'banks', label: '銀行存款', icon: 'Building2' },
   { id: 'stocks', label: '股票/基金', icon: 'BarChart3' },
+  { id: 'insurance', label: '保險管理', icon: 'ShieldCheck' },
   { id: 'budget', label: '年度支出預算', icon: 'PieChart' },
   { id: 'tax', label: '所得稅管理', icon: 'FileText' },
 ] as const;

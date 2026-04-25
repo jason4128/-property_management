@@ -35,9 +35,14 @@ import {
   CheckCircle2,
   Copy,
   ChevronLeft,
-  GripVertical
+  GripVertical,
+  ShieldCheck,
+  Check,
+  MessageSquare,
+  FileSearch
 } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
+import Markdown from 'react-markdown';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { TABS, TabId } from './constants';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid, AreaChart, Area, BarChart, Bar, Cell as RechartsCell } from 'recharts';
@@ -48,11 +53,15 @@ import {
   BankAccount, 
   Fund, 
   Stock, 
+  TaxRecord, 
+  TaxStandard, 
   Budget,
+  Insurance,
+  InsurancePremium,
   YearlyStandard,
-  TaxRecord,
-  TaxStandard,
-  TaxBracket
+  TaxBracket,
+  User, 
+  OperationType 
 } from './types';
 import { 
   BASIC_PAY_TABLE, 
@@ -67,8 +76,7 @@ import {
   onAuthStateChanged, 
   signOut,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  User
+  createUserWithEmailAndPassword
 } from 'firebase/auth';
 import { 
   collection, 
@@ -84,15 +92,6 @@ import {
 } from 'firebase/firestore';
 
 // --- Error Handling ---
-enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
 const getAppTargetUids = (user: any) => {
   const base = [
     'default-user', 
@@ -1824,6 +1823,8 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
         .map(doc => ({ ...doc.data(), id: doc.id } as CreditCard))
         .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setCards(data);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'creditCards');
     });
 
     const unsubBills = onSnapshot(query(collection(db, 'creditCardBills')), (snapshot) => {
@@ -1831,6 +1832,8 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
         .map(doc => ({ ...doc.data(), id: doc.id } as CreditCardBill))
         .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setBills(data);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'creditCardBills');
     });
 
     return () => { unsubCards(); unsubBills(); };
@@ -1866,17 +1869,25 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
     setIsAIProcessing(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `你是一個專業的財務數據分析師。請分析這張信用卡帳單或消費截圖，並提取出該月份的應繳總額。
-如果是多張卡片或多個月份，請嘗試對應到系統中的卡片名稱。
-系統現有的卡片列表：${cards.map(c => `${c.bank}${c.name} (ID: ${c.id})`).join(', ')}
+      const prompt = `你是一個精確的財務數據 OCR 專家。請分析這張「信用卡消費統計矩陣表格」截圖。
+該表格結構如下：
+1. 第一欄 (Column A)：包含「月份」或「日期」(如：111年7月, 113年02月)。
+2. 標題列 (Header Row)：包含不同的「銀行名稱」或「信用卡名稱」。
+3. 交叉格點：對應該月份、該銀行的「應繳金額」。
 
-請嚴格按照以下 JSON 格式回傳：
+你的任務：
+- 將左側月份轉換為 YYYY-MM 格式（民國年請轉換為西元年，111年=2022年, 112年=2023年, 113年=2024年）。
+- 提取每個格點的金額（忽略 0 或空白）。
+- 根據這份系統現有的卡片名單進行精確 ID 匹配：${cards.map(c => `${c.bank}${c.name} (ID: ${c.id})`).join(', ')}
+
+請嚴格回傳此 JSON 格式：
 {
   "bills": [
-    { "month": "YYYY-MM", "cardId": "對應的卡片ID", "amount": 1234 }
+    { "month": "YYYY-MM", "cardId": "匹配到的ID", "amount": 數字 }
   ]
 }
-注意：月份請依照 YYYY-MM 格式，金額請為純數字。如果無法確切對應卡片，請盡量推測。`;
+
+注意：如果截圖中的銀行名稱與系統名單略有出入（例如「台新」對應「台新銀行」），請以語意最接近的為準。`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
@@ -2008,14 +2019,14 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
         <table className="w-full text-left border-collapse">
-          <thead className="bg-amber-400 text-slate-900 border-b-2 border-slate-300">
+          <thead className="bg-[#FFFF00] text-slate-900 border-b-2 border-slate-400">
             <tr>
-              <th className="p-3 text-sm font-black border-r border-slate-300 sticky left-0 z-10 bg-amber-400 w-32">日期</th>
+              <th className="p-3 text-sm font-black border-r border-slate-400 sticky left-0 z-10 bg-[#FFFF00] w-32 border-b-2 border-slate-400 text-center">日期</th>
               {cards.map(card => (
-                <th key={card.id} className="p-3 text-center border-r border-slate-300 min-w-[120px] group relative">
+                <th key={card.id} className="p-3 text-center border-r border-slate-400 min-w-[120px] group relative border-b-2 border-slate-400">
                   <div className="flex flex-col items-center justify-center">
-                    <span className="text-[12px] font-black">{card.bank}{card.name}</span>
-                    <span className="text-[10px] opacity-70">結帳{card.statementDate}日</span>
+                    <span className="text-[12px] font-black">{card.bank}</span>
+                    <span className="text-[10px] font-bold">結帳{card.statementDate}日</span>
                   </div>
                   <button 
                     onClick={() => setDeleteTarget({ type: 'creditCards', id: card.id, name: `${card.bank} ${card.name}` })}
@@ -2027,10 +2038,10 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
               ))}
             </tr>
           </thead>
-          <tbody className="bg-amber-300/30">
+          <tbody className="bg-[#FFFF00]/10">
             {months.map(month => (
-              <tr key={month} className="border-b border-slate-300 hover:bg-amber-200/50 transition-colors">
-                <td className="p-3 text-sm font-bold border-r border-slate-300 sticky left-0 z-10 bg-amber-300/30 backdrop-blur-sm whitespace-nowrap">
+              <tr key={month} className="border-b border-slate-400 hover:bg-[#FFFF00]/40 transition-colors">
+                <td className="p-2 py-1.5 text-sm font-bold border-r border-slate-400 sticky left-0 z-10 bg-[#FFFF00] whitespace-nowrap text-center">
                   {toMinguoMonth(month)}
                 </td>
                 {cards.map(card => {
@@ -2040,7 +2051,7 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
                   return (
                     <td 
                       key={`${card.id}-${month}`} 
-                      className="p-3 text-right border-r border-slate-300 font-mono text-slate-800 transition-all cursor-pointer hover:bg-white/40"
+                      className="p-2 py-1.5 text-right border-r border-slate-400 font-mono text-slate-800 transition-all cursor-pointer hover:bg-[#FFFF00]/20"
                       onClick={() => !isEditing && setEditingBill({ cardId: card.id, month, amount: bill?.amount || 0 })}
                     >
                       {isEditing ? (
@@ -2048,7 +2059,7 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
                           <input 
                             autoFocus
                             type="number" 
-                            className="w-full bg-white border border-indigo-500 rounded p-1 text-right text-sm"
+                            className="w-full bg-white border border-indigo-500 rounded p-0.5 text-right text-xs"
                             value={editingBill.amount}
                             onChange={e => setEditingBill({ ...editingBill, amount: Number(e.target.value) })}
                             onKeyDown={e => {
@@ -2059,9 +2070,9 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
                           />
                         </div>
                       ) : (
-                        <span className={bill?.amount ? 'font-bold' : 'text-slate-400 opacity-30 italic'}>
-                          {bill?.amount ? bill.amount.toLocaleString() : '0'}
-                        </span>
+                        <div className="text-center font-bold text-sm">
+                          {bill?.amount !== undefined ? bill.amount.toLocaleString() : "0"}
+                        </div>
                       )}
                     </td>
                   );
@@ -2069,25 +2080,23 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
               </tr>
             ))}
             {/* Row for adding new month */}
-            <tr className="border-b border-slate-300">
-               <td className="p-3 border-r border-slate-300">
+            <tr className="border-b border-slate-400 bg-[#FFFF00]">
+               <td className="p-2 py-1.5 border-r border-slate-400 text-center">
                   <button 
                     onClick={() => {
-                      const [lastY, lastM] = (months[0] || '2024-03').split('-').map(Number);
+                      const [lastY, lastM] = (months[months.length - 1] || '111-07').split('-').map(Number);
                       let nextY = lastY;
-                      let nextM = lastM + 1;
-                      if (nextM > 12) { nextM = 1; nextY++; }
+                      let nextM = lastM - 1;
+                      if (nextM < 1) { nextM = 12; nextY--; }
                       const newMonth = `${nextY}-${String(nextM).padStart(2, '0')}`;
-                      setEditingBill({ cardId: '', month: newMonth, amount: 0 }); // Just to trigger a new empty row if needed, but we derive months from data. 
-                      // Actually better to just have a helper to inject a month into the set.
-                      setBills(prev => [...prev, { id: 'temp', cardId: 'temp', month: newMonth, amount: 0 }]);
+                      setBills(prev => [...prev, { id: 'temp-'+Date.now(), cardId: 'temp', month: newMonth, amount: 0 }]);
                     }}
-                    className="text-[10px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                    className="text-[10px] font-bold text-indigo-700 hover:underline flex items-center justify-center gap-1"
                   >
                     <Plus size={12} /> 新增月份
                   </button>
                </td>
-               {cards.map(card => <td key={card.id} className="border-r border-slate-300" />)}
+               {cards.map(card => <td key={card.id} className="border-r border-slate-400" />)}
             </tr>
           </tbody>
         </table>
@@ -4286,7 +4295,7 @@ const CalculationBreakdown = ({
 };
 
 const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
-  const [viewMode, setViewMode] = useState<'calculator' | 'records' | 'standards'>('calculator');
+  const [viewMode, setViewMode] = useState<'calculator' | 'records' | 'standards'>('records');
   const [taxes, setTaxes] = useState<TaxRecord[]>([]);
   const [standards, setStandards] = useState<TaxStandard[]>([]);
   const [salaryRecords, setSalaryRecords] = useState<SalaryRecord[]>([]);
@@ -5118,11 +5127,552 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
   );
 };
 
+const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
+  const [insurances, setInsurances] = useState<Insurance[]>([]);
+  const [premiums, setPremiums] = useState<InsurancePremium[]>([]);
+  const [isAdding, setIsAdding] = useState(false);
+  const [newInsurance, setNewInsurance] = useState<Partial<Insurance>>({ name: '', provider: '', type: '' });
+  
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [aiImage, setAiImage] = useState<string | null>(null);
+  const [isAIProcessing, setIsAIProcessing] = useState(false);
+  const [aiMode, setAiMode] = useState<'premium' | 'contract'>('premium'); // New state for AI mode
+
+  // Coverage Analysis States
+  const [selectedInsuranceId, setSelectedInsuranceId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'coverage'>('table');
+  const [chatMessage, setChatMessage] = useState('');
+  const [isChatting, setIsChatting] = useState(false);
+  const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'assistant', content: string }[]>([]);
+
+  const BIRTHDAY = new Date('1988-09-27');
+  const currentAge = useMemo(() => {
+    const today = new Date();
+    let age = today.getFullYear() - BIRTHDAY.getFullYear();
+    const m = today.getMonth() - BIRTHDAY.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < BIRTHDAY.getDate())) {
+      age--;
+    }
+    return age;
+  }, []);
+
+  const handleContractAnalysis = async () => {
+    if (!aiImage || !selectedInsuranceId) {
+      alert('請先選擇要分析的保險產品並上傳截圖');
+      return;
+    }
+    setIsAIProcessing(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const targetIns = insurances.find(i => i.id === selectedInsuranceId);
+      const prompt = `你是一個專業的保險契約分析師。請分析這張「${targetIns?.provider} ${targetIns?.name}」的保險契約或理賠項目截圖。
+1. 請總結該保險的核心保障項目（例如：住院日額、特定手術、意外失能等）。
+2. 請提取關鍵理賠額度。
+3. 以結構化 Markdown 格式回傳。
+
+請回傳 JSON 格式：
+{
+  "summary": "Markdown 格式的保障總結",
+  "rawAnalysis": "詳細的分析數據"
+}`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: {
+          parts: [
+            { inlineData: { mimeType: "image/png", data: aiImage.split(',')[1] } },
+            { text: prompt }
+          ]
+        },
+        config: { responseMimeType: "application/json" }
+      });
+
+      const result = JSON.parse(response.text || '{}');
+      if (result.summary) {
+        await updateDoc(doc(db, 'insurances', selectedInsuranceId), {
+          coverageSummary: result.summary,
+          analysisRaw: result.rawAnalysis
+        });
+        alert('保險契約分析完成！');
+      }
+      setIsAIModalOpen(false);
+      setAiImage(null);
+    } catch (error) {
+      console.error('AI Error:', error);
+      alert('分析失敗');
+    } finally {
+      setIsAIProcessing(false);
+    }
+  };
+
+  const handleChat = async () => {
+    if (!chatMessage || !selectedInsuranceId) return;
+    const targetIns = insurances.find(i => i.id === selectedInsuranceId);
+    if (!targetIns?.coverageSummary) {
+      alert('請先進行 AI 契約分析，才能詢問理賠項目。');
+      return;
+    }
+
+    const newHistory = [...chatHistory, { role: 'user' as const, content: chatMessage }];
+    setChatHistory(newHistory);
+    setChatMessage('');
+    setIsChatting(true);
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const prompt = `你是精通保險理賠的助手。根據以下保險契約分析結果，回答使用者的問題。
+保險產品：${targetIns.provider} ${targetIns.name}
+契約摘要：${targetIns.coverageSummary}
+詳細數據：${targetIns.analysisRaw}
+
+使用者問題：${chatMessage}
+請以專業、親切且易懂的方式回答，並明確指出理賠條件（如果已知）。如果資訊不足，請禮貌說明。`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: { parts: [{ text: prompt }] }
+      });
+
+      setChatHistory([...newHistory, { role: 'assistant', content: response.text || '分析失敗' }]);
+    } catch (error) {
+      console.error('Chat Error:', error);
+      alert('諮詢失敗');
+    } finally {
+      setIsChatting(false);
+    }
+  };
+
+  useEffect(() => {
+    const targetUids = getAppTargetUids(user);
+    const unsubIns = onSnapshot(collection(db, 'insurances'), (snapshot) => {
+      const data = snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as Insurance))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid))
+        .sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
+      setInsurances(data);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'insurances');
+    });
+
+    const unsubPre = onSnapshot(collection(db, 'insurancePremiums'), (snapshot) => {
+      const data = snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as InsurancePremium))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
+      setPremiums(data);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'insurancePremiums');
+    });
+
+    return () => { unsubIns(); unsubPre(); };
+  }, [user.uid]);
+
+  const handleAdd = async () => {
+    try {
+      await addDoc(collection(db, 'insurances'), { ...newInsurance, uid: user.uid, order: insurances.length });
+      setIsAdding(false);
+      setNewInsurance({ name: '', provider: '', type: '' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'insurances');
+    }
+  };
+
+  const handleAIProcess = async () => {
+    if (!aiImage) return;
+    setIsAIProcessing(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const prompt = `你是一個專業的保險精算數據分析師。請分析這張「保險費率對照表」截圖。
+這是一個結構化表格：橫列（Row）通常是「年齡」，縱欄（Column）則是不同的「保險產品」。
+請精確提取每個年齡對應到的各個保險產品金額。
+
+系統現有的保險清單：${insurances.map(i => `${i.provider}${i.name} (ID: ${i.id})`).join(', ')}
+
+請嚴格按照以下 JSON 格式回傳：
+{
+  "premiums": [
+    { "age": 數字, "insuranceId": "對應的保險ID", "premium": 數字 }
+  ],
+  "newInsurances": [
+    { "provider": "公司名", "name": "保險全名", "type": "險種" }
+  ]
+}
+注意：如果產品名稱在系統清單中找不到，請放入 newInsurances 以便新增。`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: {
+          parts: [
+            { inlineData: { mimeType: "image/png", data: aiImage.split(',')[1] } },
+            { text: prompt }
+          ]
+        },
+        config: { responseMimeType: "application/json" }
+      });
+
+      const result = JSON.parse(response.text || '{}');
+      
+      if (result.newInsurances && Array.isArray(result.newInsurances)) {
+        for (const ins of result.newInsurances) {
+          await addDoc(collection(db, 'insurances'), { ...ins, uid: user.uid, order: insurances.length });
+        }
+      }
+
+      if (result.premiums && Array.isArray(result.premiums)) {
+        for (const pre of result.premiums) {
+          const existing = premiums.find(p => p.insuranceId === pre.insuranceId && p.age === pre.age);
+          if (existing) {
+            await updateDoc(doc(db, 'insurancePremiums', existing.id), { premium: pre.premium });
+          } else if (pre.insuranceId && pre.age) {
+            await addDoc(collection(db, 'insurancePremiums'), { ...pre, uid: user.uid });
+          }
+        }
+      }
+
+      alert('AI 保費辨識匯入完成！');
+      setIsAIModalOpen(false);
+      setAiImage(null);
+    } catch (error) {
+      console.error('AI Error:', error);
+      alert('AI 辨識失敗。');
+    } finally {
+      setIsAIProcessing(false);
+    }
+  };
+
+  const ages = useMemo(() => {
+    const list = Array.from(new Set(premiums.map(p => p.age))).sort((a,b) => a - b);
+    if (list.length === 0) return Array.from({length: 30}, (_, i) => i + 30);
+    return list;
+  }, [premiums]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
+            <ShieldCheck size={24} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">保險管理</h2>
+            <p className="text-sm text-slate-500">
+              目前年齡: <span className="font-bold text-indigo-600">{currentAge} 歲</span> (1988/09/27)
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <div className="flex bg-slate-100 p-1 rounded-xl mr-2">
+            <button 
+              onClick={() => setViewMode('table')} 
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'table' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}
+            >
+              費率對照
+            </button>
+            <button 
+              onClick={() => setViewMode('coverage')} 
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'coverage' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}
+            >
+              保障分析
+            </button>
+          </div>
+          <button 
+            onClick={() => { setAiMode('premium'); setIsAIModalOpen(true); }} 
+            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 shadow-lg transition-colors font-bold text-sm"
+          >
+            <Sparkles size={18} /> AI 辨識費率
+          </button>
+          <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 shadow-lg transition-colors font-bold text-sm">
+            <Plus size={18} /> 新增保險
+          </button>
+        </div>
+      </div>
+
+      {isAdding && (
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-2xl shadow-md border border-indigo-100 space-y-4">
+          <h3 className="font-bold text-slate-800">新增保險產品</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <input type="text" placeholder="保險公司 (如: 全球人壽)" className="p-2 border rounded-lg text-sm" value={newInsurance.provider ?? ""} onChange={e => setNewInsurance({...newInsurance, provider: e.target.value})} />
+            <input type="text" placeholder="保險名稱 (如: XHR)" className="p-2 border rounded-lg text-sm" value={newInsurance.name ?? ""} onChange={e => setNewInsurance({...newInsurance, name: e.target.value})} />
+            <input type="text" placeholder="險種 (如: 醫療險)" className="p-2 border rounded-lg text-sm" value={newInsurance.type ?? ""} onChange={e => setNewInsurance({...newInsurance, type: e.target.value})} />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+             <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">取消</button>
+             <button onClick={handleAdd} className="bg-indigo-600 text-white px-8 py-2 rounded-lg font-bold hover:bg-indigo-700 text-sm">儲存</button>
+          </div>
+        </motion.div>
+      )}
+
+      {viewMode === 'table' ? (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-4 bg-indigo-50/50 border-b border-indigo-100 flex justify-between items-center">
+            <div className="flex items-center gap-4 text-xs font-bold text-indigo-700">
+               <span>年度保費總額 (目前): <span className="text-sm text-indigo-900">${(premiums.filter(p => p.age === currentAge && insurances.some(i => i.id === p.insuranceId)).reduce((sum, p) => sum + p.premium, 0)).toLocaleString()}</span></span>
+            </div>
+            <p className="text-[10px] text-slate-400 italic font-medium">※ 資料同步至雲端，可隨時核對 AI 解析結果</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse table-fixed">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="p-2 text-[11px] font-black border-r border-slate-200 sticky left-0 z-10 bg-slate-50 w-16 text-center">年齡</th>
+                  {insurances.map(ins => (
+                    <th key={ins.id} className="p-2 text-center border-r border-slate-200 group relative min-w-[80px] max-w-[100px]">
+                      <div className="flex flex-col">
+                        <span className="text-[9px] text-slate-400 font-bold leading-tight truncate">{ins.provider}</span>
+                        <span className="text-[10px] font-black text-slate-800 leading-tight break-words">{ins.name}</span>
+                      </div>
+                      <button onClick={() => setDeleteTarget({ type: 'insurances', id: ins.id, name: `${ins.provider} ${ins.name}` })} className="absolute -top-1 -right-1 p-1 bg-white text-rose-500 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
+                        <X size={10} />
+                      </button>
+                    </th>
+                  ))}
+                  <th className="p-2 text-center bg-indigo-50 border-r border-slate-200 w-24 text-[11px] font-black text-indigo-700">總計</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ages.map(age => {
+                  const insuranceIds = insurances.map(i => i.id);
+                  const agePremiums = premiums.filter(p => p.age === age && insuranceIds.includes(p.insuranceId));
+                  const totalForAge = agePremiums.reduce((sum, p) => sum + p.premium, 0);
+                  const isCurrent = age === currentAge;
+                  
+                  return (
+                    <tr key={age} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${isCurrent ? 'bg-indigo-50/50' : ''}`}>
+                      <td className={`p-1.5 text-[11px] font-bold border-r border-slate-200 sticky left-0 z-10 text-center ${isCurrent ? 'bg-indigo-100 text-indigo-700' : 'bg-white text-slate-500'}`}>
+                        {age}
+                      </td>
+                      {insurances.map(ins => {
+                        const pre = premiums.find(p => p.insuranceId === ins.id && p.age === age);
+                        return (
+                          <td key={`${ins.id}-${age}`} className="p-1 text-right border-r border-slate-200 font-mono text-[10px]">
+                            <input 
+                              type="number"
+                              className={`w-full bg-transparent text-right focus:bg-white focus:ring-1 focus:ring-indigo-300 rounded p-0.5 outline-none font-medium ${isCurrent ? 'text-indigo-800' : ''}`}
+                              value={pre?.premium || 0}
+                              onChange={async (e) => {
+                                const val = Number(e.target.value);
+                                if (pre) {
+                                  await updateDoc(doc(db, 'insurancePremiums', pre.id), { premium: val });
+                                } else if (val > 0) {
+                                  await addDoc(collection(db, 'insurancePremiums'), { insuranceId: ins.id, age, premium: val, uid: user.uid });
+                                }
+                              }}
+                            />
+                          </td>
+                        );
+                      })}
+                      <td className={`p-1.5 text-right font-mono text-[11px] font-black border-r border-slate-200 ${isCurrent ? 'text-indigo-700 bg-indigo-50' : 'text-slate-800 bg-slate-50'}`}>
+                        ${totalForAge.toLocaleString()}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="lg:col-span-4 space-y-3">
+            <h3 className="text-sm font-bold text-slate-500 px-1">選擇保險產品進行分析</h3>
+            {insurances.map(ins => (
+              <button 
+                key={ins.id}
+                onClick={() => setSelectedInsuranceId(ins.id)}
+                className={`w-full p-4 rounded-2xl border text-left transition-all relative overflow-hidden ${selectedInsuranceId === ins.id ? 'border-indigo-500 bg-indigo-50 shadow-md ring-1 ring-indigo-200' : 'border-slate-200 bg-white hover:border-indigo-200'}`}
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 block uppercase">{ins.provider}</span>
+                    <h4 className="text-sm font-black text-slate-800">{ins.name}</h4>
+                    <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full mt-2 inline-block font-bold">{ins.type}</span>
+                  </div>
+                  {ins.coverageSummary && (
+                    <div className="w-6 h-6 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                      <Check size={14} />
+                    </div>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="lg:col-span-8">
+            {!selectedInsuranceId ? (
+              <div className="h-[500px] flex flex-col items-center justify-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                <ShieldCheck size={48} className="text-slate-200 mb-4" />
+                <p className="text-slate-400 font-bold">請從左側選擇保險產品以查看保障內容</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[700px]">
+                <div className="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800">
+                      {insurances.find(i => i.id === selectedInsuranceId)?.provider} {insurances.find(i => i.id === selectedInsuranceId)?.name}
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">保障項目與理賠諮詢</p>
+                  </div>
+                  <button 
+                    onClick={() => { setAiMode('contract'); setIsAIModalOpen(true); }}
+                    className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 transition-all font-bold text-xs shadow-lg"
+                  >
+                    <FileSearch size={16} /> AI 分析契約
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                  {insurances.find(i => i.id === selectedInsuranceId)?.coverageSummary ? (
+                    <>
+                      <div className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100 prose prose-sm max-w-none prose-indigo prose-p:leading-relaxed prose-li:my-1">
+                        <small className="text-indigo-600 font-bold uppercase tracking-widest block mb-2">AI 契約摘要</small>
+                        <Markdown>
+                          {insurances.find(i => i.id === selectedInsuranceId)?.coverageSummary || ''}
+                        </Markdown>
+                      </div>
+
+                      <div className="space-y-4 pt-4">
+                        <h4 className="text-xs font-black text-slate-400 uppercase flex items-center gap-2">
+                          <MessageSquare size={14} /> 理賠諮詢對話
+                        </h4>
+                        <div className="space-y-3">
+                          {chatHistory.map((msg, idx) => (
+                            <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                              <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
+                                {msg.content}
+                              </div>
+                            </div>
+                          ))}
+                          {isChatting && (
+                            <div className="flex justify-start">
+                              <div className="bg-slate-100 p-3 rounded-2xl rounded-tl-none flex items-center gap-2 text-slate-400 text-xs">
+                                <Loader2 className="animate-spin" size={14} /> AI 正在分析理賠可能性...
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center p-10 text-center space-y-4">
+                      <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-300">
+                        <FileSearch size={40} />
+                      </div>
+                      <div>
+                        <p className="text-slate-600 font-bold">尚未進行契約分析</p>
+                        <p className="text-xs text-slate-400 max-w-[250px] mt-1 mx-auto">
+                          請點擊右上角「AI 分析契約」，上傳截圖後即可查看保障項目並詢問理賠問題。
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {insurances.find(i => i.id === selectedInsuranceId)?.coverageSummary && (
+                  <div className="p-4 border-t border-slate-100 bg-white">
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        placeholder="詢問理賠項目，如：住院5天可以賠多少？" 
+                        className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-400 transition-all text-sm"
+                        value={chatMessage}
+                        onChange={e => setChatMessage(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleChat()}
+                      />
+                      <button 
+                        onClick={handleChat}
+                        disabled={!chatMessage || isChatting}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-indigo-600 text-white rounded-xl flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 transition-all"
+                      >
+                        <ChevronRight size={20} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {isAIModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-emerald-50/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600">
+                    {aiMode === 'premium' ? <ShieldCheck size={24} /> : <FileSearch size={24} />}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-800">{aiMode === 'premium' ? 'AI 保費智慧辨識' : 'AI 契約內容分析'}</h3>
+                    <p className="text-xs text-slate-500 font-medium">{aiMode === 'premium' ? '上傳各年齡保費表' : '分析詳細理賠項目與額度'}</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsAIModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
+              </div>
+              <div className="p-8">
+                {!aiImage ? (
+                  <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-3xl p-12 hover:border-emerald-300 hover:bg-emerald-50/30 transition-all cursor-pointer group">
+                    <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300 group-hover:bg-emerald-100 group-hover:text-emerald-500 transition-colors mb-4">
+                      <Camera size={32} />
+                    </div>
+                    <p className="text-slate-600 font-bold">{aiMode === 'premium' ? '上傳費率對照表截圖' : '上傳理賠細項截圖'}</p>
+                    <p className="text-xs text-slate-400 mt-2 text-center">
+                      {aiMode === 'premium' ? '請確保截圖中包含「年齡」列與各產品保費數據' : '請上傳顯示保障項目、額度或給付條件的表格截圖'}
+                    </p>
+                    <input type="file" className="hidden" accept="image/*" onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const r = new FileReader();
+                        r.onloadend = () => setAiImage(r.result as string);
+                        r.readAsDataURL(file);
+                      }
+                    }} />
+                  </label>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 shadow-inner">
+                      <img src={aiImage} className="w-full h-full object-contain" />
+                      <button onClick={() => setAiImage(null)} className="absolute top-2 right-2 p-1.5 bg-rose-500 text-white rounded-lg shadow-lg hover:bg-rose-600 transition-colors"><X size={16} /></button>
+                    </div>
+                    <div className="flex gap-3">
+                      <button 
+                        onClick={aiMode === 'premium' ? handleAIProcess : handleContractAnalysis} 
+                        disabled={isAIProcessing} 
+                        className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-white transition-all shadow-lg ${isAIProcessing ? 'bg-slate-300' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'}`}
+                      >
+                        {isAIProcessing ? <Loader2 className="animate-spin" size={24} /> : <Sparkles size={24} />}
+                        {isAIProcessing ? '正在辨識解析...' : '開始 AI 分析'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [salaries, setSalaries] = useState<SalaryRecord[]>([]);
   const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingData, setEditingData] = useState<Partial<Budget>>({});
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  const handleSaveEdit = async () => {
+    if (!editingId) return;
+    try {
+      await updateDoc(doc(db, 'budgets', editingId), editingData);
+      setEditingId(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'budgets');
+    }
+  };
+
   const [newBudget, setNewBudget] = useState<Partial<Budget>>({ 
     category: '', 
     allocated: 0, 
@@ -5165,6 +5715,8 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
         .map(doc => ({ ...doc.data(), id: doc.id } as Budget))
         .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setBudgets(data);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'budgets');
     });
 
     const sUnsubscribe = onSnapshot(collection(db, 'salaryRecords'), (snapshot) => {
@@ -5172,6 +5724,8 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
         .map(doc => ({ ...doc.data(), id: doc.id } as SalaryRecord))
         .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       setSalaries(data);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'salaryRecords');
     });
 
     return () => {
@@ -5390,38 +5944,89 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
           >
             {filteredBudgets.map(budget => {
               const yearlyEquiv = budget.frequency === 'monthly' ? budget.allocated * 12 : budget.allocated;
+              const isEditing = editingId === budget.id;
+              
               return (
                 <Reorder.Item 
                   key={budget.id} 
                   value={budget}
                   as="tr"
-                  className={`group hover:bg-slate-50/50 transition-colors ${budget.isPaid ? 'bg-emerald-50/10' : ''} cursor-grab active:cursor-grabbing`}
+                  className={`group hover:bg-slate-50/50 transition-colors ${budget.isPaid ? 'bg-emerald-50/10' : ''} ${isEditing ? 'bg-indigo-50/30' : ''} cursor-grab active:cursor-grabbing border-b border-slate-100 last:border-0`}
                 >
-                  <td className="p-2 py-2.5 font-bold text-slate-800 relative pl-10">
+                  <td className="px-3 py-1.5 font-bold text-slate-800 relative pl-10">
                     <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">
                       <GripVertical size={16} />
                     </div>
-                    {budget.category}
+                    {isEditing ? (
+                      <input 
+                        className="w-full bg-white border border-indigo-200 rounded p-1 text-sm focus:ring-1 focus:ring-indigo-400 outline-none" 
+                        value={editingData.category ?? budget.category} 
+                        onChange={e => setEditingData({...editingData, category: e.target.value})}
+                      />
+                    ) : (
+                      <span onClick={() => { setEditingId(budget.id); setEditingData(budget); }}>{budget.category}</span>
+                    )}
                   </td>
-                  <td className="p-2 py-2.5 text-center">
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${budget.frequency === 'monthly' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-600'}`}>
-                      {freqLabels[budget.frequency || 'annually']}
-                    </span>
+                  <td className="px-3 py-1.5 text-center">
+                    {isEditing ? (
+                      <select 
+                        className="p-1 border border-indigo-200 rounded text-[10px] outline-none" 
+                        value={editingData.frequency ?? budget.frequency}
+                        onChange={e => setEditingData({...editingData, frequency: e.target.value as any})}
+                      >
+                         <option value="annually">每年</option>
+                         <option value="monthly">每月</option>
+                         <option value="quarterly">每季</option>
+                      </select>
+                    ) : (
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${budget.frequency === 'monthly' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-600'}`}>
+                        {freqLabels[budget.frequency || 'annually']}
+                      </span>
+                    )}
                   </td>
-                  <td className="p-2 py-2.5 text-right font-mono text-slate-600 text-sm font-medium">${budget.allocated.toLocaleString()}</td>
-                  <td className="p-2 py-2.5 text-right font-mono font-bold text-indigo-600 text-sm">${yearlyEquiv.toLocaleString()}</td>
-                  <td className="p-2 py-2.5 text-right font-mono text-slate-900 font-bold text-sm">
-                    {budget.isPaid ? `$${budget.allocated.toLocaleString()}` : `$${budget.spent.toLocaleString()}`}
+                  <td className="px-3 py-1.5 text-right font-mono text-slate-600 text-xs font-medium">
+                    {isEditing ? (
+                      <input 
+                        type="number" 
+                        className="w-24 bg-white border border-indigo-200 rounded p-1 text-right text-xs" 
+                        value={editingData.allocated ?? budget.allocated} 
+                        onChange={e => setEditingData({...editingData, allocated: Number(e.target.value)})}
+                      />
+                    ) : (
+                      `$${budget.allocated.toLocaleString()}`
+                    )}
                   </td>
-                  <td className="p-2 py-2.5 text-center">
+                  <td className="px-3 py-1.5 text-right font-mono font-bold text-indigo-600 text-xs">
+                    ${yearlyEquiv.toLocaleString()}
+                  </td>
+                  <td className="px-3 py-1.5 text-right font-mono text-slate-900 font-bold text-xs">
+                    {isEditing ? (
+                      <input 
+                        type="number" 
+                        className="w-24 bg-white border border-indigo-200 rounded p-1 text-right text-xs" 
+                        value={editingData.spent ?? budget.spent} 
+                        onChange={e => setEditingData({...editingData, spent: Number(e.target.value)})}
+                      />
+                    ) : (
+                      budget.isPaid ? `$${budget.allocated.toLocaleString()}` : `$${budget.spent.toLocaleString()}`
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 text-center">
                     <button onClick={() => togglePaid(budget)} className={`p-1 rounded-lg transition-all ${budget.isPaid ? 'text-emerald-600 bg-emerald-100' : 'text-slate-300 bg-slate-50 hover:text-emerald-500'}`}>
-                      <CheckCircle2 size={18} />
+                      <CheckCircle2 size={16} />
                     </button>
                   </td>
-                  <td className="p-2 py-2.5 text-center">
-                    <button onClick={() => handleDelete(budget.id, budget.category)} className="p-1 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Trash2 size={16} />
-                    </button>
+                  <td className="px-3 py-1.5 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      {isEditing ? (
+                        <button onClick={handleSaveEdit} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check size={16} /></button>
+                      ) : (
+                        <button onClick={() => { setEditingId(budget.id); setEditingData(budget); }} className="p-1 text-slate-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"><Edit2 size={14} /></button>
+                      )}
+                      <button onClick={() => handleDelete(budget.id, budget.category)} className="p-1 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </td>
                 </Reorder.Item>
               );
@@ -5671,6 +6276,7 @@ export default function App() {
       case 'credit-cards': return <CreditCardPage {...pageProps} />;
       case 'banks': return <BankPage {...pageProps} />;
       case 'stocks': return <StockPage {...pageProps} />;
+      case 'insurance': return <InsurancePage {...pageProps} />;
       case 'budget': return <BudgetPage {...pageProps} />;
       case 'tax': return <TaxPage {...pageProps} />;
       default: return <DashboardPage user={user} summary={summary} />;
@@ -5691,7 +6297,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className="h-screen bg-slate-50 flex flex-col md:flex-row overflow-hidden relative">
+      <div className="min-h-screen md:h-screen bg-slate-50 flex flex-col md:flex-row overflow-x-hidden md:overflow-hidden relative">
         {/* Mobile Sidebar Overlay */}
         <AnimatePresence>
           {isSidebarOpen && windowWidth < 768 && (
@@ -5762,7 +6368,8 @@ export default function App() {
                 TrendingUp,
                 BarChart3,
                 PieChart,
-                FileText
+                FileText,
+                ShieldCheck
               }[tab.icon as string];
 
               return (

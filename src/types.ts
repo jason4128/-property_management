@@ -170,3 +170,38 @@ export interface Budget {
   isPaid: boolean;
   order?: number;
 }
+
+export interface Insurance {
+  id: string;
+  uid?: string;
+  name: string;
+  provider: string; // e.g. 全球人壽, 遠雄人壽
+  type: string; // e.g. 醫療險, 重大傷病
+  order?: number;
+  coverageSummary?: string; // AI generated summary of coverage
+  analysisRaw?: string; // Raw AI analysis result
+}
+
+export interface InsurancePremium {
+  id: string;
+  uid?: string;
+  insuranceId: string;
+  age: number;
+  premium: number;
+}
+
+export interface User {
+  uid: string;
+  email: string;
+  displayName?: string;
+  photoURL?: string;
+}
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write'
+}
