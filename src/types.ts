@@ -62,6 +62,7 @@ export interface CreditCardBill {
   cardId: string;
   month: string; // YYYY-MM
   amount: number;
+  isPaid?: boolean;
 }
 
 export interface BankAccount {

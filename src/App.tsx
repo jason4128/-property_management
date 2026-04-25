@@ -1805,13 +1805,10 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
   const [cards, setCards] = useState<CreditCard[]>([]);
   const [bills, setBills] = useState<CreditCardBill[]>([]);
   const [isAddingCard, setIsAddingCard] = useState(false);
-  const [isAddingBill, setIsAddingBill] = useState(false);
   const [editingBill, setEditingBill] = useState<{ cardId: string, month: string, amount: number } | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [activeView, setActiveView] = useState<'table' | 'charts'>('table');
   
-  // AI Recognition State
-  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
-  const [aiImage, setAiImage] = useState<string | null>(null);
-  const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [newCard, setNewCard] = useState<Partial<CreditCard>>({
     name: '', bank: '', statementDate: 1, dueDate: 1, limit: 0, currentBalance: 0
   });
@@ -1853,10 +1850,21 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
     if (!editingBill) return;
     try {
       const existing = bills.find(b => b.cardId === editingBill.cardId && b.month === editingBill.month);
+      const roundedAmount = Math.round(editingBill.amount);
+      const shouldBePaid = roundedAmount > 0;
+      
       if (existing) {
-        await updateDoc(doc(db, 'creditCardBills', existing.id), { amount: editingBill.amount });
+        await updateDoc(doc(db, 'creditCardBills', existing.id), { 
+          amount: roundedAmount,
+          isPaid: existing.isPaid ?? shouldBePaid
+        });
       } else {
-        await addDoc(collection(db, 'creditCardBills'), { ...editingBill, uid: user.uid });
+        await addDoc(collection(db, 'creditCardBills'), { 
+          ...editingBill, 
+          amount: roundedAmount, 
+          isPaid: shouldBePaid,
+          uid: user.uid 
+        });
       }
       setEditingBill(null);
     } catch (error) {
@@ -1864,79 +1872,78 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
     }
   };
 
-  const handleAIProcess = async () => {
-    if (!aiImage) return;
-    setIsAIProcessing(true);
+  const handleAddNextYear = async () => {
+    const maxYear = availableYears.length > 0 ? Math.max(...availableYears) : new Date().getFullYear();
+    const nextYear = maxYear + 1;
+    if (!confirm(`確定要建立 ${nextYear} 年度的 1-12 月帳單表格嗎？`)) return;
+    
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `你是一個精確的財務數據 OCR 專家。請分析這張「信用卡消費統計矩陣表格」截圖。
-該表格結構如下：
-1. 第一欄 (Column A)：包含「月份」或「日期」(如：111年7月, 113年02月)。
-2. 標題列 (Header Row)：包含不同的「銀行名稱」或「信用卡名稱」。
-3. 交叉格點：對應該月份、該銀行的「應繳金額」。
-
-你的任務：
-- 將左側月份轉換為 YYYY-MM 格式（民國年請轉換為西元年，111年=2022年, 112年=2023年, 113年=2024年）。
-- 提取每個格點的金額（忽略 0 或空白）。
-- 根據這份系統現有的卡片名單進行精確 ID 匹配：${cards.map(c => `${c.bank}${c.name} (ID: ${c.id})`).join(', ')}
-
-請嚴格回傳此 JSON 格式：
-{
-  "bills": [
-    { "month": "YYYY-MM", "cardId": "匹配到的ID", "amount": 數字 }
-  ]
-}
-
-注意：如果截圖中的銀行名稱與系統名單略有出入（例如「台新」對應「台新銀行」），請以語意最接近的為準。`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: {
-          parts: [
-            { inlineData: { mimeType: "image/png", data: aiImage.split(',')[1] } },
-            { text: prompt }
-          ]
-        },
-        config: { responseMimeType: "application/json" }
-      });
-
-      const result = JSON.parse(response.text || '{}');
-      if (result.bills && Array.isArray(result.bills)) {
-        for (const bill of result.bills) {
-          const existing = bills.find(b => b.cardId === bill.cardId && b.month === bill.month);
-          if (existing) {
-            await updateDoc(doc(db, 'creditCardBills', existing.id), { amount: bill.amount });
-          } else if (bill.cardId && bill.month) {
-            await addDoc(collection(db, 'creditCardBills'), { ...bill, uid: user.uid });
-          }
+      for (let m = 1; m <= 12; m++) {
+        const monthStr = `${nextYear}-${String(m).padStart(2, '0')}`;
+        for (const card of cards) {
+          await addDoc(collection(db, 'creditCardBills'), {
+            cardId: card.id,
+            month: monthStr,
+            amount: 0,
+            isPaid: false,
+            uid: user.uid
+          });
         }
-        alert('AI 辨識並匯入完成！');
       }
-      setIsAIModalOpen(false);
-      setAiImage(null);
+      setSelectedYear(nextYear);
+      alert(`${nextYear} 年度表格已建立`);
     } catch (error) {
-      console.error('AI Error:', error);
-      alert('AI 辨識失敗，請檢查網路或 API 金鑰。');
-    } finally {
-      setIsAIProcessing(false);
+      handleFirestoreError(error, OperationType.WRITE, 'creditCardBills');
+    }
+  };
+
+  const handleTogglePaid = async (billId?: string, cardId?: string, month?: string) => {
+    try {
+      if (billId) {
+        const bill = bills.find(b => b.id === billId);
+        await updateDoc(doc(db, 'creditCardBills', billId), { isPaid: !bill?.isPaid });
+      } else if (cardId && month) {
+        await addDoc(collection(db, 'creditCardBills'), { cardId, month, amount: 0, isPaid: true, uid: user.uid });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'creditCardBills');
+    }
+  };
+
+  const handleBatchMarkPaid = async () => {
+    if (!confirm('確定要將目前年度所有有填寫金額的帳單標記為「已繳費」嗎？')) return;
+    try {
+      const yearBills = bills.filter(b => b.month.startsWith(selectedYear.toString()) && b.amount > 0 && !b.isPaid);
+      for (const bill of yearBills) {
+        await updateDoc(doc(db, 'creditCardBills', bill.id), { isPaid: true });
+      }
+      alert(`已標記 ${yearBills.length} 筆帳單為已繳費`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'creditCardBills');
     }
   };
 
   const months = useMemo(() => {
-    const monthsSet = new Set<string>();
-    bills.forEach(b => monthsSet.add(b.month));
-    
-    // Ensure current month is visible
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    monthsSet.add(currentMonth);
+    const list: string[] = [];
+    for (let m = 1; m <= 12; m++) {
+      list.push(`${selectedYear}-${String(m).padStart(2, '0')}`);
+    }
+    return list;
+  }, [selectedYear]);
 
-    // Generate intermediate months if needed or just sort
-    return Array.from(monthsSet).sort().reverse();
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    years.add(new Date().getFullYear());
+    bills.forEach(b => {
+      const y = parseInt(b.month.split('-')[0]);
+      if (!isNaN(y)) years.add(y);
+    });
+    return Array.from(years).sort((a, b) => b - a);
   }, [bills]);
 
   const toMinguoMonth = (isoMonth: string) => {
     const [y, m] = isoMonth.split('-').map(Number);
+    if (!y || !m) return isoMonth;
     return `${y - 1911}年${m}月`;
   };
 
@@ -1945,275 +1952,396 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">信用卡帳單管理</h2>
-          <p className="text-sm text-slate-500 mt-1">點擊儲存格輸入每月應繳金額</p>
+          <div className="flex items-center gap-3 mt-2">
+            <p className="text-sm text-slate-500">模仿 Excel 結構，記錄每月各銀行應繳金額</p>
+            <div className="flex items-center gap-2">
+              <select 
+                className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-700 outline-none"
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+              >
+                {availableYears.map(y => (
+                  <option key={y} value={y}>{y}年度 ({y-1911}年)</option>
+                ))}
+              </select>
+              <button 
+                onClick={handleAddNextYear}
+                className="p-1 px-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors text-[10px] font-bold flex items-center gap-1"
+              >
+                <Plus size={12} /> 下一年
+              </button>
+              <button 
+                onClick={handleBatchMarkPaid}
+                className="p-1 px-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors text-[10px] font-bold flex items-center gap-1"
+              >
+                <Check size={12} /> 一鍵標記已繳
+              </button>
+            </div>
+            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 ml-2">
+              <button 
+                onClick={() => setActiveView('table')}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeView === 'table' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                表格視圖
+              </button>
+              <button 
+                onClick={() => setActiveView('charts')}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeView === 'charts' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                分析圖表
+              </button>
+            </div>
+          </div>
         </div>
         <div className="flex gap-2">
           <button 
-            onClick={async () => {
-              if (!confirm('確定要初始化截圖中的銀行卡片嗎？')) return;
-              const seedCards: Partial<CreditCard>[] = [
-                { bank: '台新銀行', name: '信用', statementDate: 2, dueDate: 17, limit: 150000 },
-                { bank: '國泰世華銀行', name: '信用', statementDate: 3, dueDate: 18, limit: 200000 },
-                { bank: '星展銀行', name: '信用', statementDate: 3, dueDate: 18, limit: 180000 },
-                { bank: '玉山銀行', name: '信用', statementDate: 3, dueDate: 18, limit: 150000 },
-                { bank: '聯邦銀行', name: '信用', statementDate: 3, dueDate: 18, limit: 120000 },
-                { bank: '富邦銀行', name: '信用', statementDate: 4, dueDate: 19, limit: 160000 },
-                { bank: '華南銀行', name: '信用', statementDate: 5, dueDate: 20, limit: 100000 },
-                { bank: '兆豐銀行', name: '信用', statementDate: 24, dueDate: 9, limit: 100000 },
-                { bank: '滙豐銀行', name: '信用', statementDate: 1, dueDate: 16, limit: 200000 }
-              ];
-              for (const c of seedCards) {
-                await addDoc(collection(db, 'creditCards'), { ...c, uid: user.uid, currentBalance: 0 });
-              }
-            }}
-            className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-lg hover:bg-slate-200 transition-colors text-sm font-bold"
-          >
-            <Sparkles size={16} /> 初始化預設銀行
-          </button>
-          <button 
-            onClick={() => setIsAIModalOpen(true)}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors shadow-lg"
-          >
-            <Sparkles size={20} /> AI 辨識帳單
-          </button>
-          <button 
             onClick={() => setIsAddingCard(true)} 
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-lg"
+            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-lg font-bold text-sm"
           >
-            <Plus size={20} /> 新增卡片
+            <Plus size={16} /> 新增卡片
           </button>
-        </div>
-      </div>
-
-      {isAddingCard && (
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-md border border-indigo-100 space-y-4">
-          <h3 className="font-bold text-slate-800">新增信用卡參數</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-400 uppercase">銀行</label>
-              <input type="text" placeholder="台新, 國泰..." className="w-full p-2 border rounded-md" value={newCard.bank ?? ""} onChange={e => setNewCard({...newCard, bank: e.target.value})} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-400 uppercase">卡片/名稱</label>
-              <input type="text" placeholder="玫瑰, 英雄聯盟..." className="w-full p-2 border rounded-md" value={newCard.name ?? ""} onChange={e => setNewCard({...newCard, name: e.target.value})} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-400 uppercase">結帳日</label>
-              <input type="number" min="1" max="31" className="w-full p-2 border rounded-md" value={newCard.statementDate ?? 1} onChange={e => setNewCard({...newCard, statementDate: Number(e.target.value)})} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-400 uppercase">付款日</label>
-              <input type="number" min="1" max="31" className="w-full p-2 border rounded-md" value={newCard.dueDate ?? 1} onChange={e => setNewCard({...newCard, dueDate: Number(e.target.value)})} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-400 uppercase">額度</label>
-              <input type="number" className="w-full p-2 border rounded-md" value={newCard.limit ?? 0} onChange={e => setNewCard({...newCard, limit: Number(e.target.value)})} />
-            </div>
-          </div>
-          <div className="flex justify-end gap-3 pt-2 border-t">
-            <button onClick={() => setIsAddingCard(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
-            <button onClick={handleAddCard} className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 font-bold">儲存卡片</button>
-          </div>
-        </motion.div>
-      )}
-
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-[#FFFF00] text-slate-900 border-b-2 border-slate-400">
-            <tr>
-              <th className="p-3 text-sm font-black border-r border-slate-400 sticky left-0 z-10 bg-[#FFFF00] w-32 border-b-2 border-slate-400 text-center">日期</th>
-              {cards.map(card => (
-                <th key={card.id} className="p-3 text-center border-r border-slate-400 min-w-[120px] group relative border-b-2 border-slate-400">
-                  <div className="flex flex-col items-center justify-center">
-                    <span className="text-[12px] font-black">{card.bank}</span>
-                    <span className="text-[10px] font-bold">結帳{card.statementDate}日</span>
-                  </div>
-                  <button 
-                    onClick={() => setDeleteTarget({ type: 'creditCards', id: card.id, name: `${card.bank} ${card.name}` })}
-                    className="absolute -top-1 -right-1 p-1 bg-white text-rose-500 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X size={12} />
-                  </button>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="bg-[#FFFF00]/10">
-            {months.map(month => (
-              <tr key={month} className="border-b border-slate-400 hover:bg-[#FFFF00]/40 transition-colors">
-                <td className="p-2 py-1.5 text-sm font-bold border-r border-slate-400 sticky left-0 z-10 bg-[#FFFF00] whitespace-nowrap text-center">
-                  {toMinguoMonth(month)}
-                </td>
-                {cards.map(card => {
-                  const bill = bills.find(b => b.cardId === card.id && b.month === month);
-                  const isEditing = editingBill?.cardId === card.id && editingBill?.month === month;
-                  
-                  return (
-                    <td 
-                      key={`${card.id}-${month}`} 
-                      className="p-2 py-1.5 text-right border-r border-slate-400 font-mono text-slate-800 transition-all cursor-pointer hover:bg-[#FFFF00]/20"
-                      onClick={() => !isEditing && setEditingBill({ cardId: card.id, month, amount: bill?.amount || 0 })}
-                    >
-                      {isEditing ? (
-                        <div className="flex items-center gap-1">
-                          <input 
-                            autoFocus
-                            type="number" 
-                            className="w-full bg-white border border-indigo-500 rounded p-0.5 text-right text-xs"
-                            value={editingBill.amount}
-                            onChange={e => setEditingBill({ ...editingBill, amount: Number(e.target.value) })}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') handleSaveBill();
-                              if (e.key === 'Escape') setEditingBill(null);
-                            }}
-                            onBlur={handleSaveBill}
-                          />
-                        </div>
-                      ) : (
-                        <div className="text-center font-bold text-sm">
-                          {bill?.amount !== undefined ? bill.amount.toLocaleString() : "0"}
-                        </div>
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-            {/* Row for adding new month */}
-            <tr className="border-b border-slate-400 bg-[#FFFF00]">
-               <td className="p-2 py-1.5 border-r border-slate-400 text-center">
-                  <button 
-                    onClick={() => {
-                      const [lastY, lastM] = (months[months.length - 1] || '111-07').split('-').map(Number);
-                      let nextY = lastY;
-                      let nextM = lastM - 1;
-                      if (nextM < 1) { nextM = 12; nextY--; }
-                      const newMonth = `${nextY}-${String(nextM).padStart(2, '0')}`;
-                      setBills(prev => [...prev, { id: 'temp-'+Date.now(), cardId: 'temp', month: newMonth, amount: 0 }]);
-                    }}
-                    className="text-[10px] font-bold text-indigo-700 hover:underline flex items-center justify-center gap-1"
-                  >
-                    <Plus size={12} /> 新增月份
-                  </button>
-               </td>
-               {cards.map(card => <td key={card.id} className="border-r border-slate-400" />)}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      
-      <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 flex gap-3 items-start">
-        <Info size={20} className="text-amber-500 flex-shrink-0 mt-0.5" />
-        <div className="text-xs text-amber-800 space-y-1">
-          <p className="font-bold">操作提示：</p>
-          <ul className="list-disc list-inside space-x-0">
-            <li>直接點擊單元格即可輸入該月應繳金額，按下 Enter 或點擊外部即可自動儲存。</li>
-            <li>「日期」欄位將根據截圖樣式以民國年度呈現。</li>
-            <li>結帳日顯示在標題列，方便對帳。</li>
-            <li>使用「AI 辨識帳單」功能，可以上傳帳單截圖自動填入對應卡片的金額。</li>
-          </ul>
         </div>
       </div>
 
       <AnimatePresence>
-        {isAIModalOpen && (
+        {isAddingCard && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col"
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden"
             >
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-emerald-50/50">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50/50">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600">
-                    <Sparkles size={24} />
+                  <div className="w-10 h-10 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600">
+                    <Plus size={24} />
                   </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-slate-800">AI 帳單智慧辨識</h3>
-                    <p className="text-xs text-slate-500">上傳截圖，AI 自動解析金額</p>
-                  </div>
+                  <h3 className="text-xl font-bold text-slate-800">新增信用卡參數</h3>
                 </div>
-                <button onClick={() => setIsAIModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors">
+                <button onClick={() => setIsAddingCard(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors">
                   <X size={20} />
                 </button>
               </div>
 
-              <div className="p-8 space-y-6">
-                {!aiImage ? (
-                  <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-3xl p-10 hover:border-emerald-300 hover:bg-emerald-50/30 transition-all cursor-pointer group">
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      id="bill-upload" 
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => setAiImage(reader.result as string);
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                    />
-                    <label htmlFor="bill-upload" className="flex flex-col items-center cursor-pointer w-full h-full">
-                      <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-emerald-100 group-hover:text-emerald-500 transition-colors mb-4">
-                        <Camera size={32} />
-                      </div>
-                      <p className="text-slate-600 font-bold">點擊或拖放帳單截圖</p>
-                      <p className="text-[10px] text-slate-400 mt-2">支援 PNG, JPG 格式</p>
-                    </label>
+              <div className="p-8 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">銀行</label>
+                  <input type="text" placeholder="台新, 國泰..." className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500 transition-all font-bold" value={newCard.bank ?? ""} onChange={e => setNewCard({...newCard, bank: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">卡片/名稱</label>
+                  <input type="text" placeholder="玫瑰, 英雄聯盟..." className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500 transition-all font-bold" value={newCard.name ?? ""} onChange={e => setNewCard({...newCard, name: e.target.value})} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">結帳日</label>
+                    <input type="number" min="1" max="31" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500 transition-all font-bold" value={newCard.statementDate ?? 1} onChange={e => setNewCard({...newCard, statementDate: Number(e.target.value)})} />
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-200 shadow-inner bg-slate-50">
-                      <img src={aiImage} className="w-full h-full object-contain" alt="Bill Preview" />
-                      <button 
-                        onClick={() => setAiImage(null)}
-                        className="absolute top-2 right-2 p-1.5 bg-rose-500 text-white rounded-lg shadow-lg hover:bg-rose-600 transition-colors"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                    <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex gap-3">
-                      <Info size={20} className="text-emerald-600 flex-shrink-0 mt-0.5" />
-                      <p className="text-[11px] text-emerald-800 leading-relaxed font-medium">
-                        提示：請確保截圖中包含卡片名稱（或銀行名稱）及該月應繳總額，AI 將自動比對系統中的卡片清單。
-                      </p>
-                    </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">付款日</label>
+                    <input type="number" min="1" max="31" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500 transition-all font-bold" value={newCard.dueDate ?? 1} onChange={e => setNewCard({...newCard, dueDate: Number(e.target.value)})} />
                   </div>
-                )}
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">信用額度</label>
+                  <input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500 transition-all font-bold" value={newCard.limit ?? 0} onChange={e => setNewCard({...newCard, limit: Number(e.target.value)})} />
+                </div>
               </div>
 
               <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
-                <button 
-                  onClick={() => setIsAIModalOpen(false)}
-                  className="flex-1 px-6 py-3 font-bold text-slate-600 hover:bg-white rounded-2xl border border-slate-200 transition-all"
-                >
-                  取消
-                </button>
-                <button 
-                  onClick={handleAIProcess}
-                  disabled={!aiImage || isAIProcessing}
-                  className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 font-bold text-white rounded-2xl transition-all shadow-lg ${!aiImage || isAIProcessing ? 'bg-slate-300' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'}`}
-                >
-                  {isAIProcessing ? (
-                    <>
-                      <Loader2 size={20} className="animate-spin" />
-                      <span>正在智慧解析...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles size={20} />
-                      <span>開始 AI 解析</span>
-                    </>
-                  )}
-                </button>
+                <button onClick={() => setIsAddingCard(false)} className="flex-1 px-6 py-3 font-bold text-slate-600 hover:bg-white rounded-2xl border border-slate-200 transition-all">取消</button>
+                <button onClick={handleAddCard} className="flex-1 px-6 py-3 font-bold text-white bg-indigo-600 rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100">儲存卡片</button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+
+      {activeView === 'table' ? (
+        <>
+          {cards.length === 0 ? (
+        <div className="bg-white rounded-3xl p-12 border-2 border-dashed border-slate-200 text-center space-y-4">
+          <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6">
+            <CreditCardIcon size={40} />
+          </div>
+          <h3 className="text-xl font-bold text-slate-800">尚未建立信用卡資料</h3>
+          <p className="text-slate-500 max-w-sm mx-auto">請先點擊上方按鈕手動新增卡片資料。</p>
+          <button 
+            onClick={() => setIsAddingCard(true)}
+            className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black shadow-xl hover:bg-indigo-700 transition-all transform hover:scale-105"
+          >
+            立即新增卡片
+          </button>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="p-3 text-xs font-bold text-slate-500 sticky left-0 z-40 bg-slate-50 w-24 text-center border-r border-slate-200 uppercase tracking-wider">日期</th>
+                  {cards.map(card => (
+                    <th key={card.id} className="p-3 text-center border-r border-slate-200 min-w-[100px] group relative">
+                      <div className="flex flex-col items-center justify-center">
+                        <span className="text-[12px] font-black text-slate-800 leading-tight">{card.bank}</span>
+                        <span className="text-[10px] font-bold text-slate-400">{card.statementDate}日</span>
+                      </div>
+                      <button 
+                        onClick={() => setDeleteTarget({ type: 'creditCards', id: card.id, name: `${card.bank} ${card.name}` })}
+                        className="absolute -top-1 -right-1 p-1 bg-white text-rose-500 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-50 border border-slate-100"
+                      >
+                        <X size={10} />
+                      </button>
+                    </th>
+                  ))}
+                  <th className="p-3 text-xs font-bold text-indigo-500 bg-indigo-50/30 w-32 text-center uppercase tracking-wider">實付 / 未付</th>
+                </tr>
+              </thead>
+              <tbody>
+                {months.map(month => {
+                  const billMap = new Map<string, CreditCardBill>();
+                  cards.forEach(c => {
+                    const b = bills.find(bill => bill.cardId === c.id && bill.month === month);
+                    if (b) billMap.set(c.id, b);
+                  });
+
+                  const monthBillsVisible = Array.from(billMap.values());
+                  const paidTotal = monthBillsVisible.filter(b => b.isPaid).reduce((sum, b) => sum + (b.amount || 0), 0);
+                  const unpaidTotal = monthBillsVisible.filter(b => !b.isPaid).reduce((sum, b) => sum + (b.amount || 0), 0);
+                  const allPaid = cards.length > 0 && monthBillsVisible.length > 0 && monthBillsVisible.every(b => b.isPaid || b.amount === 0);
+                  
+                  return (
+                    <tr key={month} className={`border-b border-slate-100 transition-colors ${allPaid ? 'bg-emerald-50/30' : 'hover:bg-slate-50/50'}`}>
+                      <td className="p-3 py-2 text-xs font-bold text-slate-600 border-r border-slate-200 sticky left-0 z-10 bg-white whitespace-nowrap text-center">
+                        {toMinguoMonth(month)}
+                      </td>
+                      {cards.map(card => {
+                        const bill = bills.find(b => b.cardId === card.id && b.month === month);
+                        const isEditing = editingBill?.cardId === card.id && editingBill?.month === month;
+                        
+                        return (
+                          <td 
+                            key={`${card.id}-${month}`} 
+                            className={`p-1 px-2 text-right border-r border-slate-100 font-mono transition-all cursor-pointer group relative ${bill?.isPaid ? 'bg-emerald-50/50' : 'hover:bg-indigo-50/30'}`}
+                            onClick={() => !isEditing && setEditingBill({ cardId: card.id, month, amount: bill?.amount || 0 })}
+                          >
+                            <div className="flex flex-col items-end">
+                              {isEditing ? (
+                                <div className="w-full" onClick={e => e.stopPropagation()}>
+                                  <input 
+                                    autoFocus
+                                    type="number" 
+                                    className="w-full bg-white border-2 border-indigo-400 rounded px-1 text-right text-sm font-bold h-7"
+                                    value={editingBill.amount}
+                                    onChange={e => setEditingBill({ ...editingBill, amount: Number(e.target.value) })}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') handleSaveBill();
+                                      if (e.key === 'Escape') setEditingBill(null);
+                                    }}
+                                    onBlur={handleSaveBill}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-end gap-1.5 w-full h-7">
+                                  <span className={`font-black text-sm ${bill?.amount ? 'text-slate-800' : 'text-slate-300'}`}>
+                                    {bill?.amount !== undefined && bill.amount > 0 ? Math.round(bill.amount).toLocaleString() : ""}
+                                  </span>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleTogglePaid(bill?.id, card.id, month);
+                                    }}
+                                    className={`p-1 rounded-md transition-colors ${bill?.isPaid ? 'text-emerald-600 bg-emerald-100' : 'text-slate-200 hover:text-indigo-400 hover:bg-slate-100'}`}
+                                  >
+                                    <Check size={14} strokeWidth={3} />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      })}
+                      <td className={`p-3 py-2 text-right font-black text-[10px] bg-indigo-50/20 tabular-nums`}>
+                        <div className="flex flex-col">
+                          <span className="text-emerald-600">${Math.round(paidTotal).toLocaleString()}</span>
+                          <span className="text-rose-400 text-[9px] border-t border-indigo-100/30 mt-0.5 pt-0.5">${Math.round(unpaidTotal).toLocaleString()}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+          )}
+        </>
+      ) : (
+        <CreditCardCharts cards={cards} bills={bills} months={months} selectedYear={selectedYear} />
+      )}
+      
+      <div className="bg-slate-100 p-4 rounded-xl border border-slate-200 flex gap-3 items-start">
+        <Info size={20} className="text-slate-400 flex-shrink-0 mt-0.5" />
+        <div className="text-xs text-slate-500 space-y-1">
+          <p className="font-bold">操作提示：</p>
+          <ul className="list-disc list-inside">
+            <li>直接點擊金額單元格即可輸入應繳金額，支援整數自動儲存。</li>
+            <li>點擊金額旁邊的 <Check size={12} className="inline" /> 勾選框可標記該筆帳單已完成繳費。</li>
+            <li>背景呈現 <span className="inline-block w-2 h-2 bg-emerald-100 rounded-sm"></span> 綠色代表該筆或該月帳單已完成繳費。</li>
+            <li>您可以透過年份下拉選單切換不同年度的帳單紀錄。</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CreditCardCharts = ({ cards, bills, months, selectedYear }: { cards: CreditCard[], bills: CreditCardBill[], months: string[], selectedYear: number }) => {
+  const chartData = useMemo(() => {
+    // Generate data for each month of the selected year
+    return months.map(month => {
+      const billMap = new Map<string, CreditCardBill>();
+      cards.forEach(c => {
+        const b = bills.find(bill => bill.cardId === c.id && bill.month === month);
+        if (b) billMap.set(c.id, b);
+      });
+
+      const monthBillsVisible = Array.from(billMap.values());
+      const data: any = { 
+        name: month.split('-', 2)[1] + '月',
+        fullMonth: month,
+        total: monthBillsVisible.reduce((sum, b) => sum + (b.amount || 0), 0)
+      };
+      
+      cards.forEach(card => {
+        const bill = billMap.get(card.id);
+        data[card.bank] = bill?.amount || 0;
+      });
+      
+      return data;
+    });
+  }, [cards, bills, months]);
+
+  const COLORS = [
+    '#6366f1', '#ec4899', '#8b5cf6', '#10b981', '#f59e0b', 
+    '#3b82f6', '#ef4444', '#06b6d4', '#84cc16', '#a855f7'
+  ];
+
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between">
+          <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
+            <LayoutDashboard size={20} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">年度總支出</p>
+            <h4 className="text-2xl font-black text-slate-800">
+              ${chartData.reduce((sum, d) => sum + d.total, 0).toLocaleString()}
+            </h4>
+          </div>
+        </div>
+        
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between">
+          <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-4">
+            <TrendingUp size={20} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">平均每月支出</p>
+            <h4 className="text-2xl font-black text-slate-800">
+              ${Math.round(chartData.reduce((sum, d) => sum + d.total, 0) / 12).toLocaleString()}
+            </h4>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between">
+          <div className="w-10 h-10 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mb-4">
+            <CreditCardIcon size={20} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">持卡總數</p>
+            <h4 className="text-2xl font-black text-slate-800">{cards.length} 張</h4>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between">
+          <div className="w-10 h-10 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mb-4">
+            <Sparkles size={20} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">最高支出月份</p>
+            <h4 className="text-2xl font-black text-slate-800">
+              {chartData.concat().sort((a, b) => b.total - a.total)[0]?.name || 'N/A'}
+            </h4>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Total Spending Trend */}
+        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <h3 className="text-lg font-black text-slate-800">總支出趨勢</h3>
+              <p className="text-xs text-slate-400 font-bold">{selectedYear} 年度支出走勢</p>
+            </div>
+          </div>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} tickFormatter={(v) => `$${v}`} />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }}
+                />
+                <Area type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorTotal)" name="總支出" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Card Comparison */}
+        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <h3 className="text-lg font-black text-slate-800">各卡片支出對比</h3>
+              <p className="text-xs text-slate-400 font-bold">不同銀行的每月支出佔比</p>
+            </div>
+          </div>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} tickFormatter={(v) => `$${v}`} />
+                <Tooltip 
+                  cursor={{fill: '#f8fafc'}}
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }}
+                />
+                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '11px', fontWeight: 'bold' }} />
+                {cards.map((card, idx) => (
+                  <Bar 
+                    key={card.id} 
+                    dataKey={card.bank} 
+                    stackId="a" 
+                    fill={COLORS[idx % COLORS.length]} 
+                    radius={idx === cards.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} 
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
@@ -5430,9 +5558,10 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
               </thead>
               <tbody>
                 {ages.map(age => {
-                  const insuranceIds = insurances.map(i => i.id);
-                  const agePremiums = premiums.filter(p => p.age === age && insuranceIds.includes(p.insuranceId));
-                  const totalForAge = agePremiums.reduce((sum, p) => sum + p.premium, 0);
+                  const totalForAge = insurances.reduce((sum, ins) => {
+                    const pre = premiums.find(p => p.insuranceId === ins.id && p.age === age);
+                    return sum + (pre?.premium || 0);
+                  }, 0);
                   const isCurrent = age === currentAge;
                   
                   return (
