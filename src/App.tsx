@@ -31,6 +31,7 @@ import {
   Info,
   LayoutDashboard,
   FileText,
+  FileUp,
   AlertCircle,
   CheckCircle2,
   Copy,
@@ -222,17 +223,17 @@ const fromROCDate = (rocDate: string) => {
 // --- AI Service ---
 const getApiKey = () => localStorage.getItem('GEMINI_API_KEY') || process.env.GEMINI_API_KEY;
 
-const analyzeSalaryInput = async (input: { text?: string, image?: string }) => {
+const analyzeSalaryInput = async (input: { text?: string, image?: string, mimeType?: string }) => {
   const apiKey = getApiKey();
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY is not configured. Please set it in Settings.");
   }
   const ai = new GoogleGenAI({ apiKey });
   
-  const prompt = `你是一個專業的財務分析助手。請分析提供的公務員薪資表格（可能是文字、表格或圖片）。
+  const prompt = `你是一個專業的財務分析助手。請分析提供的公務員薪資表格（可能是文字、表格、圖片或 PDF）。
   表格包含多個月份的資料，請提取每一列的資訊並以 JSON 陣列格式返回。
   
-  欄位對照說明 (請嚴格對應圖片中的欄位)：
+  欄位對照說明 (請嚴格對應文件中的欄位)：
   - 年月 -> date (請轉換為 民國年-月 格式，例如 115年1月 轉換為 115-01)
   - 職等階 -> rank (例如：薦任七職等、委任五職等)
   - 俸點 -> salaryPoint (例如：505、400)
@@ -275,14 +276,14 @@ const analyzeSalaryInput = async (input: { text?: string, image?: string }) => {
   if (input.image) {
     contents.push({
       inlineData: {
-        mimeType: "image/png",
+        mimeType: input.mimeType || "image/png",
         data: input.image.split(',')[1]
       }
     });
   }
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-1.5-flash",
     contents: { parts: contents },
     config: {
       responseMimeType: "application/json",
@@ -354,7 +355,7 @@ const analyzeTaxDocument = async (fileBase64: string, mimeType: string) => {
   2. 數值均為數字類型。`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-1.5-flash",
     contents: {
       parts: [
         { text: prompt },
@@ -407,7 +408,7 @@ const analyzeTaxStandards = async (fileBase64: string, mimeType: string) => {
   3. 級距請按金額從小到大排列。`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-1.5-flash",
     contents: {
       parts: [
         { text: prompt },
@@ -542,7 +543,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiInput, setAiInput] = useState("");
-  const [aiImage, setAiImage] = useState<string | null>(null);
+  const [aiFileData, setAiFileData] = useState<{ url: string, type: string, name: string } | null>(null);
   const [editingCell, setEditingCell] = useState<{ id: string, field: keyof SalaryRecord } | null>(null);
   const [editValue, setEditValue] = useState<string | number>("");
   const [isComparing, setIsComparing] = useState(false);
@@ -791,12 +792,13 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
   };
 
   const handleAIAnalyze = async () => {
-    if (!aiInput && !aiImage) return;
+    if (!aiInput && !aiFileData) return;
     setIsAnalyzing(true);
     try {
       const results = await analyzeSalaryInput({ 
         text: aiInput, 
-        image: aiImage || undefined 
+        image: aiFileData?.url || undefined,
+        mimeType: aiFileData?.type
       });
       
       for (const res of results) {
@@ -810,7 +812,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
       
       setIsAIModalOpen(false);
       setAiInput("");
-      setAiImage(null);
+      setAiFileData(null);
     } catch (error) {
       console.error("AI Analysis failed:", error);
       alert("AI 分析失敗，請重試或手動輸入。");
@@ -865,7 +867,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
           if (blob) {
             const reader = new FileReader();
             reader.onloadend = () => {
-              setAiImage(reader.result as string);
+              setAiFileData({ url: reader.result as string, type: blob.type, name: blob.name || 'pasted-image.png' });
             };
             reader.readAsDataURL(blob);
           }
@@ -882,7 +884,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setAiImage(reader.result as string);
+        setAiFileData({ url: reader.result as string, type: file.type, name: file.name });
       };
       reader.readAsDataURL(file);
     }
@@ -1091,26 +1093,33 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                 </div>
                 
                 <div className="space-y-2">
-                  <label className="block text-sm font-bold text-slate-700">或上傳薪資單圖片</label>
+                  <label className="block text-sm font-bold text-slate-700">或上傳薪資單檔案 (圖片或 PDF)</label>
                   <div className="flex items-center justify-center w-full">
                     <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
                       <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        {aiImage ? (
-                          <img src={aiImage} alt="Preview" className="h-24 object-contain" />
+                        {aiFileData ? (
+                          aiFileData.type === 'application/pdf' ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <FileText className="text-rose-500" size={32} />
+                              <p className="text-[10px] font-bold text-slate-500">{aiFileData.name}</p>
+                            </div>
+                          ) : (
+                            <img src={aiFileData.url} alt="Preview" className="h-24 object-contain" />
+                          )
                         ) : (
                           <>
                             <Plus className="w-8 h-8 mb-4 text-slate-400" />
-                            <p className="mb-2 text-sm text-slate-500 font-semibold">點擊上傳、拖曳或直接貼上圖片</p>
+                            <p className="mb-2 text-sm text-slate-500 font-semibold">點擊上傳或 PDF 文件</p>
                           </>
                         )}
                       </div>
-                      <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                      <input type="file" className="hidden" accept="image/*,application/pdf" onChange={handleImageUpload} />
                     </label>
                   </div>
                 </div>
 
                 <div className="bg-amber-50 p-4 rounded-xl text-xs text-amber-700 leading-relaxed">
-                  💡 提示：您可以直接從 Excel 貼上表格，或是上傳薪資單的照片。AI 會自動嘗試辨識本俸、加給及各項扣繳金額。
+                  💡 提示：您可以直接從 Excel 貼上表格，或是上傳薪資單的照片或 PDF。AI 會自動嘗試辨識本俸、加給及各項扣繳金額。
                 </div>
               </div>
               <div className="p-6 bg-slate-50 flex justify-end gap-3">
@@ -1121,7 +1130,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                   取消
                 </button>
                 <button 
-                  disabled={isAnalyzing || (!aiInput && !aiImage)}
+                  disabled={isAnalyzing || (!aiInput && !aiFileData)}
                   onClick={handleAIAnalyze}
                   className="flex items-center gap-2 bg-amber-500 text-white px-8 py-2 rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-all"
                 >
@@ -2467,7 +2476,7 @@ ${text}
 }`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-1.5-flash",
         contents: { parts: [{ text: prompt }] },
         config: {
           responseMimeType: "application/json",
@@ -2902,7 +2911,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
 
   // AI Recognition State
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
-  const [aiImage, setAiImage] = useState<string | null>(null);
+  const [aiFileData, setAiFileData] = useState<{ url: string, type: string, name: string } | null>(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [aiResult, setAiResult] = useState<any[] | null>(null);
 
@@ -3151,7 +3160,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
   }, [user.uid]);
 
   const handleAIStockRecognition = async () => {
-    if (!aiImage) return;
+    if (!aiFileData) return;
     setIsAIProcessing(true);
     try {
       const apiKey = getApiKey();
@@ -3159,7 +3168,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
         throw new Error("GEMINI_API_KEY is not configured. Please set it in Settings.");
       }
       const ai = new GoogleGenAI({ apiKey });
-      const prompt = `這是一張股票或基金庫存明細的截圖（可能來自國泰證券、Firstrade 或 鉅亨買基金）。請辨識圖中的資訊並以 JSON 格式回傳一個陣列。
+      const prompt = `這是一份股票或基金庫存明細文件（圖片或 PDF，可能來自國泰證券、Firstrade 或 鉅亨買基金）。請辨識圖中的資訊並以 JSON 格式回傳一個陣列。
       每個物件包含：
       - symbol: 股票代號或基金代號 (例如: 0050, AAPL, 若為基金則填寫代號或 NA)
       - name: 名稱 (例如: 元大台灣50, Apple, 統一黑馬基金)
@@ -3170,14 +3179,14 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       請只回傳 JSON 陣列，不要有其他文字。`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-1.5-flash",
         contents: {
           parts: [
             { text: prompt },
             {
               inlineData: {
-                mimeType: "image/jpeg",
-                data: aiImage.split(',')[1]
+                mimeType: aiFileData.type,
+                data: aiFileData.url.split(',')[1]
               }
             }
           ]
@@ -3247,7 +3256,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       
       setIsAIModalOpen(false);
       setAiResult(null);
-      setAiImage(null);
+      setAiFileData(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, source === 'FundRich' ? 'funds' : 'stocks');
     }
@@ -3717,23 +3726,23 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                   const file = item.getAsFile();
                   if (file) {
                     const reader = new FileReader();
-                    reader.onloadend = () => setAiImage(reader.result as string);
+                    reader.onloadend = () => setAiFileData({ url: reader.result as string, type: file.type, name: file.name || 'pasted-image.png' });
                     reader.readAsDataURL(file);
                   }
                 }
               }}>
-                {!aiImage ? (
+                {!aiFileData ? (
                   <div className="border-2 border-dashed border-slate-200 rounded-xl p-12 text-center">
                     <input 
                       type="file" 
-                      accept="image/*" 
+                      accept="image/*,application/pdf" 
                       className="hidden" 
                       id="stock-ai-upload" 
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
                           const reader = new FileReader();
-                          reader.onloadend = () => setAiImage(reader.result as string);
+                          reader.onloadend = () => setAiFileData({ url: reader.result as string, type: file.type, name: file.name });
                           reader.readAsDataURL(file);
                         }
                       }}
@@ -3750,10 +3759,17 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="relative rounded-xl overflow-hidden border border-slate-200">
-                      <img src={aiImage} alt="Preview" className="w-full h-auto max-h-64 object-contain bg-slate-50" />
+                    <div className="relative rounded-xl overflow-hidden border border-slate-200 flex items-center justify-center bg-slate-50 min-h-[200px]">
+                      {aiFileData.type === 'application/pdf' ? (
+                        <div className="flex flex-col items-center gap-3 p-8">
+                          <FileText size={64} className="text-rose-500" />
+                          <p className="text-sm font-bold text-slate-600">{aiFileData.name}</p>
+                        </div>
+                      ) : (
+                        <img src={aiFileData.url} alt="Preview" className="w-full h-auto max-h-64 object-contain" />
+                      )}
                       <button 
-                        onClick={() => { setAiImage(null); setAiResult(null); }}
+                        onClick={() => { setAiFileData(null); setAiResult(null); }}
                         className="absolute top-2 right-2 bg-white/80 backdrop-blur p-1 rounded-full text-rose-500 shadow-sm"
                       >
                         <X size={20} />
@@ -5262,7 +5278,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
   const [newInsurance, setNewInsurance] = useState<Partial<Insurance>>({ name: '', provider: '', type: '' });
   
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
-  const [aiImage, setAiImage] = useState<string | null>(null);
+  const [aiFileData, setAiFileData] = useState<{ url: string, type: string, name: string } | null>(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [aiMode, setAiMode] = useState<'premium' | 'contract'>('premium'); // New state for AI mode
 
@@ -5285,15 +5301,15 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
   }, []);
 
   const handleContractAnalysis = async () => {
-    if (!aiImage || !selectedInsuranceId) {
-      alert('請先選擇要分析的保險產品並上傳截圖');
+    if (!aiFileData || !selectedInsuranceId) {
+      alert('請先選擇要分析的保險產品並上傳契約文件 (圖片或 PDF)');
       return;
     }
     setIsAIProcessing(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const targetIns = insurances.find(i => i.id === selectedInsuranceId);
-      const prompt = `你是一個專業的保險契約分析師。請分析這張「${targetIns?.provider} ${targetIns?.name}」的保險契約或理賠項目截圖。
+      const prompt = `你是一個專業的保險契約分析師。請分析這份「${targetIns?.provider} ${targetIns?.name}」的保險契約文件。
 1. 請總結該保險的核心保障項目（例如：住院日額、特定手術、意外失能等）。
 2. 請提取關鍵理賠額度。
 3. 以結構化 Markdown 格式回傳。
@@ -5305,10 +5321,10 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
 }`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-1.5-flash",
         contents: {
           parts: [
-            { inlineData: { mimeType: "image/png", data: aiImage.split(',')[1] } },
+            { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
             { text: prompt }
           ]
         },
@@ -5324,7 +5340,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
         alert('保險契約分析完成！');
       }
       setIsAIModalOpen(false);
-      setAiImage(null);
+      setAiFileData(null);
     } catch (error) {
       console.error('AI Error:', error);
       alert('分析失敗');
@@ -5357,7 +5373,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
 請以專業、親切且易懂的方式回答，並明確指出理賠條件（如果已知）。如果資訊不足，請禮貌說明。`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-1.5-flash",
         contents: { parts: [{ text: prompt }] }
       });
 
@@ -5405,11 +5421,11 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
   };
 
   const handleAIProcess = async () => {
-    if (!aiImage) return;
+    if (!aiFileData) return;
     setIsAIProcessing(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `你是一個專業的保險精算數據分析師。請分析這張「保險費率對照表」截圖。
+      const prompt = `你是一個專業的保險精算數據分析師。請分析這份「保險費率對照表」文件 (圖片或 PDF)。
 這是一個結構化表格：橫列（Row）通常是「年齡」，縱欄（Column）則是不同的「保險產品」。
 請精確提取每個年齡對應到的各個保險產品金額。
 
@@ -5427,10 +5443,10 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
 注意：如果產品名稱在系統清單中找不到，請放入 newInsurances 以便新增。`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-1.5-flash",
         contents: {
           parts: [
-            { inlineData: { mimeType: "image/png", data: aiImage.split(',')[1] } },
+            { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
             { text: prompt }
           ]
         },
@@ -5458,7 +5474,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
 
       alert('AI 保費辨識匯入完成！');
       setIsAIModalOpen(false);
-      setAiImage(null);
+      setAiFileData(null);
     } catch (error) {
       console.error('AI Error:', error);
       alert('AI 辨識失敗。');
@@ -5789,29 +5805,37 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                 <button onClick={() => setIsAIModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
               </div>
               <div className="p-8">
-                {!aiImage ? (
+                {!aiFileData ? (
                   <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-3xl p-12 hover:border-emerald-300 hover:bg-emerald-50/30 transition-all cursor-pointer group">
                     <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300 group-hover:bg-emerald-100 group-hover:text-emerald-500 transition-colors mb-4">
-                      <Camera size={32} />
+                      <FileUp size={32} />
                     </div>
-                    <p className="text-slate-600 font-bold">{aiMode === 'premium' ? '上傳費率對照表截圖' : '上傳理賠細項截圖'}</p>
+                    <p className="text-slate-600 font-bold">{aiMode === 'premium' ? '上傳費率對照表 (圖片或 PDF)' : '上傳契約理賠細項 (圖片或 PDF)'}</p>
                     <p className="text-xs text-slate-400 mt-2 text-center">
-                      {aiMode === 'premium' ? '請確保截圖中包含「年齡」列與各產品保費數據' : '請上傳顯示保障項目、額度或給付條件的表格截圖'}
+                      {aiMode === 'premium' ? '請確保文件包含「年齡」與保費數據' : '請上傳顯示保障項目、額度或給付條件的文件'}
                     </p>
-                    <input type="file" className="hidden" accept="image/*" onChange={e => {
+                    <input type="file" className="hidden" accept="image/*,application/pdf" onChange={e => {
                       const file = e.target.files?.[0];
                       if (file) {
                         const r = new FileReader();
-                        r.onloadend = () => setAiImage(r.result as string);
+                        r.onloadend = () => setAiFileData({ url: r.result as string, type: file.type, name: file.name });
                         r.readAsDataURL(file);
                       }
                     }} />
                   </label>
                 ) : (
                   <div className="space-y-4">
-                    <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 shadow-inner">
-                      <img src={aiImage} className="w-full h-full object-contain" />
-                      <button onClick={() => setAiImage(null)} className="absolute top-2 right-2 p-1.5 bg-rose-500 text-white rounded-lg shadow-lg hover:bg-rose-600 transition-colors"><X size={16} /></button>
+                    <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 shadow-inner flex items-center justify-center">
+                      {aiFileData.type === 'application/pdf' ? (
+                        <div className="flex flex-col items-center gap-3">
+                          <FileText size={64} className="text-rose-500" />
+                          <p className="text-sm font-bold text-slate-600">{aiFileData.name}</p>
+                          <span className="text-[10px] bg-rose-100 text-rose-600 px-3 py-1 rounded-full font-bold uppercase tracking-widest">PDF 文件</span>
+                        </div>
+                      ) : (
+                        <img src={aiFileData.url} className="w-full h-full object-contain" />
+                      )}
+                      <button onClick={() => setAiFileData(null)} className="absolute top-4 right-4 p-2 bg-rose-500 text-white rounded-xl shadow-lg hover:bg-rose-600 transition-colors"><X size={20} /></button>
                     </div>
                     <div className="flex gap-3">
                       <button 
@@ -5820,7 +5844,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                         className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-white transition-all shadow-lg ${isAIProcessing ? 'bg-slate-300' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'}`}
                       >
                         {isAIProcessing ? <Loader2 className="animate-spin" size={24} /> : <Sparkles size={24} />}
-                        {isAIProcessing ? '正在辨識解析...' : '開始 AI 分析'}
+                        {isAIProcessing ? '正在嘗試讀取文件...' : '開始 AI 文件分析'}
                       </button>
                     </div>
                   </div>
