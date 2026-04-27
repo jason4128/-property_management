@@ -1865,7 +1865,8 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
       if (existing) {
         await updateDoc(doc(db, 'creditCardBills', existing.id), { 
           amount: roundedAmount,
-          isPaid: existing.isPaid ?? shouldBePaid
+          isPaid: existing.isPaid ?? shouldBePaid,
+          uid: existing.uid || user.uid
         });
       } else {
         await addDoc(collection(db, 'creditCardBills'), { 
@@ -1910,7 +1911,10 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
     try {
       if (billId) {
         const bill = bills.find(b => b.id === billId);
-        await updateDoc(doc(db, 'creditCardBills', billId), { isPaid: !bill?.isPaid });
+        await updateDoc(doc(db, 'creditCardBills', billId), { 
+          isPaid: !bill?.isPaid,
+          uid: bill?.uid || user.uid
+        });
       } else if (cardId && month) {
         await addDoc(collection(db, 'creditCardBills'), { cardId, month, amount: 0, isPaid: true, uid: user.uid });
       }
@@ -1924,7 +1928,10 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
     try {
       const yearBills = bills.filter(b => b.month.startsWith(selectedYear.toString()) && b.amount > 0 && !b.isPaid);
       for (const bill of yearBills) {
-        await updateDoc(doc(db, 'creditCardBills', bill.id), { isPaid: true });
+        await updateDoc(doc(db, 'creditCardBills', bill.id), { 
+          isPaid: true,
+          uid: bill.uid || user.uid
+        });
       }
       alert(`已標記 ${yearBills.length} 筆帳單為已繳費`);
     } catch (error) {
@@ -2939,23 +2946,19 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
             const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
             const proxies = [
               (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-              (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
               (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
             ];
             
-            for (const proxy of proxies) {
-              try {
-                const response = await fetch(proxy(url));
-                if (response.ok) {
-                  const rawJson = await response.json();
-                  const parsed = rawJson.contents ? JSON.parse(rawJson.contents) : rawJson;
-                  if (parsed.quoteResponse?.result?.[0]) {
-                    quote = parsed.quoteResponse.result[0];
-                    break;
-                  }
-                }
-              } catch (e) {}
-            }
+            quote = await Promise.any(proxies.map(async proxy => {
+              const response = await fetch(proxy(url));
+              if (!response.ok) throw new Error('failed');
+              const rawJson = await response.json();
+              const parsed = rawJson.contents ? JSON.parse(rawJson.contents) : rawJson;
+              if (parsed.quoteResponse?.result?.[0]) {
+                return parsed.quoteResponse.result[0];
+              }
+              throw new Error('not found');
+            }));
             if (quote) break;
           } catch (e) {}
         }
@@ -2963,7 +2966,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       };
 
       const results = [];
-      const batchSize = 5;
+      const batchSize = 10;
       for (let i = 0; i < symbols.length; i += batchSize) {
         setRefreshStatus(`獲取現價 (${i + 1}/${symbols.length})...`);
         const batch = symbols.slice(i, i + batchSize);
@@ -3011,35 +3014,28 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
             
             const proxies = [
               (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-              (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
               (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
             ];
 
-            for (const proxy of proxies) {
-              try {
-                if (!quote) {
-                  const qRes = await fetch(proxy(quoteUrl));
-                  if (qRes.ok) {
-                    const qJson = await qRes.json();
-                    const qParsed = qJson.contents ? JSON.parse(qJson.contents) : qJson;
-                    quote = qParsed.quoteResponse?.result?.[0];
-                  }
-                }
+            const fetchWithProxy = async (url: string) => {
+              return await Promise.any(proxies.map(async proxy => {
+                const res = await fetch(proxy(url));
+                if (!res.ok) throw new Error('failed');
+                const rawJson = await res.json();
+                return rawJson.contents ? JSON.parse(rawJson.contents) : rawJson;
+              }));
+            };
 
-                if (!chartData) {
-                  const cRes = await fetch(proxy(chartUrl));
-                  if (cRes.ok) {
-                    const cJson = await cRes.json();
-                    const cParsed = cJson.contents ? JSON.parse(cJson.contents) : cJson;
-                    chartData = cParsed.chart?.result?.[0];
-                  }
-                }
-                
-                if (chartData && quote) break;
-              } catch (e) {
-                // Ignore single proxy failure
+            try {
+              if (!quote) {
+                const qParsed = await fetchWithProxy(quoteUrl);
+                quote = qParsed.quoteResponse?.result?.[0];
               }
-            }
+              if (!chartData) {
+                const cParsed = await fetchWithProxy(chartUrl);
+                chartData = cParsed.chart?.result?.[0];
+              }
+            } catch (e) {}
 
             if (chartData || quote) break;
           } catch (e) {}
