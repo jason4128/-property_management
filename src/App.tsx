@@ -507,7 +507,7 @@ const EditableCell = ({
       className={`cursor-pointer hover:bg-indigo-50/50 p-1 rounded transition-colors ${className}`}
       title="雙擊以編輯"
     >
-      {type === "number" ? value.toLocaleString() : value}
+      {type === "number" ? (value ?? 0).toLocaleString() : value}
     </div>
   );
 };
@@ -981,7 +981,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="displayYear" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={(v) => `${(v/10000).toFixed(0)}萬`} />
-                  <Tooltip formatter={(v: number) => [`$${v.toLocaleString()}`, '年實領']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Tooltip formatter={(v: any) => [`$${(v || 0).toLocaleString()}`, '年實領']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                   <Area type="monotone" dataKey="年實領總額" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#colorNet)" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -1005,7 +1005,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="displayYear" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
-                  <Tooltip formatter={(v: number) => [`$${v.toLocaleString()}`, '平均月薪']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Tooltip formatter={(v: number) => [`$${(v || 0).toLocaleString()}`, '平均月薪']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                   <Line type="monotone" dataKey="平均月薪(含加給)" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#10b981' }} activeDot={{ r: 6 }} />
                 </LineChart>
               </ResponsiveContainer>
@@ -1035,7 +1035,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="displayYear" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={(v) => `${(v/10000).toFixed(0)}萬`} />
-                  <Tooltip formatter={(v: number) => [`$${v.toLocaleString()}`, '獎金總額']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Tooltip formatter={(v: number) => [`$${(v || 0).toLocaleString()}`, '獎金總額']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                   <Area type="monotone" dataKey="年終/考績總額" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorBonus)" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -1067,8 +1067,8 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
           </div>
           <div className="text-right">
             <p className="text-sm text-rose-600 font-medium">累計差額 (應追領/追扣)</p>
-            <p className={`text-2xl font-black ${totalOwed > 0 ? 'text-emerald-600' : totalOwed < 0 ? 'text-rose-600' : 'text-slate-400'}`}>
-              {totalOwed > 0 ? `+${totalOwed.toLocaleString()}` : totalOwed.toLocaleString()} 元
+            <p className={`text-2xl font-black ${(totalOwed || 0) > 0 ? 'text-emerald-600' : (totalOwed || 0) < 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+              {(totalOwed || 0) > 0 ? `+${(totalOwed || 0).toLocaleString()}` : (totalOwed || 0).toLocaleString()} 元
             </p>
           </div>
         </motion.div>
@@ -1759,7 +1759,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         className={isComparing && diff && diff.insuranceDiff !== 0 ? 'font-bold underline' : ''}
                       />
                       {isComparing && diff && diff.insuranceDiff !== 0 && (
-                        <div className="text-[10px] text-rose-400">預估: ${diff.expectedDeductions.civilServiceInsurance.toLocaleString()}</div>
+                        <div className="text-[10px] text-rose-400">預估: ${(diff.expectedDeductions.civilServiceInsurance || 0).toLocaleString()}</div>
                       )}
                     </td>
                     <td className="p-3 text-right text-rose-500">
@@ -1770,7 +1770,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         className={isComparing && diff && diff.healthDiff !== 0 ? 'font-bold underline' : ''}
                       />
                       {isComparing && diff && diff.healthDiff !== 0 && (
-                        <div className="text-[10px] text-rose-400">預估: ${diff.expectedDeductions.healthInsurance.toLocaleString()}</div>
+                        <div className="text-[10px] text-rose-400">預估: ${(diff.expectedDeductions.healthInsurance || 0).toLocaleString()}</div>
                       )}
                     </td>
                     <td className="p-3 text-right text-rose-500">
@@ -1781,24 +1781,24 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         className={isComparing && diff && diff.pensionDiff !== 0 ? 'font-bold underline' : ''}
                       />
                       {isComparing && diff && diff.pensionDiff !== 0 && (
-                        <div className="text-[10px] text-rose-400">預估: ${diff.expectedDeductions.pensionFund.toLocaleString()}</div>
+                        <div className="text-[10px] text-rose-400">預估: ${(diff.expectedDeductions.pensionFund || 0).toLocaleString()}</div>
                       )}
                     </td>
                     <td className="p-3 text-right text-amber-600">
                       <EditableCell value={r.retroactivePay} type="number" onSave={(val) => handleUpdate(r.id, 'retroactivePay', val)} />
                     </td>
-                    <td className="p-3 text-right text-emerald-600 font-bold bg-emerald-50/30">${net.toLocaleString()}</td>
+                    <td className="p-3 text-right text-emerald-600 font-bold bg-emerald-50/30">${(net || 0).toLocaleString()}</td>
                     
                     {isComparing && (
                       <td className={`p-3 text-right font-bold bg-rose-50 ${diff && diff.totalDiff > 0 ? 'text-emerald-600' : diff && diff.totalDiff < 0 ? 'text-rose-600' : 'text-slate-400'}`}>
-                        {diff ? (diff.totalDiff > 0 ? `+${diff.totalDiff.toLocaleString()}` : diff.totalDiff.toLocaleString()) : '-'}
+                        {diff ? (diff.totalDiff > 0 ? `+${(diff.totalDiff || 0).toLocaleString()}` : (diff.totalDiff || 0).toLocaleString()) : '-'}
                       </td>
                     )}
 
                     <td className="p-3 text-right text-indigo-600 font-medium">
                       <EditableCell value={r.taxableIncome} type="number" onSave={(val) => handleUpdate(r.id, 'taxableIncome', val)} />
                     </td>
-                    <td className="p-3 text-right text-slate-400 text-xs">${annualTaxable.toLocaleString()}</td>
+                    <td className="p-3 text-right text-slate-400 text-xs">${(annualTaxable || 0).toLocaleString()}</td>
                     <td className="p-3 text-slate-500 italic text-xs">
                       <EditableCell value={r.note || ""} onSave={(val) => handleUpdate(r.id, 'note', val)} className="min-w-[100px]" />
                     </td>
@@ -2172,7 +2172,7 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
                               ) : (
                                 <div className="flex items-center justify-end gap-1.5 w-full h-7">
                                   <span className={`font-black text-sm ${bill?.amount ? 'text-slate-800' : 'text-slate-300'}`}>
-                                    {bill?.amount !== undefined && bill.amount > 0 ? Math.round(bill.amount).toLocaleString() : ""}
+                                    {bill?.amount !== undefined && bill.amount > 0 ? (Math.round(bill.amount) || 0).toLocaleString() : ""}
                                   </span>
                                   <button 
                                     onClick={(e) => {
@@ -2191,8 +2191,8 @@ const CreditCardPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
                       })}
                       <td className={`p-3 py-2 text-right font-black text-[10px] bg-indigo-50/20 tabular-nums`}>
                         <div className="flex flex-col">
-                          <span className="text-emerald-600">${Math.round(paidTotal).toLocaleString()}</span>
-                          <span className="text-rose-400 text-[9px] border-t border-indigo-100/30 mt-0.5 pt-0.5">${Math.round(unpaidTotal).toLocaleString()}</span>
+                          <span className="text-emerald-600">${(Math.round(paidTotal) || 0).toLocaleString()}</span>
+                          <span className="text-rose-400 text-[9px] border-t border-indigo-100/30 mt-0.5 pt-0.5">${(Math.round(unpaidTotal) || 0).toLocaleString()}</span>
                         </div>
                       </td>
                     </tr>
@@ -2266,7 +2266,7 @@ const CreditCardCharts = ({ cards, bills, months, selectedYear }: { cards: Credi
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">年度總支出</p>
             <h4 className="text-2xl font-black text-slate-800">
-              ${chartData.reduce((sum, d) => sum + d.total, 0).toLocaleString()}
+              ${(chartData.reduce((sum, d) => sum + d.total, 0) || 0).toLocaleString()}
             </h4>
           </div>
         </div>
@@ -2278,7 +2278,7 @@ const CreditCardCharts = ({ cards, bills, months, selectedYear }: { cards: Credi
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">平均每月支出</p>
             <h4 className="text-2xl font-black text-slate-800">
-              ${Math.round(chartData.reduce((sum, d) => sum + d.total, 0) / 12).toLocaleString()}
+              ${(Math.round(chartData.reduce((sum, d) => sum + d.total, 0) / 12) || 0).toLocaleString()}
             </h4>
           </div>
         </div>
@@ -2689,7 +2689,7 @@ ${text}
           <div className="flex items-center gap-4 px-2">
             <h3 className="font-black text-slate-400 uppercase tracking-[0.2em] text-xs">{cat.title}</h3>
             <div className="h-px bg-slate-200 flex-1"></div>
-            <span className="text-xs font-bold text-slate-400">小計: ${cat.data.reduce((sum, a) => sum + (a.balance || 0), 0).toLocaleString()}</span>
+            <span className="text-xs font-bold text-slate-400">小計: ${(cat.data.reduce((sum, a) => sum + (a.balance || 0), 0) || 0).toLocaleString()}</span>
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden overflow-x-auto">
@@ -2783,7 +2783,7 @@ ${text}
                           <div className="mt-1 w-32 ml-auto">
                             <div className="flex justify-between text-[9px] mb-1 font-bold text-slate-400">
                               <span>進度: {limitPercent.toFixed(0)}%</span>
-                              <span>限額: {(acc.balanceLimit / 10000).toLocaleString()}萬</span>
+                              <span>限額: {((acc.balanceLimit || 0) / 10000).toLocaleString()}萬</span>
                             </div>
                             <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden">
                               <div className={`h-full transition-all duration-500 ${limitPercent >= 100 ? 'bg-amber-400' : 'bg-indigo-500'}`} style={{ width: `${limitPercent}%` }}></div>
@@ -2795,7 +2795,7 @@ ${text}
                         {acc.interestRate ? (
                           <div className="space-y-0.5">
                             <p className="font-bold text-indigo-600">{acc.interestRate}%</p>
-                            <p className="text-[10px] text-slate-400 font-bold tracking-tight">預估年{catIdx === 2 ? '利息' : '收益'}: ${annualInterest.toFixed(0).toLocaleString()}</p>
+                            <p className="text-[10px] text-slate-400 font-bold tracking-tight">預估年{catIdx === 2 ? '利息' : '收益'}: ${(Math.round(annualInterest || 0)).toLocaleString()}</p>
                           </div>
                         ) : '-'}
                       </td>
@@ -3484,10 +3484,10 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
           </div>
           <div className="flex flex-col md:items-end gap-1 text-sm bg-slate-50 p-3 rounded-lg md:bg-transparent md:p-0">
              <div className="flex flex-col md:flex-row gap-2 md:gap-4">
-              <div className="text-slate-500">總成本: <span className="font-bold text-slate-800">${Math.floor(portfolioSummary.totalCost).toLocaleString()} TWD</span></div>
-              <div className="text-slate-500">總市值: <span className="font-bold text-slate-800">${Math.floor(portfolioSummary.totalVal).toLocaleString()} TWD</span></div>
+              <div className="text-slate-500">總成本: <span className="font-bold text-slate-800">${(Math.floor(portfolioSummary.totalCost) || 0).toLocaleString()} TWD</span></div>
+              <div className="text-slate-500">總市值: <span className="font-bold text-slate-800">${(Math.floor(portfolioSummary.totalVal) || 0).toLocaleString()} TWD</span></div>
               <div className={`font-bold ${portfolioSummary.totalProfit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                總損益: ${Math.floor(portfolioSummary.totalProfit).toLocaleString()} TWD
+                總損益: ${(Math.floor(portfolioSummary.totalProfit) || 0).toLocaleString()} TWD
               </div>
             </div>
             {(portfolioSummary.totalDividend > 0) && (
@@ -3547,7 +3547,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                     </td>
                     <td className="px-4 py-3 font-medium text-indigo-600 hover:underline" onClick={() => setSelectedStock(stock)}>{stock.symbol} ({stock.name})</td>
                     <td className="px-4 py-3">{stock.source}</td>
-                    <td className="px-4 py-3">{stock.shares.toLocaleString()}</td>
+                    <td className="px-4 py-3">{(stock.shares || 0).toLocaleString()}</td>
                     <td className="px-4 py-3">${Math.floor(cost).toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
                     <td className="px-4 py-3 text-indigo-600 font-bold">${stock.currentPrice}</td>
                     <td className="px-4 py-3">${Math.floor(val).toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
@@ -6327,26 +6327,26 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">年度總預算</p>
-          <p className="text-2xl font-black text-slate-900">${Math.floor(stats.yearlyEquivalentTotal).toLocaleString()}</p>
+          <p className="text-2xl font-black text-slate-900">${(Math.floor(stats.yearlyEquivalentTotal) || 0).toLocaleString()}</p>
           <div className="flex justify-between text-[11px] mt-2 font-bold text-slate-500">
-            <span>已支出: ${Math.floor(stats.totalSpent).toLocaleString()}</span>
-            <span>剩餘: ${Math.floor(stats.remaining).toLocaleString()}</span>
+            <span>已支出: ${(Math.floor(stats.totalSpent) || 0).toLocaleString()}</span>
+            <span>剩餘: ${(Math.floor(stats.remaining) || 0).toLocaleString()}</span>
           </div>
         </div>
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">每月預計支出</p>
-          <p className="text-2xl font-black text-indigo-600">${Math.floor(stats.monthlyExpense).toLocaleString()}</p>
-          <p className="text-[10px] text-slate-400 mt-1 font-medium">包含年度項目摊提 (${Math.floor(stats.yearlyTotal/12).toLocaleString()}/月)</p>
+          <p className="text-2xl font-black text-indigo-600">${(Math.floor(stats.monthlyExpense) || 0).toLocaleString()}</p>
+          <p className="text-[10px] text-slate-400 mt-1 font-medium">包含年度項目摊提 (${(Math.floor(stats.yearlyTotal/12) || 0).toLocaleString()}/月)</p>
         </div>
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">平均月實領薪資</p>
-          <p className="text-2xl font-black text-emerald-600">${Math.floor(stats.avgMonthlyIncome).toLocaleString()}</p>
+          <p className="text-2xl font-black text-emerald-600">${(Math.floor(stats.avgMonthlyIncome) || 0).toLocaleString()}</p>
           <p className="text-[10px] text-slate-400 mt-1 font-medium">基於 {selectedYear} 年薪資紀錄</p>
         </div>
         <div className="bg-white p-5 rounded-2xl border border-indigo-600/20 bg-indigo-50/10 shadow-sm">
           <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-1">預計每月可存款額</p>
           <p className={`text-2xl font-black ${stats.canSave >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
-            ${Math.floor(stats.canSave).toLocaleString()}
+            ${(Math.floor(stats.canSave) || 0).toLocaleString()}
           </p>
           <p className="text-[10px] text-slate-400 mt-1 font-medium">薪資 - 每月預算分配</p>
         </div>
@@ -6457,11 +6457,11 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         onChange={e => setEditingData({...editingData, allocated: Number(e.target.value)})}
                       />
                     ) : (
-                      `$${budget.allocated.toLocaleString()}`
+                      `$${(budget.allocated || 0).toLocaleString()}`
                     )}
                   </td>
                   <td className="px-3 py-1.5 text-right font-mono font-bold text-indigo-600 text-xs">
-                    ${yearlyEquiv.toLocaleString()}
+                    ${(yearlyEquiv || 0).toLocaleString()}
                   </td>
                   <td className="px-3 py-1.5 text-right font-mono text-slate-900 font-bold text-xs">
                     {isEditing ? (
@@ -6472,7 +6472,7 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         onChange={e => setEditingData({...editingData, spent: Number(e.target.value)})}
                       />
                     ) : (
-                      budget.isPaid ? `$${budget.allocated.toLocaleString()}` : `$${budget.spent.toLocaleString()}`
+                      budget.isPaid ? `$${(budget.allocated || 0).toLocaleString()}` : `$${(budget.spent || 0).toLocaleString()}`
                     )}
                   </td>
                   <td className="px-3 py-1.5 text-center">
@@ -6642,7 +6642,7 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                               <div>
                                 <h6 className="text-white font-bold text-sm">{res.category}</h6>
                                 <div className="flex items-center gap-3 mt-1">
-                                  <span className="text-emerald-400 font-mono text-xs">${res.amount.toLocaleString()}</span>
+                                  <span className="text-emerald-400 font-mono text-xs">${(res.amount || 0).toLocaleString()}</span>
                                   <span className="text-slate-500 text-[10px] uppercase font-bold bg-slate-700/50 px-1.5 rounded">{res.frequency}</span>
                                 </div>
                                 {res.note && <p className="text-[10px] text-slate-500 mt-1 italic">{res.note}</p>}
@@ -6782,8 +6782,8 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                           <p className="text-[10px] text-slate-400 font-mono">{record.date}</p>
                         </td>
                         <td className="p-3 text-right font-mono text-slate-400">${(record.budgetAmount || 0).toLocaleString()}</td>
-                        <td className="p-3 text-right font-mono text-emerald-500 text-xs">${Math.floor(getMonthlyEquivalent(record.budgetAmount || 0, record.frequency)).toLocaleString()}</td>
-                        <td className="p-3 text-right font-black text-emerald-600 font-mono">${record.amount.toLocaleString()}</td>
+                        <td className="p-3 text-right font-mono text-emerald-500 text-xs">${(Math.floor(getMonthlyEquivalent(record.budgetAmount || 0, record.frequency)) || 0).toLocaleString()}</td>
+                        <td className="p-3 text-right font-black text-emerald-600 font-mono">${(record.amount || 0).toLocaleString()}</td>
                         <td className="p-3 text-center">
                           <button onClick={() => setDeleteTarget({ type: 'childRecords', id: record.id, name: record.category })} className="p-2 text-slate-200 hover:text-rose-500 transition-colors">
                             <Trash2 size={14} />
@@ -6829,9 +6829,9 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                             <p className="text-[10px] text-slate-400 font-mono">{record.date}</p>
                           </td>
                           <td className="p-3 text-right font-mono text-slate-400">${(record.budgetAmount || 0).toLocaleString()}</td>
-                          <td className="p-3 text-right font-mono text-rose-400 text-xs">${Math.floor(getMonthlyEquivalent(record.budgetAmount || 0, record.frequency)).toLocaleString()}</td>
+                          <td className="p-3 text-right font-mono text-rose-400 text-xs">${(Math.floor(getMonthlyEquivalent(record.budgetAmount || 0, record.frequency)) || 0).toLocaleString()}</td>
                           <td className={`p-3 text-right font-black font-mono ${overBudget ? 'text-rose-600' : 'text-slate-900'}`}>
-                            ${record.amount.toLocaleString()}
+                            ${(record.amount || 0).toLocaleString()}
                             {overBudget && <span className="block text-[8px] font-black text-rose-500">EXCEEDED</span>}
                           </td>
                           <td className="p-3 text-center">
