@@ -2927,67 +2927,71 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
   const [refreshStatus, setRefreshStatus] = useState<string | null>(null);
 
   const handleRefreshPrices = async () => {
-    const symbols = stocks.map(s => s.symbol.trim()).filter(Boolean);
-    if (symbols.length === 0) {
-      alert('無可更新的股票代號。');
+    if (stocks.length === 0) {
+      alert('無可更新的股票資料。');
       return;
     }
     
     setIsRefreshingPrices(true);
-    setRefreshStatus('正在準備更新現價...');
+    setRefreshStatus('準備更新現價...');
+
+    const fetchWithProxy = async (url: string) => {
+      const proxies = [
+        (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+        (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+      ];
+      
+      for (const proxy of proxies) {
+        try {
+          const res = await fetch(proxy(url));
+          if (!res.ok) continue;
+          const json = await res.json();
+          const content = json.contents ? JSON.parse(json.contents) : json;
+          return content;
+        } catch (e) {
+          continue;
+        }
+      }
+      return null;
+    };
+
     try {
-      const fetchPrice = async (sym: string) => {
+      let successCount = 0;
+      
+      for (let i = 0; i < stocks.length; i++) {
+        const stock = stocks[i];
+        setRefreshStatus(`更新中: ${stock.name || stock.symbol} (${i + 1}/${stocks.length})...`);
+        
+        const sym = stock.symbol.trim();
+        if (!sym || sym === 'NA') continue;
+
         const isTaiwan = /^\d{4,6}$/.test(sym);
         const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
-        let quote = null;
-
+        
+        let price = null;
         for (const target of targets) {
-          try {
-            const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
-            const proxies = [
-              (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-              (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
-            ];
-            
-            quote = await Promise.any(proxies.map(async proxy => {
-              const response = await fetch(proxy(url));
-              if (!response.ok) throw new Error('failed');
-              const rawJson = await response.json();
-              const parsed = rawJson.contents ? JSON.parse(rawJson.contents) : rawJson;
-              if (parsed.quoteResponse?.result?.[0]) {
-                return parsed.quoteResponse.result[0];
-              }
-              throw new Error('not found');
-            }));
-            if (quote) break;
-          } catch (e) {}
+          const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
+          const data = await fetchWithProxy(url);
+          const result = data?.quoteResponse?.result?.[0];
+          if (result && result.regularMarketPrice) {
+            price = result.regularMarketPrice;
+            break;
+          }
         }
-        return { sym, quote };
-      };
-
-      const results = [];
-      const batchSize = 10;
-      for (let i = 0; i < symbols.length; i += batchSize) {
-        setRefreshStatus(`獲取現價 (${i + 1}/${symbols.length})...`);
-        const batch = symbols.slice(i, i + batchSize);
-        const batchResults = await Promise.all(batch.map(fetchPrice));
-        results.push(...batchResults);
+        
+        if (price !== null) {
+          await updateDoc(doc(db, 'stocks', stock.id), { 
+            currentPrice: price,
+            lastPriceUpdate: new Date().toISOString()
+          });
+          successCount++;
+        }
       }
       
-      setRefreshStatus('更新資料庫...');
-      const updates = stocks.map(async (stock) => {
-        const result = results.find(r => r.sym === stock.symbol);
-        if (result?.quote?.regularMarketPrice) {
-          await updateDoc(doc(db, 'stocks', stock.id), {
-            currentPrice: result.quote.regularMarketPrice
-          });
-        }
-      });
-      await Promise.all(updates);
-      alert('現價更新完成。');
+      alert(`現價更新完成！\n成功更新：${successCount} 筆\n失敗：${stocks.length - successCount} 筆`);
     } catch (err) {
-      console.error(err);
-      alert('更新現價失敗。');
+      console.error('Refresh error:', err);
+      alert('更新現價時發生錯誤，請稍後再試。');
     } finally {
       setIsRefreshingPrices(false);
       setRefreshStatus(null);
@@ -3280,74 +3284,86 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
 
   useEffect(() => {
     const fetchData = async () => {
-      if (selectedStock) {
-        setIsFetchingData(true);
-        try {
-          let quote, history;
-          try {
-            const [quoteRes, historyRes] = await Promise.all([
-              fetch(`/api/stock/${selectedStock.symbol}`),
-              fetch(`/api/stock/history/${selectedStock.symbol}`)
-            ]);
-            
-            if (!quoteRes.ok || !historyRes.ok) throw new Error();
-            
-            quote = await quoteRes.json();
-            history = await historyRes.json();
-          } catch (e) {
-            // Fallback for static hosting
-            console.warn('Backend API unavailable for details, attempting CORS proxy fallback...');
-            const sym = selectedStock.symbol.trim();
-            const target = /^\d{4,6}$/.test(sym) ? `${sym}.TW` : sym;
-            
-            const proxies = [
-              (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-              (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
-            ];
-            
-            const fetchWithProxy = async (url: string) => {
-              return await Promise.any(proxies.map(async proxy => {
-                const res = await fetch(proxy(url));
-                if (!res.ok) throw new Error('failed');
-                const rawJson = await res.json();
-                return rawJson.contents ? JSON.parse(rawJson.contents) : rawJson;
-              }));
-            };
-            
-            try {
-              // Fetch Quote
-              const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
-              const qResult = await fetchWithProxy(quoteUrl);
-              quote = qResult.quoteResponse?.result?.[0];
-
-              // Fetch History (Simplified: default to 1 year)
-              const histUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${target}?range=1y&interval=1d`;
-              const hResult = await fetchWithProxy(histUrl);
-              const chartData = hResult.chart?.result?.[0];
-              
-              if (chartData) {
-                const { timestamp, indicators } = chartData;
-                const closes = indicators.quote[0].close;
-                history = timestamp.map((t: number, i: number) => ({
-                  date: t * 1000,
-                  close: closes[i]
-                })).filter((d: any) => d.close != null);
-              }
-            } catch (proxyError) {
-              console.error('All proxies failed:', proxyError);
-            }
-          }
-          
-          if (quote) setStockData(quote);
-          if (history) setHistoryData(history);
-        } catch (err) {
-          console.error('Error fetching stock data:', err);
-        } finally {
-          setIsFetchingData(false);
-        }
-      } else {
+      if (!selectedStock) {
         setStockData(null);
         setHistoryData([]);
+        return;
+      }
+
+      setIsFetchingData(true);
+      setStockData(null);
+      setHistoryData([]);
+      
+      const fetchWithProxy = async (url: string) => {
+        const proxies = [
+          (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+          (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+        ];
+        for (const proxy of proxies) {
+          try {
+            const res = await fetch(proxy(url));
+            if (!res.ok) continue;
+            const json = await res.json();
+            return json.contents ? JSON.parse(json.contents) : json;
+          } catch (e) { continue; }
+        }
+        return null;
+      };
+
+      try {
+        const sym = selectedStock.symbol.trim();
+        const isTaiwan = /^\d{4,6}$/.test(sym);
+        // For individual stock view, only try the most likely target to save time
+        const target = isTaiwan ? `${sym}.TW` : sym;
+
+        // Directly use proxy, skip internal API which fails on static hosting
+        const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
+        const chartUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${target}?range=1y&interval=1d`;
+
+        const [qData, cData] = await Promise.all([
+          fetchWithProxy(quoteUrl),
+          fetchWithProxy(chartUrl)
+        ]);
+
+        if (qData?.quoteResponse?.result?.[0]) {
+          setStockData(qData.quoteResponse.result[0]);
+        }
+
+        if (cData?.chart?.result?.[0]) {
+          const result = cData.chart.result[0];
+          const { timestamp, indicators } = result;
+          const closes = indicators.quote[0].close;
+          if (timestamp && closes) {
+            const history = timestamp.map((t: number, i: number) => ({
+              date: t * 1000,
+              close: closes[i]
+            })).filter((d: any) => d.close !== null && d.close !== undefined);
+            setHistoryData(history);
+          }
+        }
+        
+        // If still no history, try .TWO if Taiwan stock
+        if (isTaiwan && historyData.length === 0) {
+          const altTarget = `${sym}.TWO`;
+          const altChartUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${altTarget}?range=1y&interval=1d`;
+          const altCData = await fetchWithProxy(altChartUrl);
+          if (altCData?.chart?.result?.[0]) {
+            const result = altCData.chart.result[0];
+            const { timestamp, indicators } = result;
+            const closes = indicators.quote[0].close;
+            if (timestamp && closes) {
+              const history = timestamp.map((t: number, i: number) => ({
+                date: t * 1000,
+                close: closes[i]
+              })).filter((d: any) => d.close !== null);
+              setHistoryData(history);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Stock detail error:', err);
+      } finally {
+        setIsFetchingData(false);
       }
     };
     fetchData();
