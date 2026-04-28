@@ -51,7 +51,7 @@ import {
   Search,
   HelpCircle
 } from 'lucide-react';
-import { askChildBudgetAdvisor, extractSubsidiesFromFile, extractSubsidiesFromText } from './services/aiService';
+import { askChildBudgetAdvisor, extractSubsidiesFromFile, extractSubsidiesFromText, genericAiCall } from './services/aiService';
 import { GoogleGenAI, Type } from "@google/genai";
 import Markdown from 'react-markdown';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
@@ -232,7 +232,7 @@ const fromROCDate = (rocDate: string) => {
 };
 
 // --- AI Service ---
-const getApiKey = () => localStorage.getItem('GEMINI_API_KEY') || process.env.GEMINI_API_KEY;
+const getApiKey = () => localStorage.getItem('GEMINI_API_KEY');
 
 const analyzeSalaryInput = async (input: { text?: string, image?: string, mimeType?: string }) => {
   const apiKey = getApiKey();
@@ -2453,7 +2453,7 @@ const BankPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (tar
     if (aiMode === 'text' && !aiAnalysisText) return;
 
     // Use the system-provided key as primary, fallback to localStorage if explicitly managed
-    const apiKey = process.env.GEMINI_API_KEY || localStorage.getItem('GEMINI_API_KEY');
+    const apiKey = localStorage.getItem('GEMINI_API_KEY');
     
     if (!apiKey) {
       alert("GEMINI_API_KEY is not configured.");
@@ -5322,7 +5322,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
     }
     setIsAIProcessing(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = getApiKey();
       const targetIns = insurances.find(i => i.id === selectedInsuranceId);
       const prompt = `你是一個專業的保險契約分析師。請分析這份「${targetIns?.provider} ${targetIns?.name}」的保險契約文件。
 1. 請總結該保險的核心保障項目（例如：住院日額、特定手術、意外失能等）。
@@ -5335,18 +5335,41 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
   "rawAnalysis": "詳細的分析數據"
 }`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: {
-          parts: [
-            { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
-            { text: prompt }
-          ]
-        },
-        config: { responseMimeType: "application/json" }
-      });
+      let result;
+      if (!apiKey) {
+        result = await genericAiCall({
+          contents: [{ 
+            role: 'user', 
+            parts: [
+              { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
+              { text: prompt }
+            ] 
+          }],
+          model: "gemini-1.5-flash",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              summary: { type: Type.STRING },
+              rawAnalysis: { type: Type.STRING }
+            },
+            required: ["summary", "rawAnalysis"]
+          }
+        });
+      } else {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+          model: "gemini-1.5-flash",
+          contents: {
+            parts: [
+              { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
+              { text: prompt }
+            ]
+          },
+          config: { responseMimeType: "application/json" }
+        });
+        result = JSON.parse(response.text || '{}');
+      }
 
-      const result = JSON.parse(response.text || '{}');
       if (result.summary) {
         await updateDoc(doc(db, 'insurances', selectedInsuranceId), {
           coverageSummary: result.summary,
@@ -5378,7 +5401,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
     setIsChatting(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = getApiKey();
       const prompt = `你是精通保險理賠的助手。根據以下保險契約分析結果，回答使用者的問題。
 保險產品：${targetIns.provider} ${targetIns.name}
 契約摘要：${targetIns.coverageSummary}
@@ -5387,12 +5410,23 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
 使用者問題：${chatMessage}
 請以專業、親切且易懂的方式回答，並明確指出理賠條件（如果已知）。如果資訊不足，請禮貌說明。`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: { parts: [{ text: prompt }] }
-      });
+      let answer;
+      if (!apiKey) {
+        const result = await genericAiCall({
+          prompt,
+          model: "gemini-1.5-flash"
+        });
+        answer = result.text;
+      } else {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+          model: "gemini-1.5-flash",
+          contents: { parts: [{ text: prompt }] }
+        });
+        answer = response.text;
+      }
 
-      setChatHistory([...newHistory, { role: 'assistant', content: response.text || '分析失敗' }]);
+      setChatHistory([...newHistory, { role: 'assistant', content: answer || '分析失敗' }]);
     } catch (error) {
       console.error('Chat Error:', error);
       alert('諮詢失敗');
@@ -5439,7 +5473,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
     if (!aiFileData) return;
     setIsAIProcessing(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = getApiKey();
       const prompt = `你是一個專業的保險精算數據分析師。請分析這份「保險費率對照表」文件 (圖片或 PDF)。
 這是一個結構化表格：橫列（Row）通常是「年齡」，縱欄（Column）則是不同的「保險產品」。
 請精確提取每個年齡對應到的各個保險產品金額。
@@ -5457,18 +5491,65 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
 }
 注意：如果產品名稱在系統清單中找不到，請放入 newInsurances 以便新增。`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: {
-          parts: [
-            { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
-            { text: prompt }
-          ]
-        },
-        config: { responseMimeType: "application/json" }
-      });
+      let result;
+      const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+          premiums: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                age: { type: Type.NUMBER },
+                insuranceId: { type: Type.STRING },
+                premium: { type: Type.NUMBER }
+              },
+              required: ["age", "insuranceId", "premium"]
+            }
+          },
+          newInsurances: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                provider: { type: Type.STRING },
+                name: { type: Type.STRING },
+                type: { type: Type.STRING }
+              }
+            }
+          }
+        }
+      };
 
-      const result = JSON.parse(response.text || '{}');
+      if (!apiKey) {
+        result = await genericAiCall({
+          contents: [{
+            role: 'user',
+            parts: [
+              { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
+              { text: prompt }
+            ]
+          }],
+          model: "gemini-1.5-flash",
+          responseSchema
+        });
+      } else {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+          model: "gemini-1.5-flash",
+          contents: {
+            parts: [
+              { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
+              { text: prompt }
+            ]
+          },
+          config: { 
+            responseMimeType: "application/json",
+            responseSchema
+          }
+        });
+        result = JSON.parse(response.text || '{}');
+      }
       
       if (result.newInsurances && Array.isArray(result.newInsurances)) {
         for (const ins of result.newInsurances) {
