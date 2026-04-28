@@ -172,6 +172,19 @@ export interface Budget {
   order?: number;
 }
 
+export interface ChildRecord {
+  id: string;
+  uid: string;
+  type: 'income' | 'expense';
+  category: string;
+  amount: number;
+  budgetAmount?: number;
+  frequency: 'monthly' | 'quarterly' | 'half-yearly' | 'yearly';
+  date: string; // YYYY-MM-DD
+  year: number;
+  note?: string;
+}
+
 export interface Insurance {
   id: string;
   uid?: string;

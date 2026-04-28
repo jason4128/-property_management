@@ -169,6 +169,23 @@
         }
       },
       "required": ["uid", "year"]
+    },
+    "ChildRecord": {
+      "title": "ChildRecord",
+      "description": "Record for managing children's expenses and income/subsidies",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user ID of the owner" },
+        "type": { "type": "string", "enum": ["income", "expense"], "description": "Type of record" },
+        "category": { "type": "string", "description": "Category name (e.g., subsidy, diapers)" },
+        "amount": { "type": "number", "description": "Amount of money" },
+        "budgetAmount": { "type": "number", "description": "Planned budget amount" },
+        "frequency": { "type": "string", "enum": ["monthly", "quarterly", "half-yearly", "yearly"], "description": "Frequency of the expense/income" },
+        "date": { "type": "string", "description": "Date of transaction (YYYY-MM-DD)" },
+        "year": { "type": "number", "description": "The year associated with the record" },
+        "note": { "type": "string", "description": "Optional note" }
+      },
+      "required": ["uid", "type", "category", "amount", "date", "year", "frequency"]
     }
   },
   "firestore": {
@@ -183,6 +200,10 @@
     "/creditCards/{cardId}": {
       "schema": "CreditCard",
       "description": "Collection of credit cards"
+    },
+    "/creditCardBills/{billId}": {
+      "schema": "CreditCardBill",
+      "description": "Collection of credit card bills"
     },
     "/bankAccounts/{accountId}": {
       "schema": "BankAccount",
@@ -207,6 +228,10 @@
     "/taxStandards/{standardId}": {
       "schema": "TaxStandard",
       "description": "Collection of yearly tax standards"
+    },
+    "/childRecords/{recordId}": {
+      "schema": "ChildRecord",
+      "description": "Collection of child expenses and income"
     }
   }
 }

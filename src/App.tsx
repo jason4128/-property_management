@@ -9,6 +9,7 @@ import {
   CreditCard as CreditCardIcon, 
   Building2, 
   TrendingUp, 
+  TrendingDown,
   BarChart3, 
   PieChart,
   Plus,
@@ -57,6 +58,7 @@ import {
   TaxRecord, 
   TaxStandard, 
   Budget,
+  ChildRecord,
   Insurance,
   InsurancePremium,
   YearlyStandard,
@@ -2935,19 +2937,27 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
     setIsRefreshingPrices(true);
     setRefreshStatus('準備更新現價...');
 
+    const proxies = [
+      (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+      (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+      (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`
+    ];
+
     const fetchWithProxy = async (url: string) => {
-      const proxies = [
-        (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-        (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
-      ];
-      
+      // 依序嘗試多個代理
       for (const proxy of proxies) {
         try {
           const res = await fetch(proxy(url));
           if (!res.ok) continue;
+          
           const json = await res.json();
-          const content = json.contents ? JSON.parse(json.contents) : json;
-          return content;
+          // 判定回傳格式 (AllOrigins 會包在 contents 裡)
+          const data = json.contents ? JSON.parse(json.contents) : json;
+          
+          // 如果是有效回傳 (Yahoo 格式)
+          if (data?.quoteResponse?.result?.[0] || data?.chart?.result?.[0]) {
+            return data;
+          }
         } catch (e) {
           continue;
         }
@@ -2965,7 +2975,8 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
         const sym = stock.symbol.trim();
         if (!sym || sym === 'NA') continue;
 
-        const isTaiwan = /^\d{4,6}$/.test(sym);
+        // 台股判定 (4~6位數字)
+        const isTaiwan = /^\d[0-9]{3,5}$/.test(sym);
         const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
         
         let price = null;
@@ -2973,13 +2984,15 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
           const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
           const data = await fetchWithProxy(url);
           const result = data?.quoteResponse?.result?.[0];
+          
           if (result && result.regularMarketPrice) {
             price = result.regularMarketPrice;
-            break;
+            break; // 找到價格就停止嘗試該股票的其他後綴
           }
         }
         
         if (price !== null) {
+          // 更新 Firebase (這會觸發 onSnapshot 自動更新畫面)
           await updateDoc(doc(db, 'stocks', stock.id), { 
             currentPrice: price,
             lastPriceUpdate: new Date().toISOString()
@@ -3294,11 +3307,13 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       setStockData(null);
       setHistoryData([]);
       
+      const proxies = [
+        (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+        (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+        (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`
+      ];
+
       const fetchWithProxy = async (url: string) => {
-        const proxies = [
-          (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-          (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
-        ];
         for (const proxy of proxies) {
           try {
             const res = await fetch(proxy(url));
@@ -3312,51 +3327,37 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
 
       try {
         const sym = selectedStock.symbol.trim();
-        const isTaiwan = /^\d{4,6}$/.test(sym);
-        // For individual stock view, only try the most likely target to save time
-        const target = isTaiwan ? `${sym}.TW` : sym;
-
-        // Directly use proxy, skip internal API which fails on static hosting
-        const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
-        const chartUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${target}?range=1y&interval=1d`;
-
-        const [qData, cData] = await Promise.all([
-          fetchWithProxy(quoteUrl),
-          fetchWithProxy(chartUrl)
-        ]);
-
-        if (qData?.quoteResponse?.result?.[0]) {
-          setStockData(qData.quoteResponse.result[0]);
-        }
-
-        if (cData?.chart?.result?.[0]) {
-          const result = cData.chart.result[0];
-          const { timestamp, indicators } = result;
-          const closes = indicators.quote[0].close;
-          if (timestamp && closes) {
-            const history = timestamp.map((t: number, i: number) => ({
-              date: t * 1000,
-              close: closes[i]
-            })).filter((d: any) => d.close !== null && d.close !== undefined);
-            setHistoryData(history);
-          }
-        }
+        const isTaiwan = /^\d[0-9]{3,5}$/.test(sym);
+        const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
         
-        // If still no history, try .TWO if Taiwan stock
-        if (isTaiwan && historyData.length === 0) {
-          const altTarget = `${sym}.TWO`;
-          const altChartUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${altTarget}?range=1y&interval=1d`;
-          const altCData = await fetchWithProxy(altChartUrl);
-          if (altCData?.chart?.result?.[0]) {
-            const result = altCData.chart.result[0];
+        // Try all targets for the individual stock view
+        for (const target of targets) {
+          const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
+          const chartUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${target}?range=1y&interval=1d`;
+
+          const [qData, cData] = await Promise.all([
+            fetchWithProxy(quoteUrl),
+            fetchWithProxy(chartUrl)
+          ]);
+
+          if (qData?.quoteResponse?.result?.[0]) {
+            setStockData(qData.quoteResponse.result[0]);
+          }
+
+          if (cData?.chart?.result?.[0]) {
+            const result = cData.chart.result[0];
             const { timestamp, indicators } = result;
             const closes = indicators.quote[0].close;
             if (timestamp && closes) {
               const history = timestamp.map((t: number, i: number) => ({
                 date: t * 1000,
                 close: closes[i]
-              })).filter((d: any) => d.close !== null);
-              setHistoryData(history);
+              })).filter((d: any) => d.close !== null && d.close !== undefined);
+              
+              if (history.length > 0) {
+                setHistoryData(history);
+                break; // Found working data, stop trying other targets
+              }
             }
           }
         }
@@ -5891,10 +5892,24 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
 const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [salaries, setSalaries] = useState<SalaryRecord[]>([]);
+  const [childRecords, setChildRecords] = useState<ChildRecord[]>([]);
+  const [activeSubTab, setActiveSubTab] = useState<'general' | 'child'>('general');
   const [isAdding, setIsAdding] = useState(false);
+  const [isAddingChild, setIsAddingChild] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingData, setEditingData] = useState<Partial<Budget>>({});
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  const [newChildRecord, setNewChildRecord] = useState<Partial<ChildRecord>>({
+    type: 'expense',
+    category: '',
+    amount: 0,
+    budgetAmount: 0,
+    frequency: 'monthly',
+    date: new Date().toISOString().split('T')[0],
+    year: selectedYear,
+    note: ''
+  });
 
   const handleSaveEdit = async () => {
     if (!editingId) return;
@@ -5961,11 +5976,57 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
       handleFirestoreError(error, OperationType.LIST, 'salaryRecords');
     });
 
+    const cUnsubscribe = onSnapshot(collection(db, 'childRecords'), (snapshot) => {
+      const data = snapshot.docs
+        .map(doc => ({ ...doc.data(), id: doc.id } as ChildRecord))
+        .filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
+      setChildRecords(data);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'childRecords');
+    });
+
     return () => {
       bUnsubscribe();
       sUnsubscribe();
+      cUnsubscribe();
     };
   }, [user.uid]);
+
+  const handleAddChildRecord = async () => {
+    try {
+      const record = {
+        ...newChildRecord,
+        uid: user.uid,
+        year: selectedYear,
+        date: newChildRecord.date || new Date().toISOString().split('T')[0],
+        amount: Number(newChildRecord.amount || 0),
+        budgetAmount: Number(newChildRecord.budgetAmount || 0)
+      };
+      await addDoc(collection(db, 'childRecords'), record);
+      setIsAddingChild(false);
+      setNewChildRecord({ type: 'expense', category: '', amount: 0, budgetAmount: 0, frequency: 'monthly', date: new Date().toISOString().split('T')[0], year: selectedYear, note: '' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'childRecords');
+    }
+  };
+
+  const getMonthlyEquivalent = (amount: number, freq: string) => {
+    switch (freq) {
+      case 'yearly': return amount / 12;
+      case 'half-yearly': return amount / 6;
+      case 'quarterly': return amount / 3;
+      default: return amount;
+    }
+  };
+
+  const getYearlyEquivalent = (amount: number, freq: string) => {
+    switch (freq) {
+      case 'monthly': return amount * 12;
+      case 'quarterly': return amount * 4;
+      case 'half-yearly': return amount * 2;
+      default: return amount;
+    }
+  };
 
   const stats = useMemo(() => {
     const yearlyItems = filteredBudgets.filter(b => b.frequency !== 'monthly');
@@ -6093,7 +6154,26 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="flex border-b border-slate-200">
+        <button 
+          onClick={() => setActiveSubTab('general')}
+          className={`px-6 py-3 text-sm font-bold transition-colors relative ${activeSubTab === 'general' ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          一般支出預算
+          {activeSubTab === 'general' && <motion.div layoutId="subtab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" />}
+        </button>
+        <button 
+          onClick={() => setActiveSubTab('child')}
+          className={`px-6 py-3 text-sm font-bold transition-colors relative ${activeSubTab === 'child' ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          育兒預算與補助
+          {activeSubTab === 'child' && <motion.div layoutId="subtab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" />}
+        </button>
+      </div>
+
+      {activeSubTab === 'general' ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">年度總預算</p>
           <p className="text-2xl font-black text-slate-900">${Math.floor(stats.yearlyEquivalentTotal).toLocaleString()}</p>
@@ -6277,6 +6357,252 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
           )}
         </table>
       </div>
+      </>
+      ) : (
+        <div className="space-y-8">
+          {/* 育兒核心數據概況 */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">年度計劃儲存 (預計盈餘)</p>
+              <p className="text-2xl font-black text-indigo-600">
+                ${(childRecords.filter(r => r.type === 'income' && r.year === selectedYear).reduce((sum, r) => sum + getYearlyEquivalent(r.budgetAmount || 0, r.frequency), 0) - 
+                   childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).reduce((sum, r) => sum + getYearlyEquivalent(r.budgetAmount || 0, r.frequency), 0)).toLocaleString()}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-1">年化預算目標</p>
+            </div>
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">預計每月需存 (自負額)</p>
+              <p className="text-2xl font-black text-rose-600">
+                ${Math.floor(
+                  (childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).reduce((sum, r) => sum + getMonthlyEquivalent(r.budgetAmount || 0, r.frequency), 0) - 
+                   childRecords.filter(r => r.type === 'income' && r.year === selectedYear).reduce((sum, r) => sum + getMonthlyEquivalent(r.budgetAmount || 0, r.frequency), 0))
+                ).toLocaleString()}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-1">每月攤提後淨支出</p>
+            </div>
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">實際累計淨值</p>
+              <p className={`text-2xl font-black ${
+                (childRecords.filter(r => r.type === 'income' && r.year === selectedYear).reduce((sum, r) => sum + r.amount, 0) - 
+                 childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).reduce((sum, r) => sum + r.amount, 0)) >= 0 ? 'text-emerald-600' : 'text-rose-600'
+              }`}>
+                ${(childRecords.filter(r => r.type === 'income' && r.year === selectedYear).reduce((sum, r) => sum + r.amount, 0) - 
+                   childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).reduce((sum, r) => sum + r.amount, 0)).toLocaleString()}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-1">本年度已入帳-已支出</p>
+            </div>
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">預算耗用率 (實際/預算)</p>
+              <div className="flex items-end gap-2">
+                <p className={`text-2xl font-black ${
+                  (childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).reduce((sum, r) => sum + r.amount, 0) <= 
+                   childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).reduce((sum, r) => sum + (r.budgetAmount || 0), 0)) ? 'text-emerald-600' : 'text-rose-600'
+                }`}>
+                  {Math.round((childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).reduce((sum, r) => sum + r.amount, 0) / 
+                   (childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).reduce((sum, r) => sum + (r.budgetAmount || 0), 0) || 1)) * 100)}%
+                </p>
+                <p className="text-xs text-slate-400 mb-1">實際支出/預算單價</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center bg-slate-900 text-white p-6 rounded-2xl shadow-xl">
+            <div>
+              <h3 className="text-lg font-black flex items-center gap-2">
+                <span className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></span>
+                育兒預算規劃與實績管理
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">規劃年度專款專用，確保育兒資金無虞</p>
+            </div>
+            <button 
+              onClick={() => setIsAddingChild(true)}
+              className="flex items-center gap-2 bg-white text-slate-900 px-6 py-2.5 rounded-xl hover:bg-slate-100 transition-all font-bold shadow-sm"
+            >
+              <Plus size={20} /> 新增收支項目
+            </button>
+          </div>
+
+          {isAddingChild && (
+            <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="bg-white p-8 rounded-2xl shadow-2xl border border-indigo-100 space-y-6 relative overflow-hidden">
+               <div className="absolute top-0 left-0 w-1 h-full bg-indigo-600"></div>
+               <h4 className="font-bold text-slate-800 border-b pb-4 mb-4 flex items-center gap-2">
+                 📝 記錄新項目
+                 <span className="text-xs font-normal text-slate-400">(設定預算可協助長期規劃)</span>
+               </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">類型</label>
+                  <select 
+                    className="w-full p-2.5 bg-slate-50 border-2 border-slate-100 rounded-lg text-sm font-bold focus:border-indigo-500 focus:bg-white transition-all outline-none" 
+                    value={newChildRecord.type} 
+                    onChange={e => setNewChildRecord({...newChildRecord, type: e.target.value as any})}
+                  >
+                    <option value="expense">📉 支出 (預算內開銷)</option>
+                    <option value="income">📈 收入 (政府補助/津貼)</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">項目名稱</label>
+                  <input 
+                    type="text" 
+                    placeholder="如: 私立托嬰月費, 生育獎勵金" 
+                    className="w-full p-2.5 bg-slate-50 border-2 border-slate-100 rounded-lg text-sm focus:border-indigo-500 focus:bg-white transition-all outline-none" 
+                    value={newChildRecord.category} 
+                    onChange={e => setNewChildRecord({...newChildRecord, category: e.target.value})} 
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-indigo-500 uppercase tracking-tighter">頻率</label>
+                  <select 
+                    className="w-full p-2.5 bg-indigo-50/30 border-2 border-indigo-100/50 rounded-lg text-sm font-bold focus:border-indigo-500 focus:bg-white transition-all outline-none" 
+                    value={newChildRecord.frequency} 
+                    onChange={e => setNewChildRecord({...newChildRecord, frequency: e.target.value as any})}
+                  >
+                    <option value="monthly">每月</option>
+                    <option value="quarterly">每季</option>
+                    <option value="half-yearly">每半年</option>
+                    <option value="yearly">每年</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-indigo-500 uppercase tracking-tighter">預算/核准金額 (單次)</label>
+                  <input 
+                    type="number" 
+                    placeholder="0"
+                    className="w-full p-2.5 bg-indigo-50/30 border-2 border-indigo-100/50 rounded-lg text-sm font-bold focus:border-indigo-500 focus:bg-white transition-all outline-none" 
+                    value={newChildRecord.budgetAmount} 
+                    onChange={e => setNewChildRecord({...newChildRecord, budgetAmount: Number(e.target.value)})} 
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">本期實際金額</label>
+                  <input 
+                    type="number" 
+                    placeholder="0"
+                    className="w-full p-2.5 bg-slate-50 border-2 border-slate-100 rounded-lg text-sm font-bold focus:border-indigo-500 focus:bg-white transition-all outline-none" 
+                    value={newChildRecord.amount} 
+                    onChange={e => setNewChildRecord({...newChildRecord, amount: Number(e.target.value)})} 
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">記錄日期</label>
+                  <input 
+                    type="date" 
+                    className="w-full p-2.5 bg-slate-50 border-2 border-slate-100 rounded-lg text-sm outline-none" 
+                    value={newChildRecord.date} 
+                    onChange={e => setNewChildRecord({...newChildRecord, date: e.target.value})} 
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+                <button onClick={() => setIsAddingChild(false)} className="px-6 py-2.5 text-slate-500 font-bold hover:bg-slate-100 rounded-xl transition-all">取消</button>
+                <button onClick={handleAddChildRecord} className="bg-indigo-600 text-white px-10 py-2.5 rounded-xl hover:bg-indigo-700 font-black shadow-lg shadow-indigo-200">完成記錄</button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* 分區管理: 收入 vs 支出 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-10">
+            
+            {/* 育兒收入/補助區 */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-2">
+                <h5 className="flex items-center gap-2 text-emerald-600 font-black">
+                  <span className="p-1.5 bg-emerald-100 rounded-lg"><TrendingUp size={16} /></span>
+                  政府補助與收入清單
+                </h5>
+                <span className="text-[10px] font-bold text-slate-400">總計: {childRecords.filter(r => r.type === 'income' && r.year === selectedYear).length} 筆</span>
+              </div>
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <tr>
+                      <th className="p-3 pl-6">項目 / 頻率</th>
+                      <th className="p-3 text-right">單次預算</th>
+                      <th className="p-3 text-right">月繳儲存</th>
+                      <th className="p-3 text-right">實際入帳</th>
+                      <th className="p-3 text-center">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {childRecords.filter(r => r.type === 'income' && r.year === selectedYear).map(record => (
+                      <tr key={record.id} className="group hover:bg-emerald-50/30 transition-colors">
+                        <td className="p-3 pl-6">
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold text-slate-800">{record.category}</p>
+                            <span className="text-[8px] bg-emerald-100 text-emerald-600 px-1 rounded uppercase">{record.frequency}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-mono">{record.date}</p>
+                        </td>
+                        <td className="p-3 text-right font-mono text-slate-400">${(record.budgetAmount || 0).toLocaleString()}</td>
+                        <td className="p-3 text-right font-mono text-emerald-500 text-xs">${Math.floor(getMonthlyEquivalent(record.budgetAmount || 0, record.frequency)).toLocaleString()}</td>
+                        <td className="p-3 text-right font-black text-emerald-600 font-mono">${record.amount.toLocaleString()}</td>
+                        <td className="p-3 text-center">
+                          <button onClick={() => setDeleteTarget({ type: 'childRecords', id: record.id, name: record.category })} className="p-2 text-slate-200 hover:text-rose-500 transition-colors">
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 育兒支出/預算區 */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-2">
+                <h5 className="flex items-center gap-2 text-rose-600 font-black">
+                  <span className="p-1.5 bg-rose-100 rounded-lg"><TrendingDown size={16} /></span>
+                  支出項目預算與實績
+                </h5>
+                <span className="text-[10px] font-bold text-slate-400">總計: {childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).length} 筆</span>
+              </div>
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <tr>
+                      <th className="p-3 pl-6">項目 / 頻率</th>
+                      <th className="p-3 text-right">單次預算</th>
+                      <th className="p-3 text-right">每月預留</th>
+                      <th className="p-3 text-right">實際支出</th>
+                      <th className="p-3 text-center">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).map(record => {
+                      const overBudget = record.amount > (record.budgetAmount || 0) && (record.budgetAmount || 0) > 0;
+                      return (
+                        <tr key={record.id} className={`group hover:bg-rose-50/30 transition-colors ${overBudget ? 'bg-rose-50/20' : ''}`}>
+                          <td className="p-3 pl-6">
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold text-slate-800">{record.category}</p>
+                              <span className="text-[8px] bg-slate-100 text-slate-500 px-1 rounded uppercase">{record.frequency}</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-mono">{record.date}</p>
+                          </td>
+                          <td className="p-3 text-right font-mono text-slate-400">${(record.budgetAmount || 0).toLocaleString()}</td>
+                          <td className="p-3 text-right font-mono text-rose-400 text-xs">${Math.floor(getMonthlyEquivalent(record.budgetAmount || 0, record.frequency)).toLocaleString()}</td>
+                          <td className={`p-3 text-right font-black font-mono ${overBudget ? 'text-rose-600' : 'text-slate-900'}`}>
+                            ${record.amount.toLocaleString()}
+                            {overBudget && <span className="block text-[8px] font-black text-rose-500">EXCEEDED</span>}
+                          </td>
+                          <td className="p-3 text-center">
+                            <button onClick={() => setDeleteTarget({ type: 'childRecords', id: record.id, name: record.category })} className="p-2 text-slate-200 hover:text-rose-500 transition-colors">
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 };

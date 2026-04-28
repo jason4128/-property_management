@@ -155,6 +155,19 @@ service cloud.firestore {
              data.year is number;
     }
 
+    function isValidChildRecord(data) {
+      return data.uid is string &&
+             canAccessData(data) &&
+             data.type is string &&
+             (data.type == 'income' || data.type == 'expense') &&
+             data.category is string &&
+             data.category.size() <= 100 &&
+             data.amount is number &&
+             data.frequency is string &&
+             (data.frequency == 'monthly' || data.frequency == 'quarterly' || data.frequency == 'half-yearly' || data.frequency == 'yearly') &&
+             data.year is number;
+    }
+
     // --- Collection matching ---
 
     match /salaryRecords/{recordId} {
@@ -238,6 +251,13 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidTaxStandard(incoming()) && isValidId(standardId);
       allow update: if (canAccessData(resource.data) || !('uid' in resource.data)) && (!('uid' in existing()) || incoming().uid == existing().uid || canAccessData(incoming())) && isValidTaxStandard(incoming()) && isValidId(standardId);
+      allow delete: if canAccessData(resource.data) || !('uid' in resource.data);
+    }
+
+    match /childRecords/{recordId} {
+      allow read: if true;
+      allow create: if isValidChildRecord(incoming()) && isValidId(recordId);
+      allow update: if (canAccessData(resource.data) || !('uid' in resource.data)) && (!('uid' in existing()) || incoming().uid == existing().uid || canAccessData(incoming())) && isValidChildRecord(incoming()) && isValidId(recordId);
       allow delete: if canAccessData(resource.data) || !('uid' in resource.data);
     }
   }
