@@ -41,8 +41,17 @@ import {
   ShieldCheck,
   Check,
   MessageSquare,
-  FileSearch
+  FileSearch,
+  Paperclip,
+  Send,
+  PlusCircle,
+  MinusCircle,
+  ArrowUpRight,
+  ClipboardCheck,
+  Search,
+  HelpCircle
 } from 'lucide-react';
+import { askChildBudgetAdvisor, extractSubsidiesFromFile, extractSubsidiesFromText } from './services/aiService';
 import { GoogleGenAI, Type } from "@google/genai";
 import Markdown from 'react-markdown';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
@@ -3307,59 +3316,34 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       setStockData(null);
       setHistoryData([]);
       
-      const proxies = [
-        (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-        (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-        (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`
-      ];
-
-      const fetchWithProxy = async (url: string) => {
-        for (const proxy of proxies) {
-          try {
-            const res = await fetch(proxy(url));
-            if (!res.ok) continue;
-            const json = await res.json();
-            return json.contents ? JSON.parse(json.contents) : json;
-          } catch (e) { continue; }
-        }
-        return null;
-      };
-
       try {
         const sym = selectedStock.symbol.trim();
-        const isTaiwan = /^\d[0-9]{3,5}$/.test(sym);
-        const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
         
-        // Try all targets for the individual stock view
-        for (const target of targets) {
-          const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
-          const chartUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${target}?range=1y&interval=1d`;
-
-          const [qData, cData] = await Promise.all([
-            fetchWithProxy(quoteUrl),
-            fetchWithProxy(chartUrl)
-          ]);
-
-          if (qData?.quoteResponse?.result?.[0]) {
-            setStockData(qData.quoteResponse.result[0]);
+        // Fetch current quote from backend
+        try {
+          const quoteRes = await fetch(`/api/stock/${encodeURIComponent(sym)}`);
+          if (quoteRes.ok) {
+            const data = await quoteRes.json();
+            setStockData(data);
           }
+        } catch (e) {
+          console.error("Backend quote fetch failed:", e);
+        }
 
-          if (cData?.chart?.result?.[0]) {
-            const result = cData.chart.result[0];
-            const { timestamp, indicators } = result;
-            const closes = indicators.quote[0].close;
-            if (timestamp && closes) {
-              const history = timestamp.map((t: number, i: number) => ({
-                date: t * 1000,
-                close: closes[i]
-              })).filter((d: any) => d.close !== null && d.close !== undefined);
-              
-              if (history.length > 0) {
-                setHistoryData(history);
-                break; // Found working data, stop trying other targets
-              }
+        // Fetch history from backend
+        try {
+          const historyRes = await fetch(`/api/stock/history/${encodeURIComponent(sym)}`);
+          if (historyRes.ok) {
+            const history = await historyRes.json();
+            if (Array.isArray(history)) {
+              setHistoryData(history.map(h => ({
+                date: new Date(h.date).getTime(),
+                close: h.close
+              })));
             }
           }
+        } catch (e) {
+          console.error("Backend history fetch failed:", e);
         }
       } catch (err) {
         console.error('Stock detail error:', err);
@@ -5900,6 +5884,16 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
   const [editingData, setEditingData] = useState<Partial<Budget>>({});
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
+  // AI States
+  const [aiChatOpen, setAiChatOpen] = useState(false);
+  const [aiMessages, setAiMessages] = useState<{ role: 'user' | 'ai', content: string }[]>([]);
+  const [aiInput, setAiInput] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [inspectorText, setInspectorText] = useState('');
+  const [isInspectorLoading, setIsInspectorLoading] = useState(false);
+  const [inspectedResults, setInspectedResults] = useState<any[]>([]);
+  const [showInspector, setShowInspector] = useState(false);
+
   const [newChildRecord, setNewChildRecord] = useState<Partial<ChildRecord>>({
     type: 'expense',
     category: '',
@@ -6005,6 +5999,82 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
       await addDoc(collection(db, 'childRecords'), record);
       setIsAddingChild(false);
       setNewChildRecord({ type: 'expense', category: '', amount: 0, budgetAmount: 0, frequency: 'monthly', date: new Date().toISOString().split('T')[0], year: selectedYear, note: '' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'childRecords');
+    }
+  };
+
+  const handleAiChat = async () => {
+    if (!aiInput.trim() || isAiLoading) return;
+    const userMsg = aiInput;
+    setAiInput('');
+    setAiMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setIsAiLoading(true);
+    
+    const response = await askChildBudgetAdvisor(userMsg, childRecords);
+    setAiMessages(prev => [...prev, { role: 'ai', content: response }]);
+    setIsAiLoading(false);
+  };
+
+  const handleInspectText = async () => {
+    if (!inspectorText.trim() || isInspectorLoading) return;
+    setIsInspectorLoading(true);
+    
+    let contentToAnalyze = inspectorText;
+    
+    // URL detection
+    const urlMatch = inspectorText.match(/https?:\/\/[^\s]+/);
+    if (urlMatch) {
+      try {
+        const res = await fetch('/api/scrape-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: urlMatch[0] })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          contentToAnalyze = data.text;
+        }
+      } catch (e) {
+        console.error("Scraping failed, falling back to raw text:", e);
+      }
+    }
+    
+    const results = await extractSubsidiesFromText(contentToAnalyze);
+    setInspectedResults(results);
+    setIsInspectorLoading(false);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsInspectorLoading(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = (event.target?.result as string).split(',')[1];
+      const results = await extractSubsidiesFromFile(base64, file.type);
+      setInspectedResults(results);
+      setIsInspectorLoading(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAddInspected = async (res: any) => {
+    try {
+      const record = {
+        uid: user.uid,
+        type: 'income' as const,
+        category: res.category,
+        amount: Number(res.amount),
+        budgetAmount: Number(res.amount),
+        frequency: res.frequency,
+        date: new Date().toISOString().split('T')[0],
+        year: selectedYear,
+        note: res.note || 'AI 解析匯入'
+      };
+      await addDoc(collection(db, 'childRecords'), record);
+      setInspectedResults(prev => prev.filter(p => p !== res));
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'childRecords');
     }
@@ -6414,13 +6484,109 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
               </h3>
               <p className="text-xs text-slate-400 mt-1">規劃年度專款專用，確保育兒資金無虞</p>
             </div>
-            <button 
-              onClick={() => setIsAddingChild(true)}
-              className="flex items-center gap-2 bg-white text-slate-900 px-6 py-2.5 rounded-xl hover:bg-slate-100 transition-all font-bold shadow-sm"
-            >
-              <Plus size={20} /> 新增收支項目
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setAiChatOpen(true)}
+                className="flex items-center gap-2 bg-indigo-500 text-white px-4 py-2.5 rounded-xl hover:bg-indigo-400 transition-all font-bold shadow-sm"
+              >
+                <Sparkles size={18} /> AI 諮詢
+              </button>
+              <button 
+                onClick={() => setShowInspector(!showInspector)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all font-bold shadow-sm ${showInspector ? 'bg-white text-slate-900' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+              >
+                <Search size={18} /> 補助分析器
+              </button>
+              <button 
+                onClick={() => setIsAddingChild(true)}
+                className="flex items-center gap-2 bg-white text-slate-900 px-6 py-2.5 rounded-xl hover:bg-slate-100 transition-all font-bold shadow-sm"
+              >
+                <Plus size={20} /> 新增收支項目
+              </button>
+            </div>
           </div>
+
+          {/* AI Subsidies Inspector Section */}
+          <AnimatePresence>
+            {showInspector && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-indigo-600 rounded-lg">
+                        <FileSearch className="text-white" size={24} />
+                      </div>
+                      <div>
+                        <h4 className="text-white font-bold">AI 補助文件解析</h4>
+                        <p className="text-xs text-slate-400">貼上網址、文字或上傳截圖，AI 將自動提取項目</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-2 border border-slate-700">
+                        <Paperclip size={16} /> 上傳截圖/PDF
+                        <input type="file" className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <textarea 
+                        className="w-full h-32 bg-slate-800 border-2 border-slate-700 rounded-xl p-4 text-white text-sm focus:border-indigo-500 focus:outline-none transition-all placeholder:text-slate-500"
+                        placeholder="在此貼上政府補助公告文字、網址或截圖說明..."
+                        value={inspectorText}
+                        onChange={(e) => setInspectorText(e.target.value)}
+                      />
+                      <button 
+                        onClick={handleInspectText}
+                        disabled={isInspectorLoading || !inspectorText.trim()}
+                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 text-white font-black rounded-xl transition-all flex items-center justify-center gap-2"
+                      >
+                        {isInspectorLoading ? <RefreshCw className="animate-spin" size={20} /> : <Sparkles size={20} />}
+                        開始智慧解析
+                      </button>
+                    </div>
+
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700 min-h-[180px]">
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">解析結果建議</p>
+                      <div className="space-y-3">
+                        {inspectedResults.length > 0 ? (
+                          inspectedResults.map((res, i) => (
+                            <div key={i} className="bg-slate-800 p-3 rounded-lg border border-slate-700 flex items-center justify-between group animate-in fade-in slide-in-from-left-2 transition-all">
+                              <div>
+                                <h6 className="text-white font-bold text-sm">{res.category}</h6>
+                                <div className="flex items-center gap-3 mt-1">
+                                  <span className="text-emerald-400 font-mono text-xs">${res.amount.toLocaleString()}</span>
+                                  <span className="text-slate-500 text-[10px] uppercase font-bold bg-slate-700/50 px-1.5 rounded">{res.frequency}</span>
+                                </div>
+                                {res.note && <p className="text-[10px] text-slate-500 mt-1 italic">{res.note}</p>}
+                              </div>
+                              <button 
+                                onClick={() => handleAddInspected(res)}
+                                className="p-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white rounded-lg transition-all"
+                              >
+                                <Plus size={18} />
+                              </button>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="h-full flex flex-col items-center justify-center text-slate-600 py-6">
+                            <Search size={32} strokeWidth={1.5} className="mb-2 opacity-20" />
+                            <p className="text-xs">尚無建議結果，請在左側輸入資料</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {isAddingChild && (
             <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="bg-white p-8 rounded-2xl shadow-2xl border border-indigo-100 space-y-6 relative overflow-hidden">
@@ -6603,6 +6769,125 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
           </div>
         </div>
       )}
+
+      {/* AI Chat Sidebar */}
+      <AnimatePresence>
+        {aiChatOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setAiChatOpen(false)}
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 pointer-events-auto"
+            />
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-[60] border-l border-slate-200 flex flex-col"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-tr from-indigo-600 to-violet-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                    <Sparkles className="text-white" size={20} />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-slate-800">AI 育兒預算助理</h4>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">目前在線</span>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={() => setAiChatOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-white rounded-xl transition-all">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/20 scroll-smooth">
+                {aiMessages.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-20 px-6">
+                    <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center">
+                      <MessageSquare className="text-indigo-400" size={40} />
+                    </div>
+                    <div>
+                      <h5 className="font-bold text-slate-900">需要育兒理財建議嗎？</h5>
+                      <p className="text-sm text-slate-500 mt-2">我可以分析您的收支資料，給您省錢或補助申請的具體方向。</p>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 w-full pt-4">
+                      {['怎麼存更多錢？', '分析目前的預算狀況', '有哪些政府補助可以申請？'].map((q) => (
+                        <button 
+                          key={q}
+                          onClick={() => { setAiInput(q); }}
+                          className="p-3 text-left bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-all shadow-sm"
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  aiMessages.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] p-4 rounded-2xl text-sm ${
+                        msg.role === 'user' 
+                          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' 
+                          : 'bg-white border border-slate-200 text-slate-800 shadow-sm'
+                      }`}>
+                        <div className="markdown-body">
+                          <Markdown>{msg.content}</Markdown>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+                {isAiLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-white border border-slate-200 p-4 rounded-2xl flex items-center gap-3">
+                      <div className="flex gap-1">
+                        <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                      </div>
+                      <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">思考中...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 bg-white border-t border-slate-100">
+                <div className="relative">
+                  <textarea 
+                    value={aiInput}
+                    onChange={(e) => setAiInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleAiChat();
+                      }
+                    }}
+                    placeholder="輸入您的問題..."
+                    className="w-full p-4 pr-12 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all resize-none max-h-32"
+                    rows={1}
+                  />
+                  <button 
+                    onClick={handleAiChat}
+                    disabled={!aiInput.trim() || isAiLoading}
+                    className="absolute right-3 bottom-3 p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:bg-slate-300 transition-all shadow-lg shadow-indigo-100"
+                  >
+                    <Send size={18} />
+                  </button>
+                </div>
+                <p className="text-[10px] text-center text-slate-400 mt-4 font-bold uppercase tracking-widest">
+                  AI 生成內容僅供參考，請以實體合約與政府公告為準
+                </p>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
