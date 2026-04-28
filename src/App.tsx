@@ -3297,33 +3297,44 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
           } catch (e) {
             // Fallback for static hosting
             console.warn('Backend API unavailable for details, attempting CORS proxy fallback...');
-            const sym = selectedStock.symbol;
+            const sym = selectedStock.symbol.trim();
             const target = /^\d{4,6}$/.test(sym) ? `${sym}.TW` : sym;
             
-            // Fetch Quote
-            const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
-            const quoteProxy = `https://api.allorigins.win/get?url=${encodeURIComponent(quoteUrl)}`;
-            const qRes = await fetch(quoteProxy);
-            const qJson = await qRes.json();
-            const qResult = JSON.parse(qJson.contents);
-            quote = qResult.quoteResponse?.result?.[0];
-
-            // Fetch History (Simplified: default to 1 year)
-            // Use query2 for chart
-            const histUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${target}?range=1y&interval=1d`;
-            const histProxy = `https://api.allorigins.win/get?url=${encodeURIComponent(histUrl)}`;
-            const hRes = await fetch(histProxy);
-            const hJson = await hRes.json();
-            const hResult = JSON.parse(hJson.contents);
-            const chartData = hResult.chart?.result?.[0];
+            const proxies = [
+              (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+              (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+            ];
             
-            if (chartData) {
-              const { timestamp, indicators } = chartData;
-              const closes = indicators.quote[0].close;
-              history = timestamp.map((t: number, i: number) => ({
-                date: t * 1000,
-                close: closes[i]
-              })).filter((d: any) => d.close != null);
+            const fetchWithProxy = async (url: string) => {
+              return await Promise.any(proxies.map(async proxy => {
+                const res = await fetch(proxy(url));
+                if (!res.ok) throw new Error('failed');
+                const rawJson = await res.json();
+                return rawJson.contents ? JSON.parse(rawJson.contents) : rawJson;
+              }));
+            };
+            
+            try {
+              // Fetch Quote
+              const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
+              const qResult = await fetchWithProxy(quoteUrl);
+              quote = qResult.quoteResponse?.result?.[0];
+
+              // Fetch History (Simplified: default to 1 year)
+              const histUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${target}?range=1y&interval=1d`;
+              const hResult = await fetchWithProxy(histUrl);
+              const chartData = hResult.chart?.result?.[0];
+              
+              if (chartData) {
+                const { timestamp, indicators } = chartData;
+                const closes = indicators.quote[0].close;
+                history = timestamp.map((t: number, i: number) => ({
+                  date: t * 1000,
+                  close: closes[i]
+                })).filter((d: any) => d.close != null);
+              }
+            } catch (proxyError) {
+              console.error('All proxies failed:', proxyError);
             }
           }
           
@@ -3508,6 +3519,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                 <th className="px-4 py-3">來源</th>
                 <th className="px-4 py-3">股數/單位</th>
                 <th className="px-4 py-3">成本</th>
+                <th className="px-4 py-3 text-indigo-500">目前淨值</th>
                 <th className="px-4 py-3">市值</th>
                 <th className="px-4 py-3">預估股利</th>
                 <th className="px-4 py-3">發放頻率</th>
@@ -3536,6 +3548,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                     <td className="px-4 py-3">{stock.source}</td>
                     <td className="px-4 py-3">{stock.shares.toLocaleString()}</td>
                     <td className="px-4 py-3">${Math.floor(cost).toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
+                    <td className="px-4 py-3 text-indigo-600 font-bold">${stock.currentPrice}</td>
                     <td className="px-4 py-3">${Math.floor(val).toLocaleString()} {isUsd ? 'USD' : 'TWD'}</td>
                     <td className="px-4 py-3 font-medium text-indigo-500">
                       {(stock.expectedDividendPerShare && stock.expectedDividendPerShare > 0) ? (
@@ -3576,6 +3589,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                     <td className="px-4 py-3">{fund.source}</td>
                     <td className="px-4 py-3">{fund.units.toLocaleString()}</td>
                     <td className="px-4 py-3">${Math.floor(cost).toLocaleString()} TWD</td>
+                    <td className="px-4 py-3 text-indigo-600 font-bold">${fund.units > 0 ? (fund.currentValue / fund.units).toFixed(4) : 0}</td>
                     <td className="px-4 py-3">${Math.floor(val).toLocaleString()} TWD</td>
                     <td className="px-4 py-3">-</td>
                     <td className="px-4 py-3">-</td>
@@ -3890,6 +3904,10 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                   <span className="text-slate-800 font-medium">${Math.floor(stock.averageCost)} {stock.source === 'Firstrade' ? 'USD' : 'TWD'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
+                  <span className="text-indigo-500 font-medium select-all">目前淨值</span>
+                  <span className="text-indigo-600 font-bold">${stock.currentPrice}</span>
+                </div>
+                <div className="flex justify-between text-sm border-t border-slate-50 pt-1 mt-1">
                   <span className="text-slate-500">目前市值</span>
                   <span className="text-slate-800 font-bold">${Math.floor(currentVal).toLocaleString()} {stock.source === 'Firstrade' ? 'USD' : 'TWD'}</span>
                 </div>
