@@ -3512,9 +3512,6 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
           >
             <Camera size={20} /> AI 掃描匯入
           </button>
-          <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
-            <Plus size={20} /> 新增股票
-          </button>
         </div>
       </div>
 
@@ -3893,28 +3890,6 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
           </div>
         )}
       </AnimatePresence>
-
-      {isAdding && (
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" placeholder="股票代號" className="p-2 border rounded-md" value={newStock.symbol ?? ""} onChange={e => setNewStock({...newStock, symbol: e.target.value})} />
-            <input type="text" placeholder="股票名稱" className="p-2 border rounded-md" value={newStock.name ?? ""} onChange={e => setNewStock({...newStock, name: e.target.value})} />
-            <input type="number" placeholder="持有股數" className="p-2 border rounded-md" value={newStock.shares ?? 0} onChange={e => setNewStock({...newStock, shares: Number(e.target.value)})} />
-            <input type="number" placeholder="平均成本" className="p-2 border rounded-md" value={newStock.averageCost ?? 0} onChange={e => setNewStock({...newStock, averageCost: Number(e.target.value)})} />
-            <input type="number" placeholder="目前股價" className="p-2 border rounded-md" value={newStock.currentPrice ?? 0} onChange={e => setNewStock({...newStock, currentPrice: Number(e.target.value)})} />
-            <input type="number" placeholder="預估每股股利 (TWD)" className="p-2 border rounded-md" value={newStock.expectedDividendPerShare ?? ""} onChange={e => setNewStock({...newStock, expectedDividendPerShare: Number(e.target.value) || undefined})} />
-            <input type="number" placeholder="54C 占比 (例如：50) %" className="p-2 border rounded-md" value={newStock.dividendRatio54C ?? ""} onChange={e => setNewStock({...newStock, dividendRatio54C: Number(e.target.value) || undefined})} />
-            <select className="p-2 border rounded-md" value={newStock.source ?? "Cathay"} onChange={e => setNewStock({...newStock, source: e.target.value as any})}>
-              <option value="Cathay">國泰 (Cathay)</option>
-              <option value="Firstrade">第一證券 (Firstrade)</option>
-            </select>
-          </div>
-          <div className="flex justify-end gap-3">
-            <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
-            <button onClick={handleAdd} className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">儲存</button>
-          </div>
-        </motion.div>
-      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredStocks.map(stock => {
@@ -8228,8 +8203,8 @@ export default function App() {
         {/* Main Content Area */}
         <div className={`flex-1 flex flex-col min-w-0 ${currentTheme.bg} relative transition-colors duration-500`}>
           {/* Header for mobile */}
-          <header className={`md:hidden ${activeTheme === 'midnight' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} px-4 py-3 flex shrink-0 items-center justify-between z-40 transition-colors`}>
-            <div className="flex items-center gap-2">
+          <header className={`md:hidden ${activeTheme === 'midnight' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} px-4 pt-safe pb-3 flex shrink-0 items-center justify-between z-40 transition-colors`}>
+            <div className="flex items-center gap-2 pt-2">
               <div className={`w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white`}>
                 <Calculator size={18} />
               </div>
@@ -8237,7 +8212,7 @@ export default function App() {
             </div>
             <button 
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2 text-indigo-600 bg-indigo-50 rounded-lg"
+              className="p-2 text-indigo-600 bg-indigo-50 rounded-lg mt-2"
             >
               <PanelLeftOpen size={20} />
             </button>
@@ -8278,9 +8253,37 @@ export default function App() {
             </div>
           </header>
 
-          <main className="flex-1 p-4 md:p-10 overflow-y-auto relative pb-24 md:pb-10">
-            <div className={`max-w-7xl mx-auto w-full ${currentTheme.content} p-6 md:p-10 transition-all duration-500`}>
-              {renderContent()}
+          <main className="flex-1 p-4 md:p-10 overflow-y-auto relative pb-24 md:pb-10 overflow-x-hidden">
+            <div className={`max-w-7xl mx-auto w-full ${currentTheme.content} p-0 md:p-10 transition-all duration-500 overflow-hidden`}>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeTab}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.2, ease: "easeInOut" }}
+                  drag="x"
+                  dragDirectionLock
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.2}
+                  onDragEnd={(_, info) => {
+                    const threshold = 100;
+                    const tabsList = TABS.map(t => t.id);
+                    const currentIndex = tabsList.indexOf(activeTab);
+                    
+                    if (info.offset.x > threshold && currentIndex > 0) {
+                      // Swipe Right -> Prev Tab
+                      setActiveTab(tabsList[currentIndex - 1]);
+                    } else if (info.offset.x < -threshold && currentIndex < tabsList.length - 1) {
+                      // Swipe Left -> Next Tab
+                      setActiveTab(tabsList[currentIndex + 1]);
+                    }
+                  }}
+                  className="p-6 md:p-0"
+                >
+                  {renderContent()}
+                </motion.div>
+              </AnimatePresence>
             </div>
           </main>
 
