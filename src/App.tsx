@@ -294,7 +294,7 @@ const analyzeSalaryInput = async (input: { text?: string, image?: string, mimeTy
   }
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-2.5-flash",
     contents: { parts: contents },
     config: {
       responseMimeType: "application/json",
@@ -366,7 +366,7 @@ const analyzeTaxDocument = async (fileBase64: string, mimeType: string) => {
   2. 數值均為數字類型。`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-2.5-flash",
     contents: {
       parts: [
         { text: prompt },
@@ -419,7 +419,7 @@ const analyzeTaxStandards = async (fileBase64: string, mimeType: string) => {
   3. 級距請按金額從小到大排列。`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-2.5-flash",
     contents: {
       parts: [
         { text: prompt },
@@ -2494,7 +2494,7 @@ ${text}
 }`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-2.5-flash",
         contents: { parts: [{ text: prompt }] },
         config: {
           responseMimeType: "application/json",
@@ -3195,7 +3195,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       請只回傳 JSON 陣列，不要有其他文字。`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-2.5-flash",
         contents: {
           parts: [
             { text: prompt },
@@ -5303,7 +5303,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
   const [newInsurance, setNewInsurance] = useState<Partial<Insurance>>({ name: '', provider: '', type: '' });
   
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
-  const [aiFileData, setAiFileData] = useState<{ url: string, type: string, name: string } | null>(null);
+  const [aiFileDatas, setAiFileDatas] = useState<{ url: string, type: string, name: string }[]>([]);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [isGeneratingTable, setIsGeneratingTable] = useState(false);
   const [aiMode, setAiMode] = useState<'premium' | 'contract'>('premium'); // New state for AI mode
@@ -5377,7 +5377,7 @@ ${ins.analysisRaw || ins.coverageSummary}
       
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
-        model: 'gemini-3.0-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt
       });
       let text = response.text || "{}";
@@ -5402,7 +5402,7 @@ ${ins.analysisRaw || ins.coverageSummary}
   };
 
   const handleContractAnalysis = async () => {
-    if (!aiFileData || !selectedInsuranceId) {
+    if (aiFileDatas.length === 0 || !selectedInsuranceId) {
       alert('請先選擇要分析的保險產品並上傳契約文件 (圖片或 PDF)');
       return;
     }
@@ -5423,17 +5423,21 @@ ${ins.analysisRaw || ins.coverageSummary}
   "planOptions": ["計畫一", "計畫二"] // 如果有的話，否則回傳空陣列
 }`;
 
+      const fileParts = aiFileDatas.map(file => ({
+        inlineData: { mimeType: file.type, data: file.url.split(',')[1] }
+      }));
+
       let result;
       if (!apiKey) {
         result = await genericAiCall({
           contents: [{ 
             role: 'user', 
             parts: [
-              { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
+              ...fileParts,
               { text: prompt }
             ] 
           }],
-          model: "gemini-3.0-flash",
+          model: "gemini-2.5-flash",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
@@ -5447,10 +5451,10 @@ ${ins.analysisRaw || ins.coverageSummary}
       } else {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-3.0-flash",
+          model: "gemini-2.5-flash",
           contents: {
             parts: [
-              { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
+              ...fileParts,
               { text: prompt }
             ]
           },
@@ -5468,7 +5472,7 @@ ${ins.analysisRaw || ins.coverageSummary}
         alert('保險契約分析完成！');
       }
       setIsAIModalOpen(false);
-      setAiFileData(null);
+      setAiFileDatas([]);
     } catch (error) {
       console.error('AI Error:', error);
       alert('分析失敗');
@@ -5508,13 +5512,13 @@ ${ins.analysisRaw || ins.coverageSummary}
       if (!apiKey) {
         const result = await genericAiCall({
           prompt,
-          model: "gemini-3-flash-preview"
+          model: "gemini-2.5-flash"
         });
         answer = result.text;
       } else {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
+          model: "gemini-2.5-flash",
           contents: { parts: [{ text: prompt }] }
         });
         answer = response.text;
@@ -5564,7 +5568,7 @@ ${ins.analysisRaw || ins.coverageSummary}
   };
 
   const handleAIProcess = async () => {
-    if (!aiFileData) return;
+    if (aiFileDatas.length === 0) return;
     setIsAIProcessing(true);
     try {
       const apiKey = getApiKey();
@@ -5584,6 +5588,10 @@ ${ins.analysisRaw || ins.coverageSummary}
   ]
 }
 注意：如果產品名稱在系統清單中找不到，請放入 newInsurances 以便新增。`;
+
+      const fileParts = aiFileDatas.map(file => ({
+        inlineData: { mimeType: file.type, data: file.url.split(',')[1] }
+      }));
 
       let result;
       const responseSchema = {
@@ -5620,20 +5628,20 @@ ${ins.analysisRaw || ins.coverageSummary}
           contents: [{
             role: 'user',
             parts: [
-              { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
+              ...fileParts,
               { text: prompt }
             ]
           }],
-          model: "gemini-3-flash-preview",
+          model: "gemini-2.5-flash",
           responseSchema
         });
       } else {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
+          model: "gemini-2.5-flash",
           contents: {
             parts: [
-              { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
+              ...fileParts,
               { text: prompt }
             ]
           },
@@ -5664,7 +5672,7 @@ ${ins.analysisRaw || ins.coverageSummary}
 
       alert('AI 保費辨識匯入完成！');
       setIsAIModalOpen(false);
-      setAiFileData(null);
+      setAiFileDatas([]);
     } catch (error) {
       console.error('AI Error:', error);
       alert('AI 辨識失敗。');
@@ -6110,37 +6118,64 @@ ${ins.analysisRaw || ins.coverageSummary}
                 <button onClick={() => setIsAIModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
               </div>
               <div className="p-8">
-                {!aiFileData ? (
+                {aiFileDatas.length === 0 ? (
                   <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-3xl p-12 hover:border-emerald-300 hover:bg-emerald-50/30 transition-all cursor-pointer group">
                     <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300 group-hover:bg-emerald-100 group-hover:text-emerald-500 transition-colors mb-4">
                       <FileUp size={32} />
                     </div>
-                    <p className="text-slate-600 font-bold">{aiMode === 'premium' ? '上傳費率對照表 (圖片或 PDF)' : '上傳契約理賠細項 (圖片或 PDF)'}</p>
+                    <p className="text-slate-600 font-bold">{aiMode === 'premium' ? '上傳費率對照表 (圖片或 PDF，可複選)' : '上傳契約理賠細項 (圖片或 PDF，可複選)'}</p>
                     <p className="text-xs text-slate-400 mt-2 text-center">
                       {aiMode === 'premium' ? '請確保文件包含「年齡」與保費數據' : '請上傳顯示保障項目、額度或給付條件的文件'}
                     </p>
-                    <input type="file" className="hidden" accept="image/*,application/pdf" onChange={e => {
-                      const file = e.target.files?.[0];
-                      if (file) {
+                    <input type="file" multiple className="hidden" accept="image/*,application/pdf" onChange={async e => {
+                      const files = Array.from(e.target.files || []);
+                      const newDatas: any[] = [];
+                      for (const file of files) {
                         const r = new FileReader();
-                        r.onloadend = () => setAiFileData({ url: r.result as string, type: file.type, name: file.name });
-                        r.readAsDataURL(file);
+                        const result = await new Promise((resolve) => {
+                          r.onloadend = () => resolve(r.result);
+                          r.readAsDataURL(file);
+                        });
+                        newDatas.push({ url: result as string, type: file.type, name: file.name });
                       }
+                      setAiFileDatas(prev => [...prev, ...newDatas]);
                     }} />
                   </label>
                 ) : (
                   <div className="space-y-4">
-                    <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 shadow-inner flex items-center justify-center">
-                      {aiFileData.type === 'application/pdf' ? (
-                        <div className="flex flex-col items-center gap-3">
-                          <FileText size={64} className="text-rose-500" />
-                          <p className="text-sm font-bold text-slate-600">{aiFileData.name}</p>
-                          <span className="text-[10px] bg-rose-100 text-rose-600 px-3 py-1 rounded-full font-bold uppercase tracking-widest">PDF 文件</span>
+                    <div className="flex gap-4 overflow-x-auto pb-4">
+                      {aiFileDatas.map((data, idx) => (
+                        <div key={idx} className="relative w-48 shrink-0 aspect-video rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 shadow-inner flex items-center justify-center">
+                          {data.type === 'application/pdf' ? (
+                            <div className="flex flex-col items-center gap-3">
+                              <FileText size={32} className="text-rose-500" />
+                              <p className="text-xs font-bold text-slate-600 max-w-[80%] truncate">{data.name}</p>
+                              <span className="text-[9px] bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">PDF</span>
+                            </div>
+                          ) : (
+                            <img src={data.url} className="w-full h-full object-contain" />
+                          )}
+                          <button onClick={() => setAiFileDatas(prev => prev.filter((_, i) => i !== idx))} className="absolute top-2 right-2 p-1.5 bg-rose-500 text-white rounded-xl shadow hover:bg-rose-600 transition-colors"><X size={14} /></button>
                         </div>
-                      ) : (
-                        <img src={aiFileData.url} className="w-full h-full object-contain" />
-                      )}
-                      <button onClick={() => setAiFileData(null)} className="absolute top-4 right-4 p-2 bg-rose-500 text-white rounded-xl shadow-lg hover:bg-rose-600 transition-colors"><X size={20} /></button>
+                      ))}
+                      
+                      <label className="w-48 shrink-0 aspect-video rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30 transition-all cursor-pointer group">
+                        <Plus size={24} className="text-slate-300 group-hover:text-emerald-500 mb-2" />
+                        <span className="text-xs font-bold text-slate-500 group-hover:text-emerald-600">加入更多</span>
+                        <input type="file" multiple className="hidden" accept="image/*,application/pdf" onChange={async e => {
+                          const files = Array.from(e.target.files || []);
+                          const newDatas: any[] = [];
+                          for (const file of files) {
+                            const r = new FileReader();
+                            const result = await new Promise((resolve) => {
+                              r.onloadend = () => resolve(r.result);
+                              r.readAsDataURL(file);
+                            });
+                            newDatas.push({ url: result as string, type: file.type, name: file.name });
+                          }
+                          setAiFileDatas(prev => [...prev, ...newDatas]);
+                        }} />
+                      </label>
                     </div>
                     <div className="flex gap-3">
                       <button 
