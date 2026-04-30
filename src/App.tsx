@@ -294,7 +294,7 @@ const analyzeSalaryInput = async (input: { text?: string, image?: string, mimeTy
   }
 
   const response = await ai.models.generateContent({
-    model: "gemini-1.5-flash",
+    model: "gemini-3-flash-preview",
     contents: { parts: contents },
     config: {
       responseMimeType: "application/json",
@@ -366,7 +366,7 @@ const analyzeTaxDocument = async (fileBase64: string, mimeType: string) => {
   2. 數值均為數字類型。`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-1.5-flash",
+    model: "gemini-3-flash-preview",
     contents: {
       parts: [
         { text: prompt },
@@ -419,7 +419,7 @@ const analyzeTaxStandards = async (fileBase64: string, mimeType: string) => {
   3. 級距請按金額從小到大排列。`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-1.5-flash",
+    model: "gemini-3-flash-preview",
     contents: {
       parts: [
         { text: prompt },
@@ -2494,7 +2494,7 @@ ${text}
 }`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-3-flash-preview",
         contents: { parts: [{ text: prompt }] },
         config: {
           responseMimeType: "application/json",
@@ -2949,6 +2949,25 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
     try {
       let successCount = 0;
       
+      const proxies = [
+        (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+        (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+        (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`
+      ];
+
+      const fetchWithProxy = async (url: string) => {
+        for (const proxy of proxies) {
+          try {
+            const res = await fetch(proxy(url));
+            if (!res.ok) continue;
+            const json = await res.json();
+            const data = json.contents ? JSON.parse(json.contents) : json;
+            if (data?.quoteResponse?.result?.[0] || data?.chart?.result?.[0]) return data;
+          } catch (e) { continue; }
+        }
+        return null;
+      };
+
       for (let i = 0; i < stocks.length; i++) {
         const stock = stocks[i];
         setRefreshStatus(`更新中: ${stock.name || stock.symbol} (${i + 1}/${stocks.length})...`);
@@ -2956,20 +2975,27 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
         const sym = stock.symbol.trim();
         if (!sym || sym === 'NA') continue;
 
-        try {
-          const res = await fetch(`/api/stock/${encodeURIComponent(sym)}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data.regularMarketPrice) {
-              await updateDoc(doc(db, 'stocks', stock.id), { 
-                currentPrice: data.regularMarketPrice,
-                lastPriceUpdate: new Date().toISOString()
-              });
-              successCount++;
-            }
+        const isTaiwan = /^\d[0-9]{3,5}$/.test(sym);
+        const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
+        
+        let price = null;
+        for (const target of targets) {
+          const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
+          const data = await fetchWithProxy(url);
+          const result = data?.quoteResponse?.result?.[0];
+          
+          if (result && result.regularMarketPrice) {
+            price = result.regularMarketPrice;
+            break;
           }
-        } catch (e) {
-          console.error(`Failed to update ${sym}:`, e);
+        }
+        
+        if (price !== null) {
+          await updateDoc(doc(db, 'stocks', stock.id), { 
+            currentPrice: price,
+            lastPriceUpdate: new Date().toISOString()
+          });
+          successCount++;
         }
       }
       
@@ -3164,7 +3190,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       請只回傳 JSON 陣列，不要有其他文字。`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-3-flash-preview",
         contents: {
           parts: [
             { text: prompt },
@@ -3281,32 +3307,55 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       
       try {
         const sym = selectedStock.symbol.trim();
+        const isTaiwan = /^\d[0-9]{3,5}$/.test(sym);
+        const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
         
-        // Fetch current quote from backend
-        try {
-          const quoteRes = await fetch(`/api/stock/${encodeURIComponent(sym)}`);
-          if (quoteRes.ok) {
-            const data = await quoteRes.json();
-            setStockData(data);
-          }
-        } catch (e) {
-          console.error("Backend quote fetch failed:", e);
+        const proxies = [
+          (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+          (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+        ];
+
+        const fetchWithProxy = async (url: string) => {
+          return await Promise.any(proxies.map(async proxy => {
+            const res = await fetch(proxy(url));
+            if (!res.ok) throw new Error('failed');
+            const rawJson = await res.json();
+            return rawJson.contents ? JSON.parse(rawJson.contents) : rawJson;
+          }));
+        };
+
+        let quote = null;
+        let chartData = null;
+
+        for (const target of targets) {
+          try {
+            const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
+            const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${target}?interval=1d&range=3mo`;
+            
+            try {
+              if (!quote) {
+                const qParsed = await fetchWithProxy(quoteUrl);
+                quote = qParsed.quoteResponse?.result?.[0];
+              }
+              if (!chartData) {
+                const cParsed = await fetchWithProxy(chartUrl);
+                chartData = cParsed.chart?.result?.[0];
+              }
+            } catch (e) {}
+            
+            if (quote || chartData) break;
+          } catch(e) {}
         }
 
-        // Fetch history from backend
-        try {
-          const historyRes = await fetch(`/api/stock/history/${encodeURIComponent(sym)}`);
-          if (historyRes.ok) {
-            const history = await historyRes.json();
-            if (Array.isArray(history)) {
-              setHistoryData(history.map(h => ({
-                date: new Date(h.date).getTime(),
-                close: h.close
-              })));
-            }
-          }
-        } catch (e) {
-          console.error("Backend history fetch failed:", e);
+        if (quote) setStockData(quote);
+        if (chartData?.timestamp && chartData?.indicators?.quote?.[0]?.close) {
+          const timestamps = chartData.timestamp;
+          const closes = chartData.indicators.quote[0].close;
+          const hist = timestamps.map((t: number, i: number) => ({
+            date: t * 1000,
+            close: closes[i]
+          })).filter((h: any) => h.close !== null);
+          setHistoryData(hist);
         }
       } catch (err) {
         console.error('Stock detail error:', err);
@@ -5308,7 +5357,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
               { text: prompt }
             ] 
           }],
-          model: "gemini-1.5-flash",
+          model: "gemini-3-flash-preview",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
@@ -5321,7 +5370,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
       } else {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-1.5-flash",
+          model: "gemini-3-flash-preview",
           contents: {
             parts: [
               { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
@@ -5377,13 +5426,13 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
       if (!apiKey) {
         const result = await genericAiCall({
           prompt,
-          model: "gemini-1.5-flash"
+          model: "gemini-3-flash-preview"
         });
         answer = result.text;
       } else {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-1.5-flash",
+          model: "gemini-3-flash-preview",
           contents: { parts: [{ text: prompt }] }
         });
         answer = response.text;
@@ -5493,13 +5542,13 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
               { text: prompt }
             ]
           }],
-          model: "gemini-1.5-flash",
+          model: "gemini-3-flash-preview",
           responseSchema
         });
       } else {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-1.5-flash",
+          model: "gemini-3-flash-preview",
           contents: {
             parts: [
               { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
@@ -6991,7 +7040,7 @@ export default function App() {
     neo: {
       bg: 'bg-slate-50',
       sidebar: 'bg-white border-slate-200',
-      content: 'bg-white/80 backdrop-blur-md border border-white shadow-sm rounded-[2.5rem]',
+      content: 'bg-white/90 border border-white shadow-sm rounded-[2.5rem]',
       accent: 'indigo-600',
       text: 'text-slate-800'
     },
