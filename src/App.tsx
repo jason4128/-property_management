@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, Component, ReactNode } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Component, ReactNode } from 'react';
 import { 
   Wallet, 
   CreditCard as CreditCardIcon, 
@@ -42,6 +42,7 @@ import {
   Check,
   MessageSquare,
   FileSearch,
+  RotateCcw,
   Paperclip,
   Send,
   PlusCircle,
@@ -99,6 +100,7 @@ import {
   deleteDoc, 
   doc, 
   updateDoc,
+  deleteField,
   getDocFromServer,
   getDocs
 } from 'firebase/firestore';
@@ -294,7 +296,7 @@ const analyzeSalaryInput = async (input: { text?: string, image?: string, mimeTy
   }
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-1.5-flash",
     contents: { parts: contents },
     config: {
       responseMimeType: "application/json",
@@ -366,7 +368,7 @@ const analyzeTaxDocument = async (fileBase64: string, mimeType: string) => {
   2. 數值均為數字類型。`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-1.5-flash",
     contents: {
       parts: [
         { text: prompt },
@@ -419,7 +421,7 @@ const analyzeTaxStandards = async (fileBase64: string, mimeType: string) => {
   3. 級距請按金額從小到大排列。`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-1.5-flash",
     contents: {
       parts: [
         { text: prompt },
@@ -2494,7 +2496,7 @@ ${text}
 }`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-1.5-flash",
         contents: { parts: [{ text: prompt }] },
         config: {
           responseMimeType: "application/json",
@@ -3195,7 +3197,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       請只回傳 JSON 陣列，不要有其他文字。`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-1.5-flash",
         contents: {
           parts: [
             { text: prompt },
@@ -5296,6 +5298,144 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
   );
 };
 
+// --- Plan Settings Form Component ---
+const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGenerating }: any) => {
+  const [localAge, setLocalAge] = useState<number>(insurance.planAge || currentAge);
+  const [localGender, setLocalGender] = useState<string>(insurance.planGender || '');
+  const [localTerm, setLocalTerm] = useState<string>(insurance.planTerm || '');
+  const [localCoverage, setLocalCoverage] = useState<string>(insurance.planCoverage || '');
+  const isComposing = useRef(false);
+
+  useEffect(() => {
+    // Only reset state if the product actually changes
+    if (insurance.id) {
+      setLocalAge(insurance.planAge || currentAge);
+      setLocalGender(insurance.planGender || '');
+      setLocalTerm(insurance.planTerm || '');
+      setLocalCoverage(insurance.planCoverage || '');
+    }
+  }, [insurance.id]);
+
+  const handleUpdateField = (field: string, value: any) => {
+    // If user is still typing Chinese (IME), wait until blur or compositionEnd
+    if (isComposing.current) return;
+    onUpdate(insurance.id, { [field]: value });
+  };
+
+  const isFormValid = localAge && localGender && localTerm && localCoverage;
+
+  return (
+    <div className="bg-slate-50 p-6 rounded-2xl mb-8">
+      <h5 className="text-sm font-bold text-slate-500 mb-4 uppercase tracking-widest flex items-center justify-between">
+        <span>目前方案設定 (填寫後自動儲存)</span>
+        {!isFormValid && <span className="text-[10px] text-amber-600 animate-pulse bg-amber-100 px-2 py-0.5 rounded-lg font-black">請填寫所有欄位以產生額度表</span>}
+      </h5>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <label className="text-xs font-bold text-slate-400 block mb-1">投保年齡</label>
+          <input 
+            type="number" 
+            value={localAge} 
+            onChange={(e) => setLocalAge(parseInt(e.target.value) || 0)}
+            onBlur={() => handleUpdateField('planAge', localAge)}
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
+            placeholder="例: 37"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold text-slate-400 block mb-1">性別</label>
+          <select 
+            value={localGender} 
+            onChange={(e) => {
+              const val = e.target.value;
+              setLocalGender(val);
+              handleUpdateField('planGender', val);
+            }}
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700"
+          >
+            <option value="">請選擇</option>
+            <option value="男性">男性</option>
+            <option value="女性">女性</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-bold text-slate-400 block mb-1">年期 <span className="text-rose-500">*</span></label>
+          <input 
+            type="text" 
+            value={localTerm} 
+            onCompositionStart={() => isComposing.current = true}
+            onCompositionEnd={() => {
+              isComposing.current = false;
+              handleUpdateField('planTerm', localTerm);
+            }}
+            onChange={(e) => setLocalTerm(e.target.value)}
+            onBlur={() => handleUpdateField('planTerm', localTerm)}
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700"
+            placeholder="例: 30年期"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold text-slate-400 block mb-1">保額 / 計畫別 <span className="text-rose-500">*</span></label>
+          {insurance.planOptions && insurance.planOptions.length > 0 ? (
+            <select
+              value={localCoverage} 
+              onChange={(e) => {
+                const val = e.target.value;
+                setLocalCoverage(val);
+                handleUpdateField('planCoverage', val);
+              }}
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700 font-bold"
+            >
+              <option value="">請選擇</option>
+              {insurance.planOptions.map((opt: string) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          ) : (
+            <input 
+              type="text" 
+              value={localCoverage} 
+              onCompositionStart={() => isComposing.current = true}
+              onCompositionEnd={() => {
+                isComposing.current = false;
+                handleUpdateField('planCoverage', localCoverage);
+              }}
+              onChange={(e) => setLocalCoverage(e.target.value)}
+              onBlur={() => handleUpdateField('planCoverage', localCoverage)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700"
+              placeholder="例: 20萬 或 計畫5"
+            />
+          )}
+        </div>
+      </div>
+      
+      {insurance.planCalculatedPremium && (
+        <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-center justify-between">
+          <span className="text-sm font-bold text-amber-800">當年度預估保費</span>
+          <span className="text-lg font-black text-amber-600">{insurance.planCalculatedPremium}</span>
+        </div>
+      )}
+
+      <div className="mt-6 flex justify-end">
+        <button 
+          onClick={() => {
+            if (!isFormValid) {
+              alert('請先填寫理賠年期與保額/計畫別欄位。');
+              return;
+            }
+            onGenerate(insurance.id);
+          }}
+          disabled={isGenerating}
+          className={`px-6 py-2.5 font-bold text-white text-sm rounded-xl transition-all flex items-center gap-2 shadow-lg active:scale-95 ${!isFormValid ? 'bg-slate-300 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+        >
+          {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+          {isGenerating ? '正在由 AI 試算中...' : '產生方案理賠額度表'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [insurances, setInsurances] = useState<Insurance[]>([]);
   const [premiums, setPremiums] = useState<InsurancePremium[]>([]);
@@ -5307,6 +5447,8 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [isGeneratingTable, setIsGeneratingTable] = useState(false);
   const [aiMode, setAiMode] = useState<'premium' | 'contract'>('premium'); // New state for AI mode
+  const [confirmClearId, setConfirmClearId] = useState<string | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
 
   // Coverage Analysis States
   const [selectedInsuranceId, setSelectedInsuranceId] = useState<string | null>(null);
@@ -5377,7 +5519,7 @@ ${ins.analysisRaw || ins.coverageSummary}
       
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-1.5-flash',
         contents: prompt
       });
       let text = response.text || "{}";
@@ -5437,7 +5579,7 @@ ${ins.analysisRaw || ins.coverageSummary}
               { text: prompt }
             ] 
           }],
-          model: "gemini-2.5-flash",
+          model: "gemini-1.5-flash",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
@@ -5451,7 +5593,7 @@ ${ins.analysisRaw || ins.coverageSummary}
       } else {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-1.5-flash",
           contents: {
             parts: [
               ...fileParts,
@@ -5478,6 +5620,36 @@ ${ins.analysisRaw || ins.coverageSummary}
       alert('分析失敗');
     } finally {
       setIsAIProcessing(false);
+    }
+  };
+
+  const handleClearInsuranceAnalysis = async (insId: string) => {
+    // Sequential confirmation for iFrame safety
+    if (confirmClearId !== insId) {
+      setConfirmClearId(insId);
+      setTimeout(() => setConfirmClearId(null), 3000); // Reset after 3s
+      return;
+    }
+
+    setIsClearing(true);
+    setConfirmClearId(null);
+    try {
+      await updateDoc(doc(db, 'insurances', insId), {
+        coverageSummary: deleteField(),
+        analysisRaw: deleteField(),
+        planOptions: deleteField(),
+        planCalculatedPremium: deleteField(),
+        planCalculatedCoverage: deleteField(),
+        planAge: deleteField(),
+        planGender: deleteField(),
+        planTerm: deleteField(),
+        planCoverage: deleteField()
+      });
+      console.log('Analysis cleared for:', insId);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsClearing(false);
     }
   };
 
@@ -5512,13 +5684,13 @@ ${ins.analysisRaw || ins.coverageSummary}
       if (!apiKey) {
         const result = await genericAiCall({
           prompt,
-          model: "gemini-2.5-flash"
+          model: "gemini-1.5-flash"
         });
         answer = result.text;
       } else {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-1.5-flash",
           contents: { parts: [{ text: prompt }] }
         });
         answer = response.text;
@@ -5632,13 +5804,13 @@ ${ins.analysisRaw || ins.coverageSummary}
               { text: prompt }
             ]
           }],
-          model: "gemini-2.5-flash",
+          model: "gemini-1.5-flash",
           responseSchema
         });
       } else {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-1.5-flash",
           contents: {
             parts: [
               ...fileParts,
@@ -5889,12 +6061,25 @@ ${ins.analysisRaw || ins.coverageSummary}
                       保障項目與理賠諮詢分析
                     </p>
                   </div>
-                  <button 
-                    onClick={() => { setAiMode('contract'); setIsAIModalOpen(true); }}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl hover:bg-indigo-700 transition-all font-bold text-sm shadow-xl shadow-indigo-100 active:scale-95"
-                  >
-                    <FileSearch size={20} /> AI 分析契約
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {insurances.find(i => i.id === selectedInsuranceId)?.coverageSummary && (
+                      <button 
+                        onClick={() => handleClearInsuranceAnalysis(selectedInsuranceId)}
+                        disabled={isClearing}
+                        className={`flex items-center gap-2 px-6 py-3 rounded-2xl transition-all font-bold text-sm shadow-sm scale-100 active:scale-95 ${confirmClearId === selectedInsuranceId ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 text-slate-500 hover:bg-rose-50 hover:text-rose-600'}`}
+                        title="清除分析結果"
+                      >
+                        {isClearing ? <Loader2 size={18} className="animate-spin" /> : <RotateCcw size={18} />}
+                        {confirmClearId === selectedInsuranceId ? '確定清除？' : '清除分析'}
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => { setAiMode('contract'); setIsAIModalOpen(true); }}
+                      className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl hover:bg-indigo-700 transition-all font-bold text-sm shadow-xl shadow-indigo-100 active:scale-95"
+                    >
+                      <FileSearch size={20} /> AI 分析契約
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar">
@@ -5925,84 +6110,13 @@ ${ins.analysisRaw || ins.coverageSummary}
                           </h4>
                         </div>
                         
-                        <div className="bg-slate-50 p-6 rounded-2xl mb-8">
-                          <h5 className="text-sm font-bold text-slate-500 mb-4 uppercase tracking-widest">目前方案設定 (選擇後自動記憶)</h5>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div>
-                              <label className="text-xs font-bold text-slate-400 block mb-1">投保年齡</label>
-                              <input 
-                                type="number" 
-                                value={insurances.find(i => i.id === selectedInsuranceId)?.planAge || currentAge} 
-                                onChange={(e) => handleUpdatePlanInfo(selectedInsuranceId, { planAge: parseInt(e.target.value) || 0 })}
-                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
-                                placeholder="例: 30"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-xs font-bold text-slate-400 block mb-1">性別</label>
-                              <select 
-                                value={insurances.find(i => i.id === selectedInsuranceId)?.planGender || ''} 
-                                onChange={(e) => handleUpdatePlanInfo(selectedInsuranceId, { planGender: e.target.value as '男性' | '女性' })}
-                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
-                              >
-                                <option value="">請選擇</option>
-                                <option value="男性">男性</option>
-                                <option value="女性">女性</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-xs font-bold text-slate-400 block mb-1">年期</label>
-                              <input 
-                                type="text" 
-                                value={insurances.find(i => i.id === selectedInsuranceId)?.planTerm || ''} 
-                                onChange={(e) => handleUpdatePlanInfo(selectedInsuranceId, { planTerm: e.target.value })}
-                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
-                                placeholder="例: 30年期"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-xs font-bold text-slate-400 block mb-1">保額 / 計畫別</label>
-                              {insurances.find(i => i.id === selectedInsuranceId)?.planOptions && insurances.find(i => i.id === selectedInsuranceId)!.planOptions!.length > 0 ? (
-                                <select
-                                  value={insurances.find(i => i.id === selectedInsuranceId)?.planCoverage || ''} 
-                                  onChange={(e) => handleUpdatePlanInfo(selectedInsuranceId, { planCoverage: e.target.value })}
-                                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
-                                >
-                                  <option value="">請選擇</option>
-                                  {insurances.find(i => i.id === selectedInsuranceId)?.planOptions?.map(opt => (
-                                    <option key={opt} value={opt}>{opt}</option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <input 
-                                  type="text" 
-                                  value={insurances.find(i => i.id === selectedInsuranceId)?.planCoverage || ''} 
-                                  onChange={(e) => handleUpdatePlanInfo(selectedInsuranceId, { planCoverage: e.target.value })}
-                                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
-                                  placeholder="例: 20萬 或 計畫5"
-                                />
-                              )}
-                            </div>
-                          </div>
-                          
-                          {insurances.find(i => i.id === selectedInsuranceId)?.planCalculatedPremium && (
-                            <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-center justify-between">
-                              <span className="text-sm font-bold text-amber-800">當年度預估保費</span>
-                              <span className="text-lg font-black text-amber-600">{insurances.find(i => i.id === selectedInsuranceId)?.planCalculatedPremium}</span>
-                            </div>
-                          )}
-
-                          <div className="mt-6 flex justify-end">
-                            <button 
-                              onClick={() => handleGenerateCoverageTable(selectedInsuranceId)}
-                              disabled={isGeneratingTable || !insurances.find(i => i.id === selectedInsuranceId)?.planCoverage}
-                              className="px-6 py-2.5 bg-indigo-600 font-bold text-white text-sm rounded-xl hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {isGeneratingTable ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                              {isGeneratingTable ? '正在產生...' : '產生理賠額度表'}
-                            </button>
-                          </div>
-                        </div>
+                        <PlanSettingsForm
+                          insurance={insurances.find(i => i.id === selectedInsuranceId)}
+                          onUpdate={handleUpdatePlanInfo}
+                          currentAge={currentAge}
+                          onGenerate={handleGenerateCoverageTable}
+                          isGenerating={isGeneratingTable}
+                        />
 
                         {insurances.find(i => i.id === selectedInsuranceId)?.planCalculatedCoverage && (
                           <div className="space-y-6">
