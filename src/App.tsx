@@ -5778,7 +5778,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
   const [aiFileDatas, setAiFileDatas] = useState<{ url: string, type: string, name: string }[]>([]);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [isGeneratingTable, setIsGeneratingTable] = useState(false);
-  const [aiMode, setAiMode] = useState<'premium' | 'contract'>('premium'); // New state for AI mode
+  const [aiMode, setAiMode] = useState<'premium' | 'contract' | 'new_insurance'>('premium'); // New state for AI mode
   const [confirmClearId, setConfirmClearId] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
 
@@ -5934,7 +5934,13 @@ ${ins.analysisRaw || ins.coverageSummary}
           },
           config: { responseMimeType: "application/json" }
         }));
-        result = JSON.parse(response.text || '{}');
+        let text = response.text || '{}';
+        if (text.includes('```json')) {
+          text = text.split('```json')[1].split('```')[0];
+        } else if (text.includes('```')) {
+          text = text.split('```')[1].split('```')[0];
+        }
+        result = JSON.parse(text.trim() || '{}');
       }
 
       if (result.summary) {
@@ -5950,6 +5956,108 @@ ${ins.analysisRaw || ins.coverageSummary}
     } catch (error: any) {
       console.error('AI Error:', error);
       alert(`保險契約分析失敗: ${error?.message || '未知錯誤'}`);
+    } finally {
+      setIsAIProcessing(false);
+    }
+  };
+
+  const handleNewInsuranceAIProcess = async () => {
+    if (aiFileDatas.length === 0) {
+      alert('請上傳保險契約文件或截圖 (圖片或 PDF)');
+      return;
+    }
+    setIsAIProcessing(true);
+    try {
+      const apiKey = getApiKey();
+      const prompt = `你是一個專業的保險文件數據擷取工程師。
+請分析使用者上傳的保險契約或建議書（圖片或 PDF），並盡可能提取以下資訊。
+如果某些內容無法從圖中得知，請填空字元或空陣列。
+
+請提取：
+1. provider (字串，保險公司名稱，例如：全球人壽、遠雄人壽)
+2. name (字串，保險商品名稱，例如：醫卡罩重大傷病定期健康保險)
+3. type (字串，險種分類，只需根據內容判定是哪一類，例如：醫療險、重大傷病、癌症險、意外險、壽險、失能險)
+4. summary (字串，Markdown 格式的保障總結)
+5. rawAnalysis (字串，詳細的各項理賠額度數據)
+6. planOptions (字串陣列，例如 ["計畫一", "計畫二", "計畫三"]，如果沒有選項則回傳空陣列)
+
+回傳格式必須剛好是可解析的 JSON 格式：
+{
+  "provider": "保險公司名稱",
+  "name": "保險名稱",
+  "type": "險種",
+  "summary": "...",
+  "rawAnalysis": "...",
+  "planOptions": []
+}
+
+請只回傳 JSON，不要有其他說明文字。`;
+
+      const fileParts = aiFileDatas.map(file => ({
+        inlineData: { mimeType: file.type, data: file.url.split(',')[1] }
+      }));
+
+      let result;
+      if (!apiKey) {
+        result = await genericAiCall({
+          contents: [{ 
+            role: 'user', 
+            parts: [
+              ...fileParts,
+              { text: prompt }
+            ] 
+          }],
+          model: "gemini-3-flash-preview",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              provider: { type: Type.STRING },
+              name: { type: Type.STRING },
+              type: { type: Type.STRING },
+              summary: { type: Type.STRING },
+              rawAnalysis: { type: Type.STRING },
+              planOptions: { type: Type.ARRAY, items: { type: Type.STRING } }
+            },
+            required: ["provider", "name", "type"]
+          }
+        });
+      } else {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await withRetry(() => ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: {
+            parts: [
+              ...fileParts,
+              { text: prompt }
+            ]
+          },
+          config: { responseMimeType: "application/json" }
+        }));
+        let text = response.text || '{}';
+        if (text.includes('```json')) {
+          text = text.split('```json')[1].split('```')[0];
+        } else if (text.includes('```')) {
+          text = text.split('```')[1].split('```')[0];
+        }
+        result = JSON.parse(text.trim() || '{}');
+      }
+
+      setNewInsurance({
+        ...newInsurance,
+        provider: result.provider || newInsurance.provider || '',
+        name: result.name || newInsurance.name || '',
+        type: result.type || newInsurance.type || '',
+        coverageSummary: result.summary || '',
+        analysisRaw: result.rawAnalysis || '',
+        planOptions: result.planOptions || []
+      });
+      
+      alert('自動帶入保險資料完成！請確認資料並填寫未完成項目。');
+      setIsAIModalOpen(false);
+      setAiFileDatas([]);
+    } catch (error: any) {
+      console.error('AI Error:', error);
+      alert(`保險契約辨識失敗: ${error?.message || '未知錯誤'}`);
     } finally {
       setIsAIProcessing(false);
     }
@@ -6240,7 +6348,15 @@ ${ins.analysisRaw || ins.coverageSummary}
 
       {isAdding && (
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-8 rounded-[2rem] shadow-xl border border-indigo-100 space-y-6">
-          <h3 className="text-xl font-bold text-slate-800">新增保險產品</h3>
+          <div className="flex justify-between items-center">
+            <h3 className="text-xl font-bold text-slate-800">新增保險產品</h3>
+            <button 
+              onClick={() => { setAiMode('new_insurance'); setIsAIModalOpen(true); }}
+              className="flex items-center gap-2 bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl hover:bg-emerald-100 transition-colors font-bold text-sm border border-emerald-100"
+            >
+              <FileSearch size={16} /> AI 分析契約帶入
+            </button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">保險公司</label>
@@ -6255,6 +6371,12 @@ ${ins.analysisRaw || ins.coverageSummary}
               <input type="text" placeholder="如: 醫療險" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 transition-all font-medium text-base" value={newInsurance.type ?? ""} onChange={e => setNewInsurance({...newInsurance, type: e.target.value})} />
             </div>
           </div>
+          {newInsurance.coverageSummary && (
+            <div className="bg-emerald-50 text-emerald-700 px-4 py-3 rounded-xl flex items-center gap-2 text-sm font-medium border border-emerald-100">
+              <Sparkles size={16} /> 
+              已自動寫入理賠試算所需的隱藏合約資料 ({newInsurance.planOptions?.length ? `找到 ${newInsurance.planOptions.length} 個計畫別選項` : '基本理賠數據帶入'})
+            </div>
+          )}
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
              <button onClick={() => setIsAdding(false)} className="px-6 py-3 text-slate-600 hover:bg-slate-100 rounded-xl font-bold transition-all">取消</button>
              <button onClick={handleAdd} className="bg-indigo-600 text-white px-10 py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all">儲存產品</button>
@@ -6565,8 +6687,8 @@ ${ins.analysisRaw || ins.coverageSummary}
                     {aiMode === 'premium' ? <ShieldCheck size={24} /> : <FileSearch size={24} />}
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-slate-800">{aiMode === 'premium' ? 'AI 保費智慧辨識' : 'AI 契約內容分析'}</h3>
-                    <p className="text-xs text-slate-500 font-medium">{aiMode === 'premium' ? '上傳各年齡保費表' : '分析詳細理賠項目與額度'}</p>
+                    <h3 className="text-xl font-bold text-slate-800">{aiMode === 'premium' ? 'AI 保費智慧辨識' : aiMode === 'contract' ? 'AI 契約內容分析' : 'AI 新增產品助理'}</h3>
+                    <p className="text-xs text-slate-500 font-medium">{aiMode === 'premium' ? '上傳各年齡保費表' : aiMode === 'contract' ? '分析詳細理賠項目與額度' : '上傳契約自動帶入產品資訊與理賠內容'}</p>
                   </div>
                 </div>
                 <button onClick={() => setIsAIModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
@@ -6633,7 +6755,7 @@ ${ins.analysisRaw || ins.coverageSummary}
                     </div>
                     <div className="flex gap-3">
                       <button 
-                        onClick={aiMode === 'premium' ? handleAIProcess : handleContractAnalysis} 
+                        onClick={aiMode === 'premium' ? handleAIProcess : aiMode === 'contract' ? handleContractAnalysis : handleNewInsuranceAIProcess} 
                         disabled={isAIProcessing} 
                         className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-white transition-all shadow-lg ${isAIProcessing ? 'bg-slate-300' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'}`}
                       >
