@@ -2946,34 +2946,6 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
     setIsRefreshingPrices(true);
     setRefreshStatus('準備更新現價...');
 
-    const proxies = [
-      (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-      (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-      (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`
-    ];
-
-    const fetchWithProxy = async (url: string) => {
-      // 依序嘗試多個代理
-      for (const proxy of proxies) {
-        try {
-          const res = await fetch(proxy(url));
-          if (!res.ok) continue;
-          
-          const json = await res.json();
-          // 判定回傳格式 (AllOrigins 會包在 contents 裡)
-          const data = json.contents ? JSON.parse(json.contents) : json;
-          
-          // 如果是有效回傳 (Yahoo 格式)
-          if (data?.quoteResponse?.result?.[0] || data?.chart?.result?.[0]) {
-            return data;
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-      return null;
-    };
-
     try {
       let successCount = 0;
       
@@ -2984,29 +2956,20 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
         const sym = stock.symbol.trim();
         if (!sym || sym === 'NA') continue;
 
-        // 台股判定 (4~6位數字)
-        const isTaiwan = /^\d[0-9]{3,5}$/.test(sym);
-        const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
-        
-        let price = null;
-        for (const target of targets) {
-          const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
-          const data = await fetchWithProxy(url);
-          const result = data?.quoteResponse?.result?.[0];
-          
-          if (result && result.regularMarketPrice) {
-            price = result.regularMarketPrice;
-            break; // 找到價格就停止嘗試該股票的其他後綴
+        try {
+          const res = await fetch(`/api/stock/${encodeURIComponent(sym)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.regularMarketPrice) {
+              await updateDoc(doc(db, 'stocks', stock.id), { 
+                currentPrice: data.regularMarketPrice,
+                lastPriceUpdate: new Date().toISOString()
+              });
+              successCount++;
+            }
           }
-        }
-        
-        if (price !== null) {
-          // 更新 Firebase (這會觸發 onSnapshot 自動更新畫面)
-          await updateDoc(doc(db, 'stocks', stock.id), { 
-            currentPrice: price,
-            lastPriceUpdate: new Date().toISOString()
-          });
-          successCount++;
+        } catch (e) {
+          console.error(`Failed to update ${sym}:`, e);
         }
       }
       
