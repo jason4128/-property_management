@@ -296,7 +296,7 @@ const analyzeSalaryInput = async (input: { text?: string, image?: string, mimeTy
   }
 
   const response = await ai.models.generateContent({
-    model: "gemini-1.5-flash",
+    model: "gemini-2.0-flash",
     contents: { parts: contents },
     config: {
       responseMimeType: "application/json",
@@ -368,7 +368,7 @@ const analyzeTaxDocument = async (fileBase64: string, mimeType: string) => {
   2. 數值均為數字類型。`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-1.5-flash",
+    model: "gemini-2.0-flash",
     contents: {
       parts: [
         { text: prompt },
@@ -421,7 +421,7 @@ const analyzeTaxStandards = async (fileBase64: string, mimeType: string) => {
   3. 級距請按金額從小到大排列。`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-1.5-flash",
+    model: "gemini-2.0-flash",
     contents: {
       parts: [
         { text: prompt },
@@ -826,9 +826,9 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
       setIsAIModalOpen(false);
       setAiInput("");
       setAiFileData(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Analysis failed:", error);
-      alert("AI 分析失敗，請重試或手動輸入。");
+      alert(`AI 分析失敗: ${error?.message || '未知錯誤'}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -2496,7 +2496,7 @@ ${text}
 }`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.0-flash",
         contents: { parts: [{ text: prompt }] },
         config: {
           responseMimeType: "application/json",
@@ -3197,7 +3197,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       請只回傳 JSON 陣列，不要有其他文字。`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.0-flash",
         contents: {
           parts: [
             { text: prompt },
@@ -3208,6 +3208,9 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
               }
             }
           ]
+        },
+        config: {
+          responseMimeType: "application/json"
         }
       });
 
@@ -5519,7 +5522,7 @@ ${ins.analysisRaw || ins.coverageSummary}
       
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.0-flash',
         contents: prompt
       });
       let text = response.text || "{}";
@@ -5579,7 +5582,7 @@ ${ins.analysisRaw || ins.coverageSummary}
               { text: prompt }
             ] 
           }],
-          model: "gemini-1.5-flash",
+          model: "gemini-2.0-flash",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
@@ -5593,7 +5596,7 @@ ${ins.analysisRaw || ins.coverageSummary}
       } else {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-1.5-flash",
+          model: "gemini-2.0-flash",
           contents: {
             parts: [
               ...fileParts,
@@ -5615,9 +5618,9 @@ ${ins.analysisRaw || ins.coverageSummary}
       }
       setIsAIModalOpen(false);
       setAiFileDatas([]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('AI Error:', error);
-      alert('分析失敗');
+      alert(`保險契約分析失敗: ${error?.message || '未知錯誤'}`);
     } finally {
       setIsAIProcessing(false);
     }
@@ -5684,13 +5687,13 @@ ${ins.analysisRaw || ins.coverageSummary}
       if (!apiKey) {
         const result = await genericAiCall({
           prompt,
-          model: "gemini-1.5-flash"
+          model: "gemini-2.0-flash"
         });
         answer = result.text;
       } else {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-1.5-flash",
+          model: "gemini-2.0-flash",
           contents: { parts: [{ text: prompt }] }
         });
         answer = response.text;
@@ -5804,13 +5807,13 @@ ${ins.analysisRaw || ins.coverageSummary}
               { text: prompt }
             ]
           }],
-          model: "gemini-1.5-flash",
+          model: "gemini-2.0-flash",
           responseSchema
         });
       } else {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-1.5-flash",
+          model: "gemini-2.0-flash",
           contents: {
             parts: [
               ...fileParts,
@@ -5845,9 +5848,9 @@ ${ins.analysisRaw || ins.coverageSummary}
       alert('AI 保費辨識匯入完成！');
       setIsAIModalOpen(false);
       setAiFileDatas([]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('AI Error:', error);
-      alert('AI 辨識失敗。');
+      alert(`AI 辨識失敗: ${error?.message || '未知錯誤'}`);
     } finally {
       setIsAIProcessing(false);
     }
