@@ -2947,52 +2947,38 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
     setRefreshStatus('準備更新現價...');
 
     try {
-      let successCount = 0;
+      const symbols = stocks.map(s => s.symbol.trim()).filter(sym => sym && sym !== 'NA');
       
-      const proxies = [
-        (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-        (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-        (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`
-      ];
+      if (symbols.length === 0) {
+        throw new Error("No valid symbols to update");
+      }
 
-      const fetchWithProxy = async (url: string) => {
-        for (const proxy of proxies) {
-          try {
-            const res = await fetch(proxy(url));
-            if (!res.ok) continue;
-            const json = await res.json();
-            const data = json.contents ? JSON.parse(json.contents) : json;
-            if (data?.quoteResponse?.result?.[0] || data?.chart?.result?.[0]) return data;
-          } catch (e) { continue; }
-        }
-        return null;
-      };
+      setRefreshStatus('從伺服器取得最新報價...');
+      const res = await fetch(`/api/stocks/quotes?symbols=${encodeURIComponent(symbols.join(','))}`);
+      
+      if (!res.ok) {
+        throw new Error('Failed to fetch from backend');
+      }
 
-      for (let i = 0; i < stocks.length; i++) {
-        const stock = stocks[i];
-        setRefreshStatus(`更新中: ${stock.name || stock.symbol} (${i + 1}/${stocks.length})...`);
-        
+      const data = await res.json();
+      let successCount = 0;
+
+      setRefreshStatus('寫入資料庫...');
+      for (const stock of stocks) {
         const sym = stock.symbol.trim();
         if (!sym || sym === 'NA') continue;
 
-        const isTaiwan = /^\d[0-9]{3,5}$/.test(sym);
-        const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
-        
-        let price = null;
-        for (const target of targets) {
-          const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
-          const data = await fetchWithProxy(url);
-          const result = data?.quoteResponse?.result?.[0];
-          
-          if (result && result.regularMarketPrice) {
-            price = result.regularMarketPrice;
-            break;
-          }
-        }
-        
-        if (price !== null) {
+        // Try to match symbol from results
+        // results might have suffixes like .TW or .TWO
+        const result = data.find((q: any) => 
+          q.symbol === sym || 
+          q.symbol === `${sym}.TW` || 
+          q.symbol === `${sym}.TWO`
+        );
+
+        if (result && result.regularMarketPrice) {
           await updateDoc(doc(db, 'stocks', stock.id), { 
-            currentPrice: price,
+            currentPrice: result.regularMarketPrice,
             lastPriceUpdate: new Date().toISOString()
           });
           successCount++;
@@ -3307,55 +3293,32 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       
       try {
         const sym = selectedStock.symbol.trim();
-        const isTaiwan = /^\d[0-9]{3,5}$/.test(sym);
-        const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
         
-        const proxies = [
-          (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-          (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
-        ];
-
-        const fetchWithProxy = async (url: string) => {
-          return await Promise.any(proxies.map(async proxy => {
-            const res = await fetch(proxy(url));
-            if (!res.ok) throw new Error('failed');
-            const rawJson = await res.json();
-            return rawJson.contents ? JSON.parse(rawJson.contents) : rawJson;
-          }));
-        };
-
-        let quote = null;
-        let chartData = null;
-
-        for (const target of targets) {
-          try {
-            const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
-            const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${target}?interval=1d&range=3mo`;
-            
-            try {
-              if (!quote) {
-                const qParsed = await fetchWithProxy(quoteUrl);
-                quote = qParsed.quoteResponse?.result?.[0];
-              }
-              if (!chartData) {
-                const cParsed = await fetchWithProxy(chartUrl);
-                chartData = cParsed.chart?.result?.[0];
-              }
-            } catch (e) {}
-            
-            if (quote || chartData) break;
-          } catch(e) {}
+        // Fetch current quote from backend
+        try {
+          const quoteRes = await fetch(`/api/stock/${encodeURIComponent(sym)}`);
+          if (quoteRes.ok) {
+            const data = await quoteRes.json();
+            setStockData(data);
+          }
+        } catch (e) {
+          console.error("Backend quote fetch failed:", e);
         }
 
-        if (quote) setStockData(quote);
-        if (chartData?.timestamp && chartData?.indicators?.quote?.[0]?.close) {
-          const timestamps = chartData.timestamp;
-          const closes = chartData.indicators.quote[0].close;
-          const hist = timestamps.map((t: number, i: number) => ({
-            date: t * 1000,
-            close: closes[i]
-          })).filter((h: any) => h.close !== null);
-          setHistoryData(hist);
+        // Fetch history from backend
+        try {
+          const historyRes = await fetch(`/api/stock/history/${encodeURIComponent(sym)}`);
+          if (historyRes.ok) {
+            const history = await historyRes.json();
+            if (Array.isArray(history)) {
+              setHistoryData(history.map(h => ({
+                date: new Date(h.date).getTime(),
+                close: h.close
+              })));
+            }
+          }
+        } catch (e) {
+          console.error("Backend history fetch failed:", e);
         }
       } catch (err) {
         console.error('Stock detail error:', err);
@@ -5420,7 +5383,11 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
 詳細數據：${targetIns.analysisRaw}
 
 使用者問題：${chatMessage}
-請以專業、親切且易懂的方式回答，並明確指出理賠條件（如果已知）。如果資訊不足，請禮貌說明。`;
+請以專業、親切且易懂的方式回答，並明確指出理賠條件（如果已知）。如果資訊不足，請禮貌說明。
+【重要排版要求】：
+1. 務必使用 Markdown 格式（標題、清單、粗體）。
+2. 每段文字不要太長，請**適當分段落**，段落與段落之間要空行。
+3. 關鍵數字或重點請使用粗體標示或條列式整理，讓人一眼就能看懂。`;
 
       let answer;
       if (!apiKey) {
@@ -5819,7 +5786,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                             <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black">AI</div>
                             <span className="text-base font-black text-slate-800 uppercase tracking-widest">保障摘要報告</span>
                           </div>
-                          <div className="prose prose-base max-w-none prose-indigo prose-p:leading-relaxed prose-li:my-2 prose-headings:font-black prose-headings:text-slate-800 prose-strong:text-indigo-600">
+                          <div className="text-slate-700 leading-relaxed [&>p]:mb-4 last:[&>p]:mb-0 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:mb-6 [&>ul>li]:mb-2 [&>h1]:text-2xl [&>h1]:font-black [&>h1]:text-slate-900 [&>h1]:mb-4 [&>h2]:text-xl [&>h2]:font-bold [&>h2]:text-slate-800 [&>h2]:mb-4 [&>h2]:mt-6 [&>h3]:text-lg [&>h3]:font-bold [&>h3]:text-slate-800 [&>h3]:mb-3 [&>h3]:mt-4 [&>h4]:text-md [&>h4]:font-bold [&>h4]:mb-2 [&>ol]:list-decimal [&>ol]:pl-5 [&>ol]:mb-6 [&>ol>li]:mb-2 break-words [&>p>strong]:text-indigo-600 [&>li>strong]:text-indigo-600">
                             <Markdown>
                               {insurances.find(i => i.id === selectedInsuranceId)?.coverageSummary || ''}
                             </Markdown>
@@ -5838,8 +5805,10 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                         <div className="space-y-4">
                           {chatHistory.map((msg, idx) => (
                             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                              <div className={`max-w-[90%] md:max-w-[75%] p-5 rounded-[1.5rem] text-base leading-relaxed font-medium ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none shadow-lg' : 'bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200'}`}>
-                                {msg.content}
+                              <div className={`max-w-[90%] md:max-w-[75%] p-5 rounded-[1.5rem] text-base leading-relaxed font-medium ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none shadow-lg' : 'bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200'} [&>p]:mb-4 last:[&>p]:mb-0 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:mb-4 [&>h3]:text-lg [&>h3]:font-bold [&>h3]:mb-2 [&>h4]:text-md [&>h4]:font-bold [&>h4]:mb-2 [&>ol]:list-decimal [&>ol]:pl-5 [&>ol]:mb-4 break-words`}>
+                                <Markdown>
+                                  {msg.content}
+                                </Markdown>
                               </div>
                             </div>
                           ))}
@@ -6928,10 +6897,8 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         msg.role === 'user' 
                           ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' 
                           : 'bg-white border border-slate-200 text-slate-800 shadow-sm'
-                      }`}>
-                        <div className="markdown-body">
-                          <Markdown>{msg.content}</Markdown>
-                        </div>
+                      } [&>p]:mb-4 last:[&>p]:mb-0 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:mb-4 [&>h3]:text-lg [&>h3]:font-bold [&>h3]:mb-2 [&>h4]:text-md [&>h4]:font-bold [&>h4]:mb-2 [&>ol]:list-decimal [&>ol]:pl-5 [&>ol]:mb-4 break-words`}>
+                        <Markdown>{msg.content}</Markdown>
                       </div>
                     </div>
                   ))
