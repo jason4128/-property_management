@@ -5315,6 +5315,17 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
   const [isChatting, setIsChatting] = useState(false);
   const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'assistant', content: string }[]>([]);
 
+  const BIRTHDAY = new Date('1988-09-27');
+  const currentAge = useMemo(() => {
+    const today = new Date();
+    let age = today.getFullYear() - BIRTHDAY.getFullYear();
+    const m = today.getMonth() - BIRTHDAY.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < BIRTHDAY.getDate())) {
+      age--;
+    }
+    return age;
+  }, []);
+
   const handleUpdatePlanInfo = async (id: string, updates: Partial<Insurance>) => {
     try {
       await updateDoc(doc(db, 'insurances', id), updates);
@@ -5339,47 +5350,47 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
 ${ins.analysisRaw || ins.coverageSummary}
 
 使用者目前的方案條件：
-- 投保年齡：${ins.planAge || '未知'} 歲
+- 投保年齡：${ins.planAge || currentAge || '未知'} 歲
 - 性別：${ins.planGender || '未知'}
 - 年期：${ins.planTerm || '未知'}
 - 保額/單位/計畫別：${ins.planCoverage || '未知'}
 
-請嚴格根據以上資訊，試算出此特定方案的各項理賠額度，並回傳一份 JSON 陣列，代表表格的分類與項目。
-格式必須為（此為範例，請以真實數據填寫）：
-[
-  {
-    "category": "住院 / 每次",
-    "items": [
-      { "name": "住院雜費", "amount": "120,000 元" },
-      { "name": "住院總天數1-30天", "amount": "120,000 元" },
-      { "name": "住院手續費(若有附註)", "amount": "1,000 元", "note": "備註文字" }
-    ]
-  },
-  {
-    "category": "門診 / 每次",
-    "items": [
-      { "name": "門診手術費(最高)", "amount": "220,000 元" }
-    ]
-  }
-]
+請嚴格根據以上資訊，試算出此特定方案的各項理賠額度，並回傳一份 JSON：
+1. 若數據中包含「費率表」，請依「年齡」、「性別」、「計畫別」等條件找出當年度保險費用，若無資料填寫 "無資訊"。
+2. coverageTable 為試算出的各項理賠額度表格。
 
-如果無法確定具體數字，請填寫 "依條款規定" 或 "無"。請只回傳陣列，不要有其他文字。只接受剛好陣列開頭跟結尾。`;
+格式必須為：
+{
+  "premium": "5,260 元",
+  "coverageTable": [
+    {
+      "category": "住院 / 每次",
+      "items": [
+        { "name": "住院雜費", "amount": "120,000 元" },
+        { "name": "住院手續費", "amount": "1,000 元", "note": "備註文字" }
+      ]
+    }
+  ]
+}
+
+請只回傳 JSON，不要有其他文字。只接受剛好 JSON 開頭跟結尾。`;
       
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.0-flash',
         contents: prompt
       });
-      let text = response.text || "[]";
-      if (text.includes("\`\`\`json")) {
-        text = text.split("\`\`\`json")[1].split("\`\`\`")[0];
-      } else if (text.includes("\`\`\`")) {
-        text = text.split("\`\`\`")[1].split("\`\`\`")[0];
+      let text = response.text || "{}";
+      if (text.includes(`\`\`\`json`)) {
+        text = text.split(`\`\`\`json`)[1].split(`\`\`\``)[0];
+      } else if (text.includes(`\`\`\``)) {
+        text = text.split(`\`\`\``)[1].split(`\`\`\``)[0];
       }
       
       const parsed = JSON.parse(text);
       await updateDoc(doc(db, 'insurances', insId), {
-        planCalculatedCoverage: JSON.stringify(parsed)
+        planCalculatedPremium: parsed.premium || "無資訊",
+        planCalculatedCoverage: JSON.stringify(parsed.coverageTable || [])
       });
       alert('試算理賠額度表完成');
     } catch (e: any) {
@@ -5389,17 +5400,6 @@ ${ins.analysisRaw || ins.coverageSummary}
       setIsGeneratingTable(false);
     }
   };
-
-  const BIRTHDAY = new Date('1988-09-27');
-  const currentAge = useMemo(() => {
-    const today = new Date();
-    let age = today.getFullYear() - BIRTHDAY.getFullYear();
-    const m = today.getMonth() - BIRTHDAY.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < BIRTHDAY.getDate())) {
-      age--;
-    }
-    return age;
-  }, []);
 
   const handleContractAnalysis = async () => {
     if (!aiFileData || !selectedInsuranceId) {
@@ -5413,12 +5413,14 @@ ${ins.analysisRaw || ins.coverageSummary}
       const prompt = `你是一個專業的保險契約分析師。請分析這份「${targetIns?.provider} ${targetIns?.name}」的保險契約文件。
 1. 請總結該保險的核心保障項目（例如：住院日額、特定手術、意外失能等）。
 2. 請提取關鍵理賠額度。
-3. 以結構化 Markdown 格式回傳。
+3. 判斷文件中是否有「計畫別」或「保障類別」（例如：計畫一、計畫二、500萬、1000萬等），如果有的話提取出來，以字串陣列回傳。
+4. 以結構化 Markdown 格式回傳。
 
 請回傳 JSON 格式：
 {
   "summary": "Markdown 格式的保障總結",
-  "rawAnalysis": "詳細的分析數據"
+  "rawAnalysis": "詳細的分析數據",
+  "planOptions": ["計畫一", "計畫二"] // 如果有的話，否則回傳空陣列
 }`;
 
       let result;
@@ -5431,12 +5433,13 @@ ${ins.analysisRaw || ins.coverageSummary}
               { text: prompt }
             ] 
           }],
-          model: "gemini-3-flash-preview",
+          model: "gemini-3.0-flash",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
               summary: { type: Type.STRING },
-              rawAnalysis: { type: Type.STRING }
+              rawAnalysis: { type: Type.STRING },
+              planOptions: { type: Type.ARRAY, items: { type: Type.STRING } }
             },
             required: ["summary", "rawAnalysis"]
           }
@@ -5444,7 +5447,7 @@ ${ins.analysisRaw || ins.coverageSummary}
       } else {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
+          model: "gemini-3.0-flash",
           contents: {
             parts: [
               { inlineData: { mimeType: aiFileData.type, data: aiFileData.url.split(',')[1] } },
@@ -5459,7 +5462,8 @@ ${ins.analysisRaw || ins.coverageSummary}
       if (result.summary) {
         await updateDoc(doc(db, 'insurances', selectedInsuranceId), {
           coverageSummary: result.summary,
-          analysisRaw: result.rawAnalysis
+          analysisRaw: result.rawAnalysis,
+          planOptions: result.planOptions || []
         });
         alert('保險契約分析完成！');
       }
@@ -5920,7 +5924,7 @@ ${ins.analysisRaw || ins.coverageSummary}
                               <label className="text-xs font-bold text-slate-400 block mb-1">投保年齡</label>
                               <input 
                                 type="number" 
-                                value={insurances.find(i => i.id === selectedInsuranceId)?.planAge || ''} 
+                                value={insurances.find(i => i.id === selectedInsuranceId)?.planAge || currentAge} 
                                 onChange={(e) => handleUpdatePlanInfo(selectedInsuranceId, { planAge: parseInt(e.target.value) || 0 })}
                                 className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
                                 placeholder="例: 30"
@@ -5949,16 +5953,37 @@ ${ins.analysisRaw || ins.coverageSummary}
                               />
                             </div>
                             <div>
-                              <label className="text-xs font-bold text-slate-400 block mb-1">保額</label>
-                              <input 
-                                type="text" 
-                                value={insurances.find(i => i.id === selectedInsuranceId)?.planCoverage || ''} 
-                                onChange={(e) => handleUpdatePlanInfo(selectedInsuranceId, { planCoverage: e.target.value })}
-                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
-                                placeholder="例: 20萬 或 計畫5"
-                              />
+                              <label className="text-xs font-bold text-slate-400 block mb-1">保額 / 計畫別</label>
+                              {insurances.find(i => i.id === selectedInsuranceId)?.planOptions && insurances.find(i => i.id === selectedInsuranceId)!.planOptions!.length > 0 ? (
+                                <select
+                                  value={insurances.find(i => i.id === selectedInsuranceId)?.planCoverage || ''} 
+                                  onChange={(e) => handleUpdatePlanInfo(selectedInsuranceId, { planCoverage: e.target.value })}
+                                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
+                                >
+                                  <option value="">請選擇</option>
+                                  {insurances.find(i => i.id === selectedInsuranceId)?.planOptions?.map(opt => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input 
+                                  type="text" 
+                                  value={insurances.find(i => i.id === selectedInsuranceId)?.planCoverage || ''} 
+                                  onChange={(e) => handleUpdatePlanInfo(selectedInsuranceId, { planCoverage: e.target.value })}
+                                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
+                                  placeholder="例: 20萬 或 計畫5"
+                                />
+                              )}
                             </div>
                           </div>
+                          
+                          {insurances.find(i => i.id === selectedInsuranceId)?.planCalculatedPremium && (
+                            <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-center justify-between">
+                              <span className="text-sm font-bold text-amber-800">當年度預估保費</span>
+                              <span className="text-lg font-black text-amber-600">{insurances.find(i => i.id === selectedInsuranceId)?.planCalculatedPremium}</span>
+                            </div>
+                          )}
+
                           <div className="mt-6 flex justify-end">
                             <button 
                               onClick={() => handleGenerateCoverageTable(selectedInsuranceId)}

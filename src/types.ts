@@ -198,6 +198,8 @@ export interface Insurance {
   planGender?: '男性' | '女性';
   planTerm?: string;
   planCoverage?: string;
+  planOptions?: string[]; // Array of extracted plan options
+  planCalculatedPremium?: string; // AI calculated premium based on plan
   planCalculatedCoverage?: string; // JSON string representing the calculated coverage table
 }
 
