@@ -234,6 +234,33 @@ const fromROCDate = (rocDate: string) => {
 };
 
 // --- AI Service ---
+// --- Utilities ---
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const withRetry = async <T extends unknown>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 2000): Promise<T> => {
+  let lastError: any;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      const isRetryable = error?.message?.includes('429') || 
+                         error?.message?.includes('RESOURCE_EXHAUSTED') ||
+                         error?.message?.includes('503') ||
+                         error?.message?.includes('UNAVAILABLE');
+      
+      if (isRetryable && i < maxRetries - 1) {
+        const delay = initialDelay * Math.pow(2, i);
+        console.warn(`AI request failed, retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`);
+        await sleep(delay);
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
+};
+
 const getApiKey = () => process.env.GEMINI_API_KEY || localStorage.getItem('GEMINI_API_KEY');
 
 const analyzeSalaryInput = async (input: { text?: string, image?: string, mimeType?: string }) => {
@@ -295,8 +322,8 @@ const analyzeSalaryInput = async (input: { text?: string, image?: string, mimeTy
     });
   }
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
+  const response = await withRetry(() => ai.models.generateContent({
+    model: "gemini-3-flash-preview",
     contents: { parts: contents },
     config: {
       responseMimeType: "application/json",
@@ -331,7 +358,7 @@ const analyzeSalaryInput = async (input: { text?: string, image?: string, mimeTy
         }
       }
     }
-  });
+  }));
 
   const textRes = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
   return JSON.parse(textRes || "[]") as Partial<SalaryRecord>[];
@@ -353,6 +380,7 @@ const analyzeTaxDocument = async (fileBase64: string, mimeType: string) => {
   - exemptionsCount: 免稅額人數 (本人+配偶+未滿70歲扶養親屬)
   - exemptionsSeniorCount: 70歲以上扶養親屬人數
   - isMarried: 是否有配偶 (布林值 true/false)
+  - filingMethod: 若為夫妻申報，報稅方式 ('joint' | 'salary_user_separate' | 'salary_spouse_separate')，若無法判斷請填 'joint'
   - savingsDeduction: 儲蓄投資特別扣除額
   - disabilityCount: 身心障礙特別扣除人數
   - educationCount: 教育學費特別扣除人數
@@ -367,8 +395,8 @@ const analyzeTaxDocument = async (fileBase64: string, mimeType: string) => {
   1. 返回純 JSON 物件。
   2. 數值均為數字類型。`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
+  const response = await withRetry(() => ai.models.generateContent({
+    model: "gemini-3-flash-preview",
     contents: {
       parts: [
         { text: prompt },
@@ -383,7 +411,7 @@ const analyzeTaxDocument = async (fileBase64: string, mimeType: string) => {
     config: {
       responseMimeType: 'application/json'
     }
-  });
+  }));
 
   const text = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
   return JSON.parse(text) as Partial<TaxRecord>;
@@ -420,8 +448,8 @@ const analyzeTaxStandards = async (fileBase64: string, mimeType: string) => {
   2. 數值均為數字類型。
   3. 級距請按金額從小到大排列。`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
+  const response = await withRetry(() => ai.models.generateContent({
+    model: "gemini-3-flash-preview",
     contents: {
       parts: [
         { text: prompt },
@@ -436,7 +464,7 @@ const analyzeTaxStandards = async (fileBase64: string, mimeType: string) => {
     config: {
       responseMimeType: 'application/json'
     }
-  });
+  }));
 
   const rawText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
   const parsed = JSON.parse(rawText);
@@ -2495,8 +2523,8 @@ ${text}
   "limit": number | null
 }`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
+      const response = await withRetry(() => ai.models.generateContent({
+        model: "gemini-3-flash-preview",
         contents: { parts: [{ text: prompt }] },
         config: {
           responseMimeType: "application/json",
@@ -2510,7 +2538,7 @@ ${text}
             required: ["rate", "conditions"]
           }
         }
-      });
+      }));
       
       const responseText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
       const result = JSON.parse(responseText || '{}');
@@ -3196,8 +3224,8 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       
       請只回傳 JSON 陣列，不要有其他文字。`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
+      const response = await withRetry(() => ai.models.generateContent({
+        model: "gemini-3-flash-preview",
         contents: {
           parts: [
             { text: prompt },
@@ -3212,7 +3240,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
         config: {
           responseMimeType: "application/json"
         }
-      });
+      }));
 
       const text = response.text || "";
       const jsonMatch = text.match(/\[[\s\S]*\]/);
@@ -4305,7 +4333,7 @@ const CalculationBreakdown = ({
           </thead>
           <tbody>
             <tr>
-              <td className="border border-slate-200 p-2">一般扣除額 ({tax.isMarried ? '有配偶' : '單身'})</td>
+              <td className="border border-slate-200 p-2">一般扣除額 ({tax.isMarried ? (tax.filingMethod === 'salary_user_separate' ? '有配偶(本人薪資分開)' : tax.filingMethod === 'salary_spouse_separate' ? '有配偶(配偶薪資分開)' : '有配偶(合併申報)') : '單身'})</td>
               <td className="border border-slate-200 p-2 text-right">
                 <div className="flex flex-col items-end">
                   <span className={result.isItemized ? 'text-slate-400 line-through' : 'font-bold'}>標扣: ${result.standardDeduction.toLocaleString()}</span>
@@ -4436,15 +4464,48 @@ const CalculationBreakdown = ({
 
           <div className="bg-white p-5 rounded-2xl border border-indigo-100 space-y-4 shadow-sm">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">第二階段：應納稅額</p>
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-               <span className="bg-slate-50 px-3 py-2 rounded-xl">所得 ${result.netTaxableIncome.toLocaleString()}</span>
-               <span className="text-slate-400 font-bold">×</span>
-               <span className="bg-slate-50 px-3 py-2 rounded-xl">稅率 {result.bracket.rate * 100}%</span>
-               <span className="text-slate-400 font-bold">－</span>
-               <span className="bg-slate-50 px-3 py-2 rounded-xl">累進差額 ${result.bracket.adjustment.toLocaleString()}</span>
-               <span className="text-slate-400 font-bold">＝</span>
-               <span className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black">應納稅額 ${result.taxPayable.toLocaleString()}</span>
-            </div>
+            {(!tax.isMarried || !tax.filingMethod || tax.filingMethod === 'joint') ? (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                 <span className="bg-slate-50 px-3 py-2 rounded-xl">所得 ${result.netTaxableIncome.toLocaleString()}</span>
+                 <span className="text-slate-400 font-bold">×</span>
+                 <span className="bg-slate-50 px-3 py-2 rounded-xl">稅率 {result.bracket.rate * 100}%</span>
+                 <span className="text-slate-400 font-bold">－</span>
+                 <span className="bg-slate-50 px-3 py-2 rounded-xl">累進差額 ${result.bracket.adjustment.toLocaleString()}</span>
+                 <span className="text-slate-400 font-bold">＝</span>
+                 <span className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black">應納稅額 ${result.taxPayable.toLocaleString()}</span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {result.sepResult && (
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="text-slate-500 font-bold">分開計稅薪資</span>
+                    <span className="bg-slate-50 px-3 py-2 rounded-xl">所得 ${result.sepResult.taxable.toLocaleString()}</span>
+                    <span className="text-slate-400 font-bold">×</span>
+                    <span className="bg-slate-50 px-3 py-2 rounded-xl">稅率 {(result.sepResult.bracket.rate || 0) * 100}%</span>
+                    <span className="text-slate-400 font-bold">－</span>
+                    <span className="bg-slate-50 px-3 py-2 rounded-xl">累差 ${result.sepResult.bracket.adjustment.toLocaleString()}</span>
+                    <span className="text-slate-400 font-bold">＝</span>
+                    <span className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl font-bold">${result.sepResult.tax.toLocaleString()}</span>
+                  </div>
+                )}
+                {result.priResult && (
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="text-slate-500 font-bold">其餘各類所得</span>
+                    <span className="bg-slate-50 px-3 py-2 rounded-xl">所得 ${result.priResult.taxable.toLocaleString()}</span>
+                    <span className="text-slate-400 font-bold">×</span>
+                    <span className="bg-slate-50 px-3 py-2 rounded-xl">稅率 {(result.priResult.bracket.rate || 0) * 100}%</span>
+                    <span className="text-slate-400 font-bold">－</span>
+                    <span className="bg-slate-50 px-3 py-2 rounded-xl">累差 ${result.priResult.bracket.adjustment.toLocaleString()}</span>
+                    <span className="text-slate-400 font-bold">＝</span>
+                    <span className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl font-bold">${result.priResult.tax.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-2 text-sm pt-2 border-t border-indigo-100/50">
+                  <span className="text-slate-500 font-bold mr-2">稅額合計</span>
+                  <span className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black">總應納稅額 ${result.taxPayable.toLocaleString()}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-indigo-100 space-y-4 shadow-sm">
@@ -4676,6 +4737,15 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
     const targetYear = record.parameterYear || record.year || 113;
     const std = standards.find(s => s.year === targetYear) || (PRESET_TAX_STANDARDS.find(s => s.year === targetYear) || (DEFAULT_TAX_STANDARDS as TaxStandard));
     
+    const computeTaxAmount = (taxableIncome: number, standard: TaxStandard) => {
+      const bracketIndex = standard.taxBrackets?.findIndex((b, i) => taxableIncome <= b.limit) ?? -1;
+      const computedBracket = bracketIndex !== -1 ? standard.taxBrackets[bracketIndex] : (standard.taxBrackets?.[standard.taxBrackets.length - 1] || { rate: 0, adjustment: 0 });
+      return {
+          bracket: computedBracket,
+          taxPayable: Math.max(0, taxableIncome * computedBracket.rate - computedBracket.adjustment)
+      };
+    };
+
     // 1. 薪資所得計算 (薪資所得 = 薪資收入 - 薪資所得特別扣除額)
     const salaryUserDeduction = Math.min(record.salaryUser || 0, std.salaryDeductionUnit);
     const salaryUserAfterDeduction = (record.salaryUser || 0) - salaryUserDeduction;
@@ -4708,13 +4778,43 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
     const bleComparison = totalExemptions + generalDeduction + savingsDeduction + disabilityTotal + educationTotal + preschoolTotal + longTermCareTotal;
     const bleDifference = Math.max(0, bleTotal - bleComparison);
 
-    // 7. 課稅所得額
-    const netTaxableIncome = Math.max(0, totalIncome - totalExemptions - generalDeduction - specialDeductionsTotal - bleDifference - (record.startupInvestmentDeduction || 0));
+    // 7. 課稅所得額 & 8. 應納稅額
+    let netTaxableIncome = 0;
+    let taxPayable = 0;
+    let bracket = { rate: 0, adjustment: 0 };
+    let sepResult: { taxable: number, tax: number, bracket: any } | null = null;
+    let priResult: { taxable: number, tax: number, bracket: any } | null = null;
+    
+    const method = record.filingMethod || 'joint';
 
-    // 8. 應納稅額
-    const bracketIndex = std.taxBrackets?.findIndex((b, i) => netTaxableIncome <= b.limit) ?? -1;
-    const bracket = bracketIndex !== -1 ? std.taxBrackets[bracketIndex] : (std.taxBrackets?.[std.taxBrackets.length - 1] || { rate: 0, adjustment: 0 });
-    const taxPayable = netTaxableIncome * bracket.rate - bracket.adjustment;
+    if (!record.isMarried || method === 'joint') {
+        netTaxableIncome = Math.max(0, totalIncome - totalExemptions - generalDeduction - specialDeductionsTotal - bleDifference - (record.startupInvestmentDeduction || 0));
+        const computed = computeTaxAmount(netTaxableIncome, std);
+        taxPayable = computed.taxPayable;
+        bracket = computed.bracket;
+    } else {
+        const isUserSeparate = method === 'salary_user_separate';
+        
+        const sepSalaryAfterDed = isUserSeparate ? salaryUserAfterDeduction : salarySpouseAfterDeduction;
+        const priSalaryAfterDed = isUserSeparate ? salarySpouseAfterDeduction : salaryUserAfterDeduction;
+        
+        // 分開計稅者 (僅減除免稅額)
+        const sepExemption = std.exemptionBase; 
+        const sepTaxable = Math.max(0, sepSalaryAfterDed - sepExemption);
+        const sepComputed = computeTaxAmount(sepTaxable, std);
+        sepResult = { taxable: sepTaxable, tax: sepComputed.taxPayable, bracket: sepComputed.bracket };
+        
+        // 主申報者 (減除剩餘免稅額、一般扣除額、特別扣除額、基本生活費差額等)
+        const priIncome = priSalaryAfterDed + (record.profitIncome || 0) + (record.interestIncome || 0) + (record.otherIncome || 0);
+        const priExemptions = Math.max(0, totalExemptions - sepExemption);
+        const priTaxable = Math.max(0, priIncome - priExemptions - generalDeduction - specialDeductionsTotal - bleDifference - (record.startupInvestmentDeduction || 0));
+        const priComputed = computeTaxAmount(priTaxable, std);
+        priResult = { taxable: priTaxable, tax: priComputed.taxPayable, bracket: priComputed.bracket };
+
+        netTaxableIncome = sepTaxable + priTaxable;
+        taxPayable = sepComputed.taxPayable + priComputed.taxPayable;
+        bracket = priComputed.bracket; // 供顯示參考
+    }
 
     // 9. 退補稅額
     const divCreditRaw = (record.profitIncome || 0) * 0.085;
@@ -4740,6 +4840,8 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
       netTaxableIncome: Math.round(netTaxableIncome),
       bracket,
       taxPayable: Math.round(taxPayable),
+      sepResult,
+      priResult,
       divCreditRaw: Math.round(divCreditRaw),
       divCredit: Math.round(divCredit),
       finalTaxDue: Math.round(finalTaxDue)
@@ -5079,13 +5181,23 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
             <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
               <div className="flex justify-between items-center">
                 <h3 className="text-xl font-black text-slate-800">稅務試算表</h3>
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4">
                   <div className="flex items-center gap-4 text-sm font-bold text-slate-500">
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" checked={newTax.isMarried} onChange={e => setNewTax({...newTax, isMarried: e.target.checked})} className="w-4 h-4 rounded text-indigo-600" />
-                      <span>合併申報</span>
+                      <input type="checkbox" checked={newTax.isMarried} onChange={e => setNewTax({...newTax, isMarried: e.target.checked, filingMethod: e.target.checked ? 'joint' : undefined})} className="w-4 h-4 rounded text-indigo-600" />
+                      <span className={newTax.isMarried ? "text-slate-800" : ""}>夫妻申報</span>
                     </div>
                   </div>
+                  {newTax.isMarried && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">報稅方式</span>
+                      <select className="bg-slate-50 p-2 rounded-xl text-xs font-bold ring-2 ring-indigo-500/20" value={newTax.filingMethod || 'joint'} onChange={e => setNewTax({...newTax, filingMethod: e.target.value as any})}>
+                        <option value="joint">全部合併計稅</option>
+                        <option value="salary_user_separate">本人薪資分開計稅</option>
+                        <option value="salary_spouse_separate">配偶薪資分開計稅</option>
+                      </select>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">所得年度</span>
                     <select className="bg-slate-50 p-2 rounded-xl text-xs font-bold" value={newTax.year} onChange={e => setNewTax({...newTax, year: Number(e.target.value)})}>
@@ -5521,10 +5633,10 @@ ${ins.analysisRaw || ins.coverageSummary}
 請只回傳 JSON，不要有其他文字。只接受剛好 JSON 開頭跟結尾。`;
       
       const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
+      const response = await withRetry(() => ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
         contents: prompt
-      });
+      }));
       let text = response.text || "{}";
       if (text.includes(`\`\`\`json`)) {
         text = text.split(`\`\`\`json`)[1].split(`\`\`\``)[0];
@@ -5582,7 +5694,7 @@ ${ins.analysisRaw || ins.coverageSummary}
               { text: prompt }
             ] 
           }],
-          model: "gemini-2.0-flash",
+          model: "gemini-3-flash-preview",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
@@ -5595,8 +5707,8 @@ ${ins.analysisRaw || ins.coverageSummary}
         });
       } else {
         const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({
-          model: "gemini-2.0-flash",
+        const response = await withRetry(() => ai.models.generateContent({
+          model: "gemini-3-flash-preview",
           contents: {
             parts: [
               ...fileParts,
@@ -5604,7 +5716,7 @@ ${ins.analysisRaw || ins.coverageSummary}
             ]
           },
           config: { responseMimeType: "application/json" }
-        });
+        }));
         result = JSON.parse(response.text || '{}');
       }
 
@@ -5687,16 +5799,16 @@ ${ins.analysisRaw || ins.coverageSummary}
       if (!apiKey) {
         const result = await genericAiCall({
           prompt,
-          model: "gemini-2.0-flash"
+          model: "gemini-3-flash-preview"
         });
         answer = result.text;
       } else {
         const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({
-          model: "gemini-2.0-flash",
+        const res = await withRetry(() => ai.models.generateContent({
+          model: "gemini-3-flash-preview",
           contents: { parts: [{ text: prompt }] }
-        });
-        answer = response.text;
+        }));
+        answer = res.text;
       }
 
       setChatHistory([...newHistory, { role: 'assistant', content: answer || '分析失敗' }]);
@@ -5807,13 +5919,13 @@ ${ins.analysisRaw || ins.coverageSummary}
               { text: prompt }
             ]
           }],
-          model: "gemini-2.0-flash",
+          model: "gemini-3-flash-preview",
           responseSchema
         });
       } else {
         const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({
-          model: "gemini-2.0-flash",
+        const res = await withRetry(() => ai.models.generateContent({
+          model: "gemini-3-flash-preview",
           contents: {
             parts: [
               ...fileParts,
@@ -5824,8 +5936,8 @@ ${ins.analysisRaw || ins.coverageSummary}
             responseMimeType: "application/json",
             responseSchema
           }
-        });
-        result = JSON.parse(response.text || '{}');
+        }));
+        result = JSON.parse(res.text || '{}');
       }
       
       if (result.newInsurances && Array.isArray(result.newInsurances)) {

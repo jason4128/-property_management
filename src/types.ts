@@ -114,6 +114,8 @@ export interface TaxStandard {
   taxBrackets: TaxBracket[];
 }
 
+export type FilingMethod = 'joint' | 'salary_user_separate' | 'salary_spouse_separate';
+
 export interface TaxRecord {
   id: string;
   uid: string;
@@ -127,6 +129,7 @@ export interface TaxRecord {
   exemptionsCount: number;
   exemptionsSeniorCount: number;
   isMarried: boolean;
+  filingMethod?: FilingMethod;
   propertyLossDeduction: number;
   savingsDeduction: number;
   disabilityCount: number;
