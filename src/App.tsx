@@ -232,7 +232,7 @@ const fromROCDate = (rocDate: string) => {
 };
 
 // --- AI Service ---
-const getApiKey = () => localStorage.getItem('GEMINI_API_KEY');
+const getApiKey = () => process.env.GEMINI_API_KEY || localStorage.getItem('GEMINI_API_KEY');
 
 const analyzeSalaryInput = async (input: { text?: string, image?: string, mimeType?: string }) => {
   const apiKey = getApiKey();
@@ -2947,44 +2947,63 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
     setRefreshStatus('準備更新現價...');
 
     try {
-      const symbols = stocks.map(s => s.symbol.trim()).filter(sym => sym && sym !== 'NA');
-      
-      if (symbols.length === 0) {
-        throw new Error("No valid symbols to update");
-      }
-
-      setRefreshStatus('從伺服器取得最新報價...');
-      const res = await fetch(`/api/stocks/quotes?symbols=${encodeURIComponent(symbols.join(','))}`);
-      
-      if (!res.ok) {
-        throw new Error('Failed to fetch from backend');
-      }
-
-      const data = await res.json();
       let successCount = 0;
-
-      setRefreshStatus('寫入資料庫...');
-      for (const stock of stocks) {
-        const sym = stock.symbol.trim();
-        if (!sym || sym === 'NA') continue;
-
-        // Try to match symbol from results
-        // results might have suffixes like .TW or .TWO
-        const result = data.find((q: any) => 
-          q.symbol === sym || 
-          q.symbol === `${sym}.TW` || 
-          q.symbol === `${sym}.TWO`
-        );
-
-        if (result && result.regularMarketPrice) {
-          await updateDoc(doc(db, 'stocks', stock.id), { 
-            currentPrice: result.regularMarketPrice,
-            lastPriceUpdate: new Date().toISOString()
-          });
-          successCount++;
-        }
-      }
       
+      const proxies = [
+        (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+        (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+        (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`
+      ];
+
+      const fetchWithProxy = async (url: string) => {
+        return await Promise.any(proxies.map(async proxy => {
+          const res = await fetch(proxy(url));
+          if (!res.ok) throw new Error('failed');
+          const rawJson = await res.json();
+          return rawJson.contents ? JSON.parse(rawJson.contents) : rawJson;
+        }));
+      };
+
+      const chunkSize = 10;
+      for (let i = 0; i < stocks.length; i += chunkSize) {
+        const chunk = stocks.slice(i, i + chunkSize);
+        setRefreshStatus(`更新中: 第 ${i + 1} 到 ${Math.min(i + chunkSize, stocks.length)} 筆...`);
+        
+        await Promise.all(chunk.map(async (stock) => {
+          try {
+            const sym = stock.symbol.trim();
+            if (!sym || sym === 'NA') return;
+
+            const isTaiwan = /^\d[0-9]{3,5}$/.test(sym);
+            const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
+            
+            let price = null;
+            for (const target of targets) {
+              try {
+                const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
+                const data = await fetchWithProxy(url);
+                const result = data?.quoteResponse?.result?.[0];
+                
+                if (result && result.regularMarketPrice) {
+                  price = result.regularMarketPrice;
+                  break;
+                }
+              } catch (e) {}
+            }
+            
+            if (price !== null) {
+              await updateDoc(doc(db, 'stocks', stock.id), { 
+                currentPrice: price,
+                lastPriceUpdate: new Date().toISOString()
+              });
+              successCount++;
+            }
+          } catch (e) {
+            console.error(`Failed to update ${stock.symbol}:`, e);
+          }
+        }));
+      }
+
       alert(`現價更新完成！\n成功更新：${successCount} 筆\n失敗：${stocks.length - successCount} 筆`);
     } catch (err) {
       console.error('Refresh error:', err);
@@ -3293,32 +3312,48 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       
       try {
         const sym = selectedStock.symbol.trim();
+        const isTaiwan = /^\d{4,6}[a-zA-Z]?$/.test(sym);
+        const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
         
-        // Fetch current quote from backend
-        try {
-          const quoteRes = await fetch(`/api/stock/${encodeURIComponent(sym)}`);
-          if (quoteRes.ok) {
-            const data = await quoteRes.json();
-            setStockData(data);
-          }
-        } catch (e) {
-          console.error("Backend quote fetch failed:", e);
+        const proxies = [
+          (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+          (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+          (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`
+        ];
+
+        const fetchWithProxy = async (url: string) => {
+          return await Promise.any(proxies.map(async proxy => {
+            const res = await fetch(proxy(url));
+            if (!res.ok) throw new Error('failed');
+            const rawJson = await res.json();
+            return rawJson.contents ? JSON.parse(rawJson.contents) : rawJson;
+          }));
+        };
+
+        let quote = null;
+        let chartData = null;
+
+        for (const target of targets) {
+          const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
+          const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${target}?interval=1d&range=3mo`;
+            
+          try {
+            if (!quote) quote = (await fetchWithProxy(quoteUrl))?.quoteResponse?.result?.[0];
+            if (!chartData) chartData = (await fetchWithProxy(chartUrl))?.chart?.result?.[0];
+          } catch (e) {}
+            
+          if (quote || chartData) break;
         }
 
-        // Fetch history from backend
-        try {
-          const historyRes = await fetch(`/api/stock/history/${encodeURIComponent(sym)}`);
-          if (historyRes.ok) {
-            const history = await historyRes.json();
-            if (Array.isArray(history)) {
-              setHistoryData(history.map(h => ({
-                date: new Date(h.date).getTime(),
-                close: h.close
-              })));
-            }
-          }
-        } catch (e) {
-          console.error("Backend history fetch failed:", e);
+        if (quote) setStockData(quote);
+        if (chartData?.timestamp && chartData?.indicators?.quote?.[0]?.close) {
+          const timestamps = chartData.timestamp;
+          const closes = chartData.indicators.quote[0].close;
+          const hist = timestamps.map((t: number, i: number) => ({
+            date: t * 1000,
+            close: closes[i]
+          })).filter((h: any) => h.close !== null);
+          setHistoryData(hist);
         }
       } catch (err) {
         console.error('Stock detail error:', err);
@@ -5270,6 +5305,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [aiFileData, setAiFileData] = useState<{ url: string, type: string, name: string } | null>(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
+  const [isGeneratingTable, setIsGeneratingTable] = useState(false);
   const [aiMode, setAiMode] = useState<'premium' | 'contract'>('premium'); // New state for AI mode
 
   // Coverage Analysis States
@@ -5278,6 +5314,81 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
   const [chatMessage, setChatMessage] = useState('');
   const [isChatting, setIsChatting] = useState(false);
   const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'assistant', content: string }[]>([]);
+
+  const handleUpdatePlanInfo = async (id: string, updates: Partial<Insurance>) => {
+    try {
+      await updateDoc(doc(db, 'insurances', id), updates);
+    } catch (e) {
+      console.error(e);
+      alert('更新方案設定失敗');
+    }
+  };
+
+  const handleGenerateCoverageTable = async (insId: string) => {
+    setIsGeneratingTable(true);
+    try {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        throw new Error("GEMINI_API_KEY is not configured.");
+      }
+      const ins = insurances.find(i => i.id === insId);
+      if (!ins) throw new Error("找不到保險資料");
+
+      const prompt = `你是一個專業的保險理賠試算工程師。
+使用以下 ${ins.provider} ${ins.name} 的保險條款數據：
+${ins.analysisRaw || ins.coverageSummary}
+
+使用者目前的方案條件：
+- 投保年齡：${ins.planAge || '未知'} 歲
+- 性別：${ins.planGender || '未知'}
+- 年期：${ins.planTerm || '未知'}
+- 保額/單位/計畫別：${ins.planCoverage || '未知'}
+
+請嚴格根據以上資訊，試算出此特定方案的各項理賠額度，並回傳一份 JSON 陣列，代表表格的分類與項目。
+格式必須為（此為範例，請以真實數據填寫）：
+[
+  {
+    "category": "住院 / 每次",
+    "items": [
+      { "name": "住院雜費", "amount": "120,000 元" },
+      { "name": "住院總天數1-30天", "amount": "120,000 元" },
+      { "name": "住院手續費(若有附註)", "amount": "1,000 元", "note": "備註文字" }
+    ]
+  },
+  {
+    "category": "門診 / 每次",
+    "items": [
+      { "name": "門診手術費(最高)", "amount": "220,000 元" }
+    ]
+  }
+]
+
+如果無法確定具體數字，請填寫 "依條款規定" 或 "無"。請只回傳陣列，不要有其他文字。只接受剛好陣列開頭跟結尾。`;
+      
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt
+      });
+      let text = response.text || "[]";
+      if (text.includes("\`\`\`json")) {
+        text = text.split("\`\`\`json")[1].split("\`\`\`")[0];
+      } else if (text.includes("\`\`\`")) {
+        text = text.split("\`\`\`")[1].split("\`\`\`")[0];
+      }
+      
+      const parsed = JSON.parse(text);
+      await updateDoc(doc(db, 'insurances', insId), {
+        planCalculatedCoverage: JSON.stringify(parsed)
+      });
+      alert('試算理賠額度表完成');
+    } catch (e: any) {
+      console.error(e);
+      alert('試算失敗，請確認該保險已有契約分析資料且 API 正常');
+    } finally {
+      setIsGeneratingTable(false);
+    }
+  };
 
   const BIRTHDAY = new Date('1988-09-27');
   const currentAge = useMemo(() => {
@@ -5792,6 +5903,98 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                             </Markdown>
                           </div>
                         </div>
+                      </div>
+
+                      <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm relative group overflow-hidden">
+                        <div className="flex items-center justify-between mb-6">
+                          <h4 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                            <ShieldCheck className="text-indigo-600" />
+                            專屬方案理賠額度表
+                          </h4>
+                        </div>
+                        
+                        <div className="bg-slate-50 p-6 rounded-2xl mb-8">
+                          <h5 className="text-sm font-bold text-slate-500 mb-4 uppercase tracking-widest">目前方案設定 (選擇後自動記憶)</h5>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                              <label className="text-xs font-bold text-slate-400 block mb-1">投保年齡</label>
+                              <input 
+                                type="number" 
+                                value={insurances.find(i => i.id === selectedInsuranceId)?.planAge || ''} 
+                                onChange={(e) => handleUpdatePlanInfo(selectedInsuranceId, { planAge: parseInt(e.target.value) || 0 })}
+                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
+                                placeholder="例: 30"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-bold text-slate-400 block mb-1">性別</label>
+                              <select 
+                                value={insurances.find(i => i.id === selectedInsuranceId)?.planGender || ''} 
+                                onChange={(e) => handleUpdatePlanInfo(selectedInsuranceId, { planGender: e.target.value as '男性' | '女性' })}
+                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
+                              >
+                                <option value="">請選擇</option>
+                                <option value="男性">男性</option>
+                                <option value="女性">女性</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-xs font-bold text-slate-400 block mb-1">年期</label>
+                              <input 
+                                type="text" 
+                                value={insurances.find(i => i.id === selectedInsuranceId)?.planTerm || ''} 
+                                onChange={(e) => handleUpdatePlanInfo(selectedInsuranceId, { planTerm: e.target.value })}
+                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
+                                placeholder="例: 30年期"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-bold text-slate-400 block mb-1">保額</label>
+                              <input 
+                                type="text" 
+                                value={insurances.find(i => i.id === selectedInsuranceId)?.planCoverage || ''} 
+                                onChange={(e) => handleUpdatePlanInfo(selectedInsuranceId, { planCoverage: e.target.value })}
+                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
+                                placeholder="例: 20萬 或 計畫5"
+                              />
+                            </div>
+                          </div>
+                          <div className="mt-6 flex justify-end">
+                            <button 
+                              onClick={() => handleGenerateCoverageTable(selectedInsuranceId)}
+                              disabled={isGeneratingTable || !insurances.find(i => i.id === selectedInsuranceId)?.planCoverage}
+                              className="px-6 py-2.5 bg-indigo-600 font-bold text-white text-sm rounded-xl hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isGeneratingTable ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                              {isGeneratingTable ? '正在產生...' : '產生理賠額度表'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {insurances.find(i => i.id === selectedInsuranceId)?.planCalculatedCoverage && (
+                          <div className="space-y-6">
+                            {JSON.parse(insurances.find(i => i.id === selectedInsuranceId)!.planCalculatedCoverage!).map((cat: any, i: number) => (
+                              <div key={i} className="border border-slate-200 rounded-2xl overflow-hidden">
+                                <div className="bg-slate-800 text-white font-bold px-5 py-3 tracking-wide">
+                                  {cat.category}
+                                </div>
+                                <div className="divide-y divide-slate-100">
+                                  {cat.items.map((item: any, j: number) => (
+                                    <div key={j} className="p-5 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                      <div className="flex-1">
+                                        <div className="font-bold text-slate-700">{item.name}</div>
+                                        {item.note && <div className="text-xs text-slate-400 mt-1">{item.note}</div>}
+                                      </div>
+                                      <div className="font-black text-indigo-600 text-lg">
+                                        {item.amount}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       <div className="space-y-6 pt-6">

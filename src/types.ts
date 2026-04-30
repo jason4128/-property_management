@@ -194,6 +194,11 @@ export interface Insurance {
   order?: number;
   coverageSummary?: string; // AI generated summary of coverage
   analysisRaw?: string; // Raw AI analysis result
+  planAge?: number;
+  planGender?: '男性' | '女性';
+  planTerm?: string;
+  planCoverage?: string;
+  planCalculatedCoverage?: string; // JSON string representing the calculated coverage table
 }
 
 export interface InsurancePremium {
