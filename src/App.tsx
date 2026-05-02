@@ -4171,88 +4171,146 @@ const DashboardPage = ({ user, summary }: { user: User, summary: any }) => {
   const totalAssets = bankTotal + stockTotal + fundTotal - cardDebt - totalLoan;
 
   const chartData = [
-    { name: '銀行存款', value: Math.max(0, bankTotal), color: '#6366f1' },
-    { name: '股票投資', value: Math.max(0, stockTotal), color: '#10b981' },
-    { name: '基金投資', value: Math.max(0, fundTotal), color: '#f59e0b' },
-    { name: '負債 (卡/貸)', value: Math.max(0, cardDebt + totalLoan), color: '#ef4444' },
+    { name: '銀行存款', value: Math.max(0, bankTotal), color: '#64748b' }, // slate-500
+    { name: '股票投資', value: Math.max(0, stockTotal), color: '#3b82f6' }, // blue-500
+    { name: '基金投資', value: Math.max(0, fundTotal), color: '#10b981' }, // emerald-500
+    { name: '負債總計', value: Math.max(0, cardDebt + totalLoan), color: '#f43f5e' }, // rose-500
   ].filter(d => d.value > 0);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">總資產概況</h2>
-          <p className="text-sm text-slate-500">所有財務帳戶的匯總資訊</p>
+          <h2 className="text-2xl font-black text-slate-800">總資產概況</h2>
+          <p className="text-sm text-slate-500 font-medium mt-1">所有財務帳戶的匯總資訊</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-6">
+        <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-3xl shadow-lg border border-slate-700 text-white flex flex-col justify-center">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">淨資產總額</p>
-          <p className="text-3xl font-black text-slate-800">${Math.round(totalAssets).toLocaleString()}</p>
-          <div className="mt-4 flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded w-fit">
+          <p className="text-3xl font-black">${Math.round(totalAssets).toLocaleString()}</p>
+          <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded w-fit">
             <TrendingUp size={14} />
             <span>資產健康</span>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">銀行存款</p>
-          <p className="text-2xl font-bold text-indigo-600">${Math.round(bankTotal).toLocaleString()}</p>
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center relative overflow-hidden group hover:border-slate-300 transition-colors">
+          <div className="absolute -right-4 -top-4 w-16 h-16 bg-slate-50 rounded-full group-hover:scale-150 transition-transform duration-500 ease-out" />
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 relative z-10">銀行存款</p>
+          <p className="text-2xl font-black text-slate-700 relative z-10">${Math.round(bankTotal).toLocaleString()}</p>
         </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">投資市值 (股/基)</p>
-          <p className="text-2xl font-bold text-emerald-600">${Math.round(stockTotal + fundTotal).toLocaleString()}</p>
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center relative overflow-hidden group hover:border-blue-200 transition-colors">
+          <div className="absolute -right-4 -top-4 w-16 h-16 bg-blue-50 rounded-full group-hover:scale-150 transition-transform duration-500 ease-out" />
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 relative z-10">投資總值 (股/基)</p>
+          <p className="text-2xl font-black text-blue-600 relative z-10">${Math.round(stockTotal + fundTotal).toLocaleString()}</p>
         </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">信用卡負債</p>
-          <p className="text-2xl font-bold text-rose-500">${Math.round(cardDebt).toLocaleString()}</p>
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center relative overflow-hidden group hover:border-rose-200 transition-colors">
+          <div className="absolute -right-4 -top-4 w-16 h-16 bg-rose-50 rounded-full group-hover:scale-150 transition-transform duration-500 ease-out" />
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 relative z-10">負債總額 (卡/貸)</p>
+          <p className="text-2xl font-black text-rose-500 relative z-10">${Math.round(cardDebt + totalLoan).toLocaleString()}</p>
         </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">預計年度領息總計</p>
-          <p className="text-2xl font-bold text-amber-600">${Math.round(data.banks.reduce((sum, acc) => (acc.interestRate && acc.balance > 0 && acc.type !== 'loan') ? sum + (acc.balance * (acc.interestRate / 100)) : sum, 0)).toLocaleString()}</p>
-          <p className="text-[10px] text-slate-400 mt-1">※ 依各帳戶利率估算</p>
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center relative overflow-hidden group hover:border-amber-200 transition-colors">
+          <div className="absolute -right-4 -top-4 w-16 h-16 bg-amber-50 rounded-full group-hover:scale-150 transition-transform duration-500 ease-out" />
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 relative z-10">預估年度領息</p>
+          <p className="text-2xl font-black text-amber-500 relative z-10">${Math.round(data.banks.reduce((sum, acc) => (acc.interestRate && acc.balance > 0 && acc.type !== 'loan') ? sum + (acc.balance * (acc.interestRate / 100)) : sum, 0)).toLocaleString()}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-          <h3 className="font-bold text-slate-800 mb-8 flex items-center gap-2">
-            <PieChart className="text-indigo-600" size={20} /> 資產比例
-          </h3>
-          <div className="h-[300px]">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 lg:col-span-1 flex flex-col">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="font-black text-slate-800 flex items-center gap-2">
+              <PieChart className="text-indigo-600" size={20} /> 資產佔比
+            </h3>
+          </div>
+          <div className="h-[280px] w-full relative flex-1">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsPieChart>
-                <Pie data={chartData} dataKey="value" innerRadius={60} outerRadius={100} paddingAngle={5}>
+                <Pie 
+                  data={chartData} 
+                  dataKey="value" 
+                  innerRadius={70} 
+                  outerRadius={100} 
+                  paddingAngle={8}
+                  stroke="none"
+                  cornerRadius={8}
+                >
                   {chartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
                 <Tooltip 
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px 16px' }}
+                  itemStyle={{ fontWeight: 'bold', color: '#1e293b' }}
                   formatter={(value: number) => [`$${Math.round(value).toLocaleString()}`, '金額']}
                 />
-                <Legend />
               </RechartsPieChart>
             </ResponsiveContainer>
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span className="text-[10px] font-bold text-slate-400">總計</span>
+              <span className="text-xl font-black text-slate-800">
+                ${Math.round(totalAssets / 1000) > 0 ? `${Math.round(totalAssets / 1000)}k` : totalAssets}
+              </span>
+            </div>
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-          <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
-            <BarChart3 className="text-indigo-600" size={20} /> 各項明細
-          </h3>
-          <div className="space-y-4">
-            {chartData.map((item, i) => (
-              <div key={i} className="flex items-center gap-4">
-                <div className="w-2 h-10 rounded-full" style={{ backgroundColor: item.color }} />
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-slate-700">{item.name}</p>
-                  <p className="text-xs text-slate-400">{Math.round((item.value / totalAssets) * 100)}%</p>
-                </div>
-                <p className="font-bold text-slate-800">${Math.round(item.value).toLocaleString()}</p>
-              </div>
-            ))}
+        <div className="bg-slate-900 p-8 rounded-3xl shadow-xl lg:col-span-2 relative overflow-hidden flex flex-col">
+          <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 rounded-full bg-slate-800 opacity-50 blur-3xl pointer-events-none" />
+          
+          <div className="relative z-10 flex justify-between items-center mb-8">
+            <h3 className="font-black text-white flex items-center gap-2">
+              <BarChart3 className="text-indigo-400" size={20} /> 各分類規模比較
+            </h3>
           </div>
+          
+          <div className="relative z-10 flex-1 h-[280px] min-h-[280px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 30, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#334155" />
+                <XAxis type="number" stroke="#475569" tickFormatter={(v) => `$${v.toLocaleString()}`} />
+                <YAxis dataKey="name" type="category" stroke="#cbd5e1" width={90} tick={{ fill: '#cbd5e1', fontSize: 12, fontWeight: 'bold' }} tickLine={false} axisLine={false} />
+                <Tooltip 
+                  cursor={{ fill: '#1e293b' }}
+                  contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', border: 'none', color: '#fff' }}
+                  itemStyle={{ fontWeight: 'bold' }}
+                  formatter={(value: number) => [`$${Math.round(value).toLocaleString()}`, '金額']}
+                />
+                <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={24}>
+                  {chartData.map((entry, index) => (
+                    <RechartsCell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+      
+      <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 mb-8">
+        <h3 className="font-black text-slate-800 mb-6 flex items-center gap-2">
+          <TrendingUp className="text-indigo-600" size={20} /> 資產明細
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {chartData.map((item, i) => {
+            const totalGross = bankTotal + stockTotal + fundTotal;
+            const pct = totalGross > 0 ? Math.round((item.value / totalGross) * 100) : 0;
+            return (
+              <div key={i} className="flex items-center gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                <div className="w-1 h-12 rounded-full" style={{ backgroundColor: item.color }} />
+                <div className="flex-1">
+                  <p className="text-xs font-bold text-slate-400 mb-1">{item.name}</p>
+                  <p className="text-lg font-black text-slate-700">${Math.round(item.value).toLocaleString()}</p>
+                </div>
+                {item.name !== '負債總計' && (
+                  <div className="text-right">
+                    <span className="text-[10px] font-black bg-white px-2 py-1 rounded text-slate-500 shadow-sm border border-slate-100">{pct}%</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
