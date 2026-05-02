@@ -1662,35 +1662,35 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
       )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[1400px]">
+        <table className="w-full text-left border-collapse min-w-[1000px] text-xs">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="p-3 font-bold text-slate-600 sticky left-0 bg-slate-50 z-10">年月(國曆)</th>
-              <th className="p-3 font-bold text-slate-600">職等階</th>
-              <th className="p-3 font-bold text-slate-600">俸點</th>
-              <th className="p-3 font-bold text-slate-600 text-right">本薪</th>
+              <th className="px-2 py-3 font-bold text-slate-600 sticky left-0 bg-slate-50 z-10 whitespace-nowrap">年月</th>
+              <th className="px-2 py-3 font-bold text-slate-600 whitespace-nowrap">職等階</th>
+              <th className="px-2 py-3 font-bold text-slate-600 whitespace-nowrap">俸點</th>
+              <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">本薪</th>
               {isComparing && (
-                <th className="p-3 font-bold text-rose-600 text-right bg-rose-50/50">應領本薪</th>
+                <th className="px-2 py-3 font-bold text-rose-600 text-right bg-rose-50/50 whitespace-nowrap">應領</th>
               )}
-              <th className="p-3 font-bold text-slate-600 text-right">專業加給</th>
+              <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">專業加給</th>
               {isComparing && (
-                <th className="p-3 font-bold text-rose-600 text-right bg-rose-50/50">應領加給</th>
+                <th className="px-2 py-3 font-bold text-rose-600 text-right bg-rose-50/50 whitespace-nowrap">應領</th>
               )}
-              <th className="p-3 font-bold text-slate-600 text-right">獎勵金</th>
-              <th className="p-3 font-bold text-slate-600 text-right">年終/考績</th>
-              <th className="p-3 font-bold text-slate-600 text-right">加班/其他</th>
-              <th className="p-3 font-bold text-slate-600 text-right">公保</th>
-              <th className="p-3 font-bold text-slate-600 text-right">健保</th>
-              <th className="p-3 font-bold text-slate-600 text-right">退撫</th>
-              <th className="p-3 font-bold text-slate-600 text-right">應追領</th>
-              <th className="p-3 font-bold text-slate-600 text-right bg-emerald-50">合計(實領)</th>
+              <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">獎金</th>
+              <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">年終/考績</th>
+              <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">加班/其他</th>
+              <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">公保</th>
+              <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">健保</th>
+              <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">退撫</th>
+              <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">應追領</th>
+              <th className="px-2 py-3 font-bold text-slate-600 text-right bg-emerald-50 whitespace-nowrap">合計實領</th>
               {isComparing && (
-                <th className="p-3 font-bold text-rose-600 text-right bg-rose-50">比對差額</th>
+                <th className="px-2 py-3 font-bold text-rose-600 text-right bg-rose-50 whitespace-nowrap">比對差額</th>
               )}
-              <th className="p-3 font-bold text-slate-600 text-right">應稅所得</th>
-              <th className="p-3 font-bold text-slate-600 text-right">應稅(年)</th>
-              <th className="p-3 font-bold text-slate-600">備註</th>
-              <th className="p-3 font-bold text-slate-600 text-center">操作</th>
+              <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">應稅所得</th>
+              <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">應稅(年)</th>
+              <th className="px-2 py-3 font-bold text-slate-600">備註</th>
+              <th className="px-2 py-3 font-bold text-slate-600 text-center">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -1715,16 +1715,16 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                 const diff = calculateDifference(r);
 
                 return (
-                  <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50 transition-colors text-sm group">
-                    <td className="p-3 text-slate-700 font-bold sticky left-0 bg-white group-hover:bg-slate-50 z-10">{toROCDate(r.date)}</td>
-                    <td className="p-3 text-slate-600">
+                  <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50 transition-colors group">
+                    <td className="px-2 py-2 text-slate-700 font-bold sticky left-0 bg-white group-hover:bg-slate-50 z-10 whitespace-nowrap">{toROCDate(r.date)}</td>
+                    <td className="px-2 py-2 text-slate-600 whitespace-nowrap max-w-[80px] overflow-hidden text-ellipsis">
                       <EditableCell value={r.rank} onSave={(val) => handleUpdate(r.id, 'rank', val)} />
                     </td>
-                    <td className="p-3 text-slate-600">
+                    <td className="px-2 py-2 text-slate-600 whitespace-nowrap">
                       <EditableCell value={r.salaryPoint} type="number" onSave={(val) => handleUpdate(r.id, 'salaryPoint', val)} />
                     </td>
                     
-                    <td className="p-3 text-right text-slate-600">
+                    <td className="px-2 py-2 text-right text-slate-600 whitespace-nowrap">
                       <EditableCell 
                         value={r.basicPay} 
                         type="number" 
@@ -1733,7 +1733,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                       />
                     </td>
                     {isComparing && (
-                      <td className="p-3 text-right bg-rose-50/30">
+                      <td className="px-2 py-2 text-right bg-rose-50/30 whitespace-nowrap">
                         <EditableCell 
                           value={r.expectedBasicPay || (diff?.expectedBasicPay || 0)} 
                           type="number" 
@@ -1742,7 +1742,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         />
                       </td>
                     )}
-                    <td className="p-3 text-right text-slate-600">
+                    <td className="px-2 py-2 text-right text-slate-600 whitespace-nowrap">
                       <EditableCell 
                         value={r.professionalAllowance} 
                         type="number" 
@@ -1751,7 +1751,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                       />
                     </td>
                     {isComparing && (
-                      <td className="p-3 text-right bg-rose-50/30">
+                      <td className="px-2 py-2 text-right bg-rose-50/30 whitespace-nowrap">
                         <EditableCell 
                           value={r.expectedProfessionalAllowance || (diff?.expectedProfessionalAllowance || 0)} 
                           type="number" 
@@ -1760,10 +1760,10 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         />
                       </td>
                     )}
-                    <td className="p-3 text-right text-slate-600">
+                    <td className="px-2 py-2 text-right text-slate-600 whitespace-nowrap">
                       <EditableCell value={r.medicalIncentive} type="number" onSave={(val) => handleUpdate(r.id, 'medicalIncentive', val)} />
                     </td>
-                    <td className="p-3 text-right text-slate-600">
+                    <td className="px-2 py-2 text-right text-slate-600 whitespace-nowrap">
                       <div className="flex flex-col items-end">
                         <div className="flex gap-1">
                           <EditableCell value={r.yearEndBonus} type="number" onSave={(val) => handleUpdate(r.id, 'yearEndBonus', val)} />
@@ -1772,7 +1772,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         </div>
                       </div>
                     </td>
-                    <td className="p-3 text-right text-slate-600">
+                    <td className="px-2 py-2 text-right text-slate-600 whitespace-nowrap">
                       <div className="flex flex-col items-end">
                         <div className="flex gap-1">
                           <EditableCell value={r.overtimePay} type="number" onSave={(val) => handleUpdate(r.id, 'overtimePay', val)} />
@@ -1781,7 +1781,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         </div>
                       </div>
                     </td>
-                    <td className="p-3 text-right text-rose-500">
+                    <td className="px-2 py-2 text-right text-rose-500 whitespace-nowrap">
                       <EditableCell 
                         value={r.civilServiceInsurance} 
                         type="number" 
@@ -1792,7 +1792,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         <div className="text-[10px] text-rose-400">預估: ${(diff.expectedDeductions.civilServiceInsurance || 0).toLocaleString()}</div>
                       )}
                     </td>
-                    <td className="p-3 text-right text-rose-500">
+                    <td className="px-2 py-2 text-right text-rose-500 whitespace-nowrap">
                       <EditableCell 
                         value={r.healthInsurance} 
                         type="number" 
@@ -1803,7 +1803,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         <div className="text-[10px] text-rose-400">預估: ${(diff.expectedDeductions.healthInsurance || 0).toLocaleString()}</div>
                       )}
                     </td>
-                    <td className="p-3 text-right text-rose-500">
+                    <td className="px-2 py-2 text-right text-rose-500 whitespace-nowrap">
                       <EditableCell 
                         value={r.pensionFund} 
                         type="number" 
@@ -1814,25 +1814,25 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         <div className="text-[10px] text-rose-400">預估: ${(diff.expectedDeductions.pensionFund || 0).toLocaleString()}</div>
                       )}
                     </td>
-                    <td className="p-3 text-right text-amber-600">
+                    <td className="px-2 py-2 text-right text-amber-600 whitespace-nowrap">
                       <EditableCell value={r.retroactivePay} type="number" onSave={(val) => handleUpdate(r.id, 'retroactivePay', val)} />
                     </td>
-                    <td className="p-3 text-right text-emerald-600 font-bold bg-emerald-50/30">${(net || 0).toLocaleString()}</td>
+                    <td className="px-2 py-2 text-right text-emerald-600 font-bold bg-emerald-50/30 whitespace-nowrap">${(net || 0).toLocaleString()}</td>
                     
                     {isComparing && (
-                      <td className={`p-3 text-right font-bold bg-rose-50 ${diff && diff.totalDiff > 0 ? 'text-emerald-600' : diff && diff.totalDiff < 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                      <td className={`px-2 py-2 text-right font-bold bg-rose-50 whitespace-nowrap ${diff && diff.totalDiff > 0 ? 'text-emerald-600' : diff && diff.totalDiff < 0 ? 'text-rose-600' : 'text-slate-400'}`}>
                         {diff ? (diff.totalDiff > 0 ? `+${(diff.totalDiff || 0).toLocaleString()}` : (diff.totalDiff || 0).toLocaleString()) : '-'}
                       </td>
                     )}
 
-                    <td className="p-3 text-right text-indigo-600 font-medium">
+                    <td className="px-2 py-2 text-right text-indigo-600 font-medium whitespace-nowrap">
                       <EditableCell value={r.taxableIncome} type="number" onSave={(val) => handleUpdate(r.id, 'taxableIncome', val)} />
                     </td>
-                    <td className="p-3 text-right text-slate-400 text-xs">${(annualTaxable || 0).toLocaleString()}</td>
-                    <td className="p-3 text-slate-500 italic text-xs">
-                      <EditableCell value={r.note || ""} onSave={(val) => handleUpdate(r.id, 'note', val)} className="min-w-[100px]" />
+                    <td className="px-2 py-2 text-right text-slate-400 whitespace-nowrap">${(annualTaxable || 0).toLocaleString()}</td>
+                    <td className="px-2 py-2 text-slate-500 italic max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap">
+                      <EditableCell value={r.note || ""} onSave={(val) => handleUpdate(r.id, 'note', val)} className="w-full" />
                     </td>
-                    <td className="p-3 text-center">
+                    <td className="px-2 py-2 text-center whitespace-nowrap">
                       <button 
                         onClick={() => handleDelete(r.id, r.date)}
                         className="text-slate-400 hover:text-rose-500 transition-colors"
