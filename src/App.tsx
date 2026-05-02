@@ -2289,47 +2289,47 @@ const CreditCardCharts = ({ cards, bills, months, selectedYear }: { cards: Credi
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between">
-          <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between min-w-0">
+          <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4 shrink-0">
             <LayoutDashboard size={20} />
           </div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">年度總支出</p>
-            <h4 className="text-2xl font-black text-slate-800">
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 truncate">年度總支出</p>
+            <h4 className="text-xl xl:text-2xl font-black text-slate-800 truncate" title={`$${(chartData.reduce((sum, d) => sum + d.total, 0) || 0).toLocaleString()}`}>
               ${(chartData.reduce((sum, d) => sum + d.total, 0) || 0).toLocaleString()}
             </h4>
           </div>
         </div>
         
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between">
-          <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-4">
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between min-w-0">
+          <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-4 shrink-0">
             <TrendingUp size={20} />
           </div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">平均每月支出</p>
-            <h4 className="text-2xl font-black text-slate-800">
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 truncate">平均每月支出</p>
+            <h4 className="text-xl xl:text-2xl font-black text-slate-800 truncate" title={`$${(Math.round(chartData.reduce((sum, d) => sum + d.total, 0) / 12) || 0).toLocaleString()}`}>
               ${(Math.round(chartData.reduce((sum, d) => sum + d.total, 0) / 12) || 0).toLocaleString()}
             </h4>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between">
-          <div className="w-10 h-10 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mb-4">
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between min-w-0">
+          <div className="w-10 h-10 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mb-4 shrink-0">
             <CreditCardIcon size={20} />
           </div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">持卡總數</p>
-            <h4 className="text-2xl font-black text-slate-800">{cards.length} 張</h4>
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 truncate">持卡總數</p>
+            <h4 className="text-xl xl:text-2xl font-black text-slate-800 truncate">{cards.length} 張</h4>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between">
-          <div className="w-10 h-10 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mb-4">
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between min-w-0">
+          <div className="w-10 h-10 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mb-4 shrink-0">
             <Sparkles size={20} />
           </div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">最高支出月份</p>
-            <h4 className="text-2xl font-black text-slate-800">
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 truncate">最高支出月份</p>
+            <h4 className="text-xl xl:text-2xl font-black text-slate-800 truncate">
               {chartData.concat().sort((a, b) => b.total - a.total)[0]?.name || 'N/A'}
             </h4>
           </div>
@@ -2631,17 +2631,23 @@ ${text}
 
       {/* Summary Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">存款總額 (不含高利)</p>
-          <p className="text-2xl font-black text-slate-800">${accounts.filter(a => ['savings', 'checking', 'fixed', undefined].includes(a.type)).reduce((sum, a) => sum + a.balance, 0).toLocaleString()}</p>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 min-w-0">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">存款總額 (不含高利)</p>
+          <p className="text-2xl font-black text-slate-800 truncate" title={`$${accounts.filter(a => ['savings', 'checking', 'fixed', undefined].includes(a.type)).reduce((sum, a) => sum + a.balance, 0).toLocaleString()}`}>
+            ${accounts.filter(a => ['savings', 'checking', 'fixed', undefined].includes(a.type)).reduce((sum, a) => sum + a.balance, 0).toLocaleString()}
+          </p>
         </div>
-        <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
-          <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-1">高利活存總額</p>
-          <p className="text-2xl font-black text-indigo-700">${accounts.filter(a => a.type === 'high-yield').reduce((sum, a) => sum + a.balance, 0).toLocaleString()}</p>
+        <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 min-w-0">
+          <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-1 truncate">高利活存總額</p>
+          <p className="text-2xl font-black text-indigo-700 truncate" title={`$${accounts.filter(a => a.type === 'high-yield').reduce((sum, a) => sum + a.balance, 0).toLocaleString()}`}>
+            ${accounts.filter(a => a.type === 'high-yield').reduce((sum, a) => sum + a.balance, 0).toLocaleString()}
+          </p>
         </div>
-        <div className="bg-rose-50 p-6 rounded-2xl border border-rose-100">
-          <p className="text-xs font-bold text-rose-400 uppercase tracking-widest mb-1">剩餘貸款總額</p>
-          <p className="text-2xl font-black text-rose-700">${totalLoan.toLocaleString()}</p>
+        <div className="bg-rose-50 p-6 rounded-2xl border border-rose-100 min-w-0">
+          <p className="text-xs font-bold text-rose-400 uppercase tracking-widest mb-1 truncate">剩餘貸款總額</p>
+          <p className="text-2xl font-black text-rose-700 truncate" title={`$${totalLoan.toLocaleString()}`}>
+            ${totalLoan.toLocaleString()}
+          </p>
         </div>
       </div>
 
@@ -4187,33 +4193,33 @@ const DashboardPage = ({ user, summary }: { user: User, summary: any }) => {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-6">
-        <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-3xl shadow-lg border border-slate-700 text-white flex flex-col justify-center">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">淨資產總額</p>
-          <p className="text-3xl font-black">${Math.round(totalAssets).toLocaleString()}</p>
-          <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded w-fit">
+        <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-3xl shadow-lg border border-slate-700 text-white flex flex-col justify-center min-w-0">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 truncate">淨資產總額</p>
+          <p className="text-2xl xl:text-3xl font-black truncate" title={`$${Math.round(totalAssets).toLocaleString()}`}>${Math.round(totalAssets).toLocaleString()}</p>
+          <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded w-fit whitespace-nowrap">
             <TrendingUp size={14} />
             <span>資產健康</span>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center relative overflow-hidden group hover:border-slate-300 transition-colors">
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center relative overflow-hidden group hover:border-slate-300 transition-colors min-w-0">
           <div className="absolute -right-4 -top-4 w-16 h-16 bg-slate-50 rounded-full group-hover:scale-150 transition-transform duration-500 ease-out" />
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 relative z-10">銀行存款</p>
-          <p className="text-2xl font-black text-slate-700 relative z-10">${Math.round(bankTotal).toLocaleString()}</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 relative z-10 truncate">銀行存款</p>
+          <p className="text-xl xl:text-2xl font-black text-slate-700 relative z-10 truncate" title={`$${Math.round(bankTotal).toLocaleString()}`}>${Math.round(bankTotal).toLocaleString()}</p>
         </div>
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center relative overflow-hidden group hover:border-blue-200 transition-colors">
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center relative overflow-hidden group hover:border-blue-200 transition-colors min-w-0">
           <div className="absolute -right-4 -top-4 w-16 h-16 bg-blue-50 rounded-full group-hover:scale-150 transition-transform duration-500 ease-out" />
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 relative z-10">投資總值 (股/基)</p>
-          <p className="text-2xl font-black text-blue-600 relative z-10">${Math.round(stockTotal + fundTotal).toLocaleString()}</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 relative z-10 truncate">投資總值 (股/基)</p>
+          <p className="text-xl xl:text-2xl font-black text-blue-600 relative z-10 truncate" title={`$${Math.round(stockTotal + fundTotal).toLocaleString()}`}>${Math.round(stockTotal + fundTotal).toLocaleString()}</p>
         </div>
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center relative overflow-hidden group hover:border-rose-200 transition-colors">
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center relative overflow-hidden group hover:border-rose-200 transition-colors min-w-0">
           <div className="absolute -right-4 -top-4 w-16 h-16 bg-rose-50 rounded-full group-hover:scale-150 transition-transform duration-500 ease-out" />
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 relative z-10">負債總額 (卡/貸)</p>
-          <p className="text-2xl font-black text-rose-500 relative z-10">${Math.round(cardDebt + totalLoan).toLocaleString()}</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 relative z-10 truncate">負債總額 (卡/貸)</p>
+          <p className="text-xl xl:text-2xl font-black text-rose-500 relative z-10 truncate" title={`$${Math.round(cardDebt + totalLoan).toLocaleString()}`}>${Math.round(cardDebt + totalLoan).toLocaleString()}</p>
         </div>
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center relative overflow-hidden group hover:border-amber-200 transition-colors">
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center relative overflow-hidden group hover:border-amber-200 transition-colors min-w-0">
           <div className="absolute -right-4 -top-4 w-16 h-16 bg-amber-50 rounded-full group-hover:scale-150 transition-transform duration-500 ease-out" />
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 relative z-10">預估年度領息</p>
-          <p className="text-2xl font-black text-amber-500 relative z-10">${Math.round(data.banks.reduce((sum, acc) => (acc.interestRate && acc.balance > 0 && acc.type !== 'loan') ? sum + (acc.balance * (acc.interestRate / 100)) : sum, 0)).toLocaleString()}</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 relative z-10 truncate">預估年度領息</p>
+          <p className="text-xl xl:text-2xl font-black text-amber-500 relative z-10 truncate" title={`$${Math.round(data.banks.reduce((sum, acc) => (acc.interestRate && acc.balance > 0 && acc.type !== 'loan') ? sum + (acc.balance * (acc.interestRate / 100)) : sum, 0)).toLocaleString()}`}>${Math.round(data.banks.reduce((sum, acc) => (acc.interestRate && acc.balance > 0 && acc.type !== 'loan') ? sum + (acc.balance * (acc.interestRate / 100)) : sum, 0)).toLocaleString()}</p>
         </div>
       </div>
 
@@ -7343,26 +7349,26 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
       {activeSubTab === 'general' ? (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">年度總預算</p>
-          <p className="text-2xl font-black text-slate-900">${(Math.floor(stats.yearlyEquivalentTotal) || 0).toLocaleString()}</p>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm min-w-0">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">年度總預算</p>
+          <p className="text-2xl font-black text-slate-900 truncate" title={`$${(Math.floor(stats.yearlyEquivalentTotal) || 0).toLocaleString()}`}>${(Math.floor(stats.yearlyEquivalentTotal) || 0).toLocaleString()}</p>
           <div className="flex justify-between text-[11px] mt-2 font-bold text-slate-500">
             <span>已支出: ${(Math.floor(stats.totalSpent) || 0).toLocaleString()}</span>
             <span>剩餘: ${(Math.floor(stats.remaining) || 0).toLocaleString()}</span>
           </div>
         </div>
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">每月預計支出</p>
-          <p className="text-2xl font-black text-indigo-600">${(Math.floor(stats.monthlyExpense) || 0).toLocaleString()}</p>
-          <p className="text-[10px] text-slate-400 mt-1 font-medium">包含年度項目摊提 (${(Math.floor(stats.yearlyTotal/12) || 0).toLocaleString()}/月)</p>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm min-w-0">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">每月預計支出</p>
+          <p className="text-2xl font-black text-indigo-600 truncate" title={`$${(Math.floor(stats.monthlyExpense) || 0).toLocaleString()}`}>${(Math.floor(stats.monthlyExpense) || 0).toLocaleString()}</p>
+          <p className="text-[10px] text-slate-400 mt-1 font-medium truncate">包含年度項目摊提 (${(Math.floor(stats.yearlyTotal/12) || 0).toLocaleString()}/月)</p>
         </div>
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">平均月實領薪資</p>
-          <p className="text-2xl font-black text-emerald-600">${(Math.floor(stats.avgMonthlyIncome) || 0).toLocaleString()}</p>
-          <p className="text-[10px] text-slate-400 mt-1 font-medium">基於 {selectedYear} 年薪資紀錄</p>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm min-w-0">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">平均月實領薪資</p>
+          <p className="text-2xl font-black text-emerald-600 truncate" title={`$${(Math.floor(stats.avgMonthlyIncome) || 0).toLocaleString()}`}>${(Math.floor(stats.avgMonthlyIncome) || 0).toLocaleString()}</p>
+          <p className="text-[10px] text-slate-400 mt-1 font-medium truncate">基於 {selectedYear} 年薪資紀錄</p>
         </div>
-        <div className="bg-white p-5 rounded-2xl border border-indigo-600/20 bg-indigo-50/10 shadow-sm">
-          <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-1">預計每月可存款額</p>
+        <div className="bg-white p-5 rounded-2xl border border-indigo-600/20 bg-indigo-50/10 shadow-sm min-w-0">
+          <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-1 truncate">預計每月可存款額</p>
           <p className={`text-2xl font-black ${stats.canSave >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
             ${(Math.floor(stats.canSave) || 0).toLocaleString()}
           </p>
@@ -7531,17 +7537,17 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
         <div className="space-y-8">
           {/* 育兒核心數據概況 */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">年度計劃儲存 (預計盈餘)</p>
-              <p className="text-2xl font-black text-indigo-600">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm min-w-0">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">年度計劃儲存 (預計盈餘)</p>
+              <p className="text-2xl font-black text-indigo-600 truncate" title={`$${(childRecords.filter(r => r.type === 'income' && r.year === selectedYear).reduce((sum, r) => sum + getYearlyEquivalent(r.budgetAmount || 0, r.frequency), 0) - childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).reduce((sum, r) => sum + getYearlyEquivalent(r.budgetAmount || 0, r.frequency), 0)).toLocaleString()}`}>
                 ${(childRecords.filter(r => r.type === 'income' && r.year === selectedYear).reduce((sum, r) => sum + getYearlyEquivalent(r.budgetAmount || 0, r.frequency), 0) - 
                    childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).reduce((sum, r) => sum + getYearlyEquivalent(r.budgetAmount || 0, r.frequency), 0)).toLocaleString()}
               </p>
-              <p className="text-[10px] text-slate-400 mt-1">年化預算目標</p>
+              <p className="text-[10px] text-slate-400 mt-1 truncate">年化預算目標</p>
             </div>
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">預計每月需存 (自負額)</p>
-              <p className="text-2xl font-black text-rose-600">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm min-w-0">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">預計每月需存 (自負額)</p>
+              <p className="text-2xl font-black text-rose-600 truncate" title={`$${Math.floor((childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).reduce((sum, r) => sum + getMonthlyEquivalent(r.budgetAmount || 0, r.frequency), 0) - childRecords.filter(r => r.type === 'income' && r.year === selectedYear).reduce((sum, r) => sum + getMonthlyEquivalent(r.budgetAmount || 0, r.frequency), 0))).toLocaleString()}`}>
                 ${Math.floor(
                   (childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).reduce((sum, r) => sum + getMonthlyEquivalent(r.budgetAmount || 0, r.frequency), 0) - 
                    childRecords.filter(r => r.type === 'income' && r.year === selectedYear).reduce((sum, r) => sum + getMonthlyEquivalent(r.budgetAmount || 0, r.frequency), 0))
