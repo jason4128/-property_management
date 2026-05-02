@@ -3008,17 +3008,33 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       
       const proxies = [
         (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+        (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
         (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-        (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`
+        (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`
       ];
 
       const fetchWithProxy = async (url: string) => {
-        return await Promise.any(proxies.map(async proxy => {
-          const res = await fetch(proxy(url));
-          if (!res.ok) throw new Error('failed');
-          const rawJson = await res.json();
-          return rawJson.contents ? JSON.parse(rawJson.contents) : rawJson;
-        }));
+        let errors = [];
+        for (const proxy of proxies) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            const res = await fetch(proxy(url), { signal: controller.signal }).finally(() => clearTimeout(timeoutId));
+            if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
+            
+            const rawJson = await res.json();
+            const parsed = typeof rawJson.contents === 'string' ? JSON.parse(rawJson.contents) : (rawJson.contents || rawJson);
+            
+            // Check if response has expected Yahoo structure
+            if (parsed.quoteResponse || parsed.chart) {
+                return parsed;
+            }
+            throw new Error('Invalid Yahoo structure');
+          } catch (e: any) {
+            errors.push(e.message);
+          }
+        }
+        throw new Error(`All proxies failed: ${errors.join(', ')}`);
       };
 
       const chunkSize = 10;
@@ -3037,12 +3053,24 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
             let price = null;
             for (const target of targets) {
               try {
-                const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
-                const data = await fetchWithProxy(url);
-                const result = data?.quoteResponse?.result?.[0];
-                
-                if (result && result.regularMarketPrice) {
-                  price = result.regularMarketPrice;
+                // Try quote endpoint
+                const urlQuote = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
+                try {
+                  const data = await fetchWithProxy(urlQuote);
+                  const result = data?.quoteResponse?.result?.[0];
+                  
+                  if (result && result.regularMarketPrice) {
+                    price = result.regularMarketPrice;
+                    break;
+                  }
+                } catch(e){}
+
+                // Fallback to chart endpoint if quote fails (common due to Yahoo crumb changes)
+                const urlChart = `https://query2.finance.yahoo.com/v8/finance/chart/${target}?interval=1d&range=1d`;
+                const dataChart = await fetchWithProxy(urlChart);
+                const chartResult = dataChart?.chart?.result?.[0];
+                if (chartResult && chartResult.meta && chartResult.meta.regularMarketPrice) {
+                  price = chartResult.meta.regularMarketPrice;
                   break;
                 }
               } catch (e) {}
@@ -3754,13 +3782,13 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto flex flex-col"
+              className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
             >
-              <div className="flex justify-between items-center mb-6 sticky top-0 bg-white z-10 pb-2">
-                <h3 className="text-2xl font-bold text-slate-800">{selectedStock.symbol} - {selectedStock.name}</h3>
-                <button onClick={() => setSelectedStock(null)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
+              <div className="flex justify-between items-center p-6 border-b border-slate-100 shrink-0">
+                <h3 className="text-2xl font-bold text-slate-800 truncate pr-4">{selectedStock.symbol} - {selectedStock.name}</h3>
+                <button onClick={() => setSelectedStock(null)} className="p-2 -mr-2 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors shrink-0"><X size={20}/></button>
               </div>
-              <div className="space-y-4">
+              <div className="p-6 overflow-y-auto flex-1 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-slate-50 p-4 rounded-lg">
                     <div className="text-sm text-slate-500">目前價格</div>
