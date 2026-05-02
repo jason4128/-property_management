@@ -52,7 +52,7 @@ import {
   Search,
   HelpCircle
 } from 'lucide-react';
-import { askChildBudgetAdvisor, extractSubsidiesFromFile, extractSubsidiesFromText, genericAiCall, predictStockDividends } from './services/aiService';
+import { askChildBudgetAdvisor, extractSubsidiesFromFile, extractSubsidiesFromText, genericAiCall } from './services/aiService';
 import { GoogleGenAI, Type } from "@google/genai";
 import Markdown from 'react-markdown';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
@@ -2949,8 +2949,6 @@ ${text}
 const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [funds, setFunds] = useState<Fund[]>([]);
-  const [isAdding, setIsAdding] = useState(false);
-  const [newStock, setNewStock] = useState<Partial<Stock>>({ symbol: '', name: '', shares: 0, averageCost: 0, currentPrice: 0, source: 'Cathay' });
   const [selectedSource, setSelectedSource] = useState<'all' | 'Cathay' | 'Firstrade' | 'FundRich'>('all');
   const [selectedStocks, setSelectedStocks] = useState<Set<string>>(new Set());
   const [usdRate, setUsdRate] = useState(32.5); // Default rate
@@ -3072,7 +3070,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
     if (symbols.length === 0) return;
 
     setIsRefreshingDividends(true);
-    setRefreshStatus('正在分析股利數據 (AI+Yahoo)...');
+    setRefreshStatus('正在抓取歷史股利資料...');
     try {
       const fetchDividends = async (stock: Stock) => {
         const sym = stock.symbol.trim();
@@ -3117,19 +3115,11 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
           } catch (e) {}
         }
 
-        // AI Prediction fallback/enhancement
-        let aiPrediction = null;
-        try {
-          aiPrediction = await predictStockDividends(sym, stock.currentPrice, chartData?.events?.dividends);
-        } catch (e) {
-          console.error(`AI Prediction failed for ${sym}:`, e);
-        }
-
-        return { stockId: stock.id, sym, quote, chartData, aiPrediction };
+        return { stockId: stock.id, sym, quote, chartData };
       };
 
       const results = [];
-      const batchSize = 2; 
+      const batchSize = 10; 
       for (let i = 0; i < stocks.length; i += batchSize) {
         setRefreshStatus(`進度: ${i + 1}/${stocks.length} (正在分析 ${stocks[i].symbol})...`);
         const batch = stocks.slice(i, i + batchSize);
@@ -3139,7 +3129,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
 
       let successCount = 0;
       const updates = results.map(async (res) => {
-        const { stockId, quote, chartData, aiPrediction } = res;
+        const { stockId, quote, chartData } = res;
         
         let predictedDiv = 0;
         let freqStr = '不定期';
@@ -3166,21 +3156,13 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
           else if (frequencyCount == 1) freqStr = '年配';
 
           const currentYear = new Date().getFullYear();
-          if (maxYear === currentYear) {
-            predictedDiv = yearDivs[maxYear].reduce((sum, d) => sum + d.amount, 0);
-            if (lastYear && yearDivs[lastYear] && yearDivs[maxYear].length < yearDivs[lastYear].length) {
-              const missingCount = yearDivs[lastYear].length - yearDivs[maxYear].length;
-              const missingFromLastYear = [...yearDivs[lastYear]].sort((a,b) => a.date - b.date).slice(-missingCount);
-              predictedDiv += missingFromLastYear.reduce((sum, d) => sum + d.amount, 0);
-            }
-          } else {
+          const targetYear = currentYear - 1;
+
+          if (yearDivs[targetYear]) {
+            predictedDiv = yearDivs[targetYear].reduce((sum, d) => sum + d.amount, 0);
+          } else if (yearDivs[maxYear]) {
             predictedDiv = yearDivs[maxYear].reduce((sum, d) => sum + d.amount, 0);
           }
-        }
-
-        if (aiPrediction && aiPrediction.predictedDividend > 0) {
-          predictedDiv = aiPrediction.predictedDividend;
-          freqStr = aiPrediction.frequency || freqStr;
         }
 
         if (predictedDiv === 0 && quote?.trailingAnnualDividendRate) {
@@ -3198,7 +3180,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       });
 
       await Promise.all(updates);
-      alert(`AI 股利分析完成！\n成功更新：${successCount} 筆\n(若預測不準確可手動修正)`);
+      alert(`股利分析完成！\n成功更新：${successCount} 筆\n(若有誤差可手動修正)`);
     } catch (err) {
       console.error('Refresh error:', err);
       alert('分析失敗，請稍後再試或檢查 API Key。');
@@ -3336,33 +3318,6 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       setAiFileData(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, source === 'FundRich' ? 'funds' : 'stocks');
-    }
-  };
-
-  const handleAdd = async () => {
-    try {
-      const isFund = newStock.source === 'FundRich';
-      const uid = user.uid;
-      
-      if (isFund) {
-        const fund = {
-          name: newStock.name || '',
-          units: newStock.shares || 0,
-          cost: (newStock.shares || 0) * (newStock.averageCost || 0),
-          currentValue: (newStock.shares || 0) * (newStock.currentPrice || 0),
-          source: 'FundRich',
-          uid
-        };
-        await addDoc(collection(db, 'funds'), fund);
-      } else {
-        const stock = { ...newStock, uid };
-        await addDoc(collection(db, 'stocks'), stock);
-      }
-      
-      setIsAdding(false);
-      setNewStock({ symbol: '', name: '', shares: 0, averageCost: 0, currentPrice: 0, source: 'Cathay' });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, newStock.source === 'FundRich' ? 'funds' : 'stocks');
     }
   };
 
@@ -3610,18 +3565,6 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
     }
   };
 
-  const handleDeleteAll = async () => {
-    if (!confirm('確定要刪除所有股票與基金資訊嗎？此操作無法復原。')) return;
-    try {
-      const batchDeleteStocks = stocks.map(stock => deleteDoc(doc(db, 'stocks', stock.id)));
-      const batchDeleteFunds = funds.map(fund => deleteDoc(doc(db, 'funds', fund.id)));
-      await Promise.all([...batchDeleteStocks, ...batchDeleteFunds]);
-      setSelectedStocks(new Set());
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'items');
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -3633,14 +3576,8 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
             <option value="Firstrade">Firstrade</option>
             <option value="FundRich">鉅亨買基金</option>
           </select>
-          <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
-            <Plus size={20} /> 手動新增
-          </button>
           <button onClick={handleBatchDelete} disabled={selectedStocks.size === 0} className="flex items-center gap-2 bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 transition-colors disabled:opacity-50">
             <Trash2 size={20} /> 批次刪除 ({selectedStocks.size})
-          </button>
-          <button onClick={handleDeleteAll} className="flex items-center gap-2 bg-rose-800 text-white px-4 py-2 rounded-lg hover:bg-rose-900 transition-colors">
-            <Trash2 size={20} /> 刪除全部
           </button>
           <button 
             onClick={handleRefreshPrices} 
@@ -3660,7 +3597,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
           >
             <Sparkles size={20} className={isRefreshingDividends ? 'animate-spin' : ''} />
             <div className="flex flex-col items-start leading-tight">
-              <span>{isRefreshingDividends ? '分析中...' : 'AI 股利預測'}</span>
+              <span>{isRefreshingDividends ? '分析中...' : '抓取歷史股利'}</span>
               {(isRefreshingDividends && refreshStatus) && <span className="text-[10px] text-indigo-100 opacity-80">{refreshStatus}</span>}
             </div>
           </button>
@@ -3802,58 +3739,6 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
           </table>
         </div>
       </div>
-
-      {/* Add Stock Modal */}
-      <AnimatePresence>
-        {isAdding && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-slate-800">手動新增股票/資產</h3>
-                <button onClick={() => setIsAdding(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">股票代號 (Symbol)</label>
-                  <input type="text" value={newStock.symbol} onChange={(e) => setNewStock({ ...newStock, symbol: e.target.value.toUpperCase() })} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="例如: 2330, AAPL" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">名稱 (Name)</label>
-                  <input type="text" value={newStock.name} onChange={(e) => setNewStock({ ...newStock, name: e.target.value })} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="例如: 台積電, Apple Inc." />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">持有股數</label>
-                    <input type="number" value={newStock.shares} onChange={(e) => setNewStock({ ...newStock, shares: Number(e.target.value) })} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">平均成本 (每股)</label>
-                    <input type="number" value={newStock.averageCost} onChange={(e) => setNewStock({ ...newStock, averageCost: Number(e.target.value) })} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">目前市價 (單價)</label>
-                    <input type="number" value={newStock.currentPrice} onChange={(e) => setNewStock({ ...newStock, currentPrice: Number(e.target.value) })} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">資料來源</label>
-                    <select value={newStock.source} onChange={(e) => setNewStock({ ...newStock, source: e.target.value as any })} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
-                      <option value="Cathay">國泰證券</option>
-                      <option value="Firstrade">Firstrade</option>
-                      <option value="FundRich">鉅亨買基金</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="flex gap-4 pt-4">
-                  <button onClick={() => setIsAdding(false)} className="flex-1 px-4 py-2 border rounded-lg font-medium text-slate-600 hover:bg-slate-50">取消</button>
-                  <button onClick={handleAdd} className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-md">儲存股票</button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* Stock Detail Modal */}
       <AnimatePresence>
