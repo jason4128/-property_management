@@ -3754,9 +3754,9 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6"
+              className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto flex flex-col"
             >
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex justify-between items-center mb-6 sticky top-0 bg-white z-10 pb-2">
                 <h3 className="text-2xl font-bold text-slate-800">{selectedStock.symbol} - {selectedStock.name}</h3>
                 <button onClick={() => setSelectedStock(null)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
               </div>
@@ -8448,9 +8448,20 @@ export default function App() {
           </header>
 
           <header className="hidden md:flex justify-between items-center p-6 pb-0 max-w-7xl mx-auto w-full">
-            <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-widest ${activeTheme === 'midnight' ? 'text-slate-500' : 'text-slate-400'}`}>
-              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-              雲端同步作業中
+            <div className="flex items-center gap-4">
+              {!isSidebarOpen && (
+                <button 
+                  onClick={() => setIsSidebarOpen(true)}
+                  className={`p-2 ${activeTheme === 'midnight' ? 'text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20' : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'} rounded-lg transition-colors`}
+                  title="顯示側邊欄"
+                >
+                  <PanelLeftOpen size={20} />
+                </button>
+              )}
+              <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-widest ${activeTheme === 'midnight' ? 'text-slate-500' : 'text-slate-400'}`}>
+                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                雲端同步作業中
+              </div>
             </div>
             
             <div className="flex items-center gap-4">
