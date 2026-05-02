@@ -158,7 +158,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
       email: auth.currentUser?.email,
       emailVerified: auth.currentUser?.emailVerified,
       isAnonymous: auth.currentUser?.isAnonymous,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
         providerId: provider.providerId,
         displayName: provider.displayName,
         email: provider.email
@@ -3373,6 +3373,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
   const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
   const [stockData, setStockData] = useState<any>(null);
   const [historyData, setHistoryData] = useState<any[]>([]);
+  const [dividendData, setDividendData] = useState<any[]>([]);
   const [isFetchingData, setIsFetchingData] = useState(false);
 
   useEffect(() => {
@@ -3380,67 +3381,106 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       if (!selectedStock) {
         setStockData(null);
         setHistoryData([]);
+        setDividendData([]);
         return;
       }
 
       setIsFetchingData(true);
       setStockData(null);
       setHistoryData([]);
-      
-      try {
-        const sym = selectedStock.symbol.trim();
-        const isTaiwan = /^\d{4,6}[a-zA-Z]?$/.test(sym);
-        const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
-        
+      setDividendData([]);
+
+      const tryFetchWithProxies = async (url: string, isChart = true) => {
         const proxies = [
           (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
           (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-          (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`
+          (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+          (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
         ];
 
-        const fetchWithProxy = async (url: string) => {
-          const proxies = [
-            (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-            (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-            (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`
-          ];
-
-          const tryFetch = async (proxyFn: (u: string) => string) => {
-            const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), 8000);
-            try {
-              const res = await fetch(proxyFn(url), { signal: controller.signal });
-              if (!res.ok) throw new Error('Proxy fail');
-              const rawJson = await res.json();
-              const content = rawJson.contents || rawJson;
-              const parsed = typeof content === 'string' ? JSON.parse(content) : content;
-              if (url.includes('chart') && !parsed?.chart?.result?.[0]?.meta) throw new Error('No chart meta');
-              return parsed;
-            } finally {
-              clearTimeout(id);
+        return Promise.any(proxies.map(async (proxyFn) => {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          try {
+            const res = await fetch(proxyFn(url), { signal: controller.signal });
+            if (!res.ok) throw new Error('Proxy fail');
+            const data = await res.json();
+            const contents = data.contents || data;
+            const parsed = typeof contents === 'string' ? JSON.parse(contents) : contents;
+            
+            if (isChart && !parsed?.chart?.result?.[0]?.meta) {
+               throw new Error('Invalid chart data');
             }
-          };
+            return parsed;
+          } finally {
+            clearTimeout(timeoutId);
+          }
+        }));
+      };
 
-          return Promise.any(proxies.map(p => tryFetch(p)));
-        };
+      try {
+        const sym = selectedStock.symbol.trim();
+        const stocksToTry = [];
+        
+        const isTaiwan = /^\d{4,6}[a-zA-Z]?$/.test(sym);
+        if (isTaiwan) {
+          stocksToTry.push(`${sym}.TW`, `${sym}.TWO`);
+        } else if (sym && sym !== 'NA') {
+          stocksToTry.push(sym);
+        }
 
         let finalChartRes = null;
+        let finalDivRes = null;
         const endpoints = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
 
-        for (const target of targets) {
+        // Phase 1: Try direct symbols
+        for (const target of stocksToTry) {
           if (finalChartRes) break;
           for (const endpoint of endpoints) {
             try {
-              console.log(`[StockChart] Fetching ${target} @ ${endpoint}`);
-              const cP = await fetchWithProxy(`${endpoint}/v8/finance/chart/${target}?interval=1d&range=3mo`);
-              
-              if (cP?.chart?.result?.[0]?.meta) {
-                finalChartRes = cP.chart.result[0];
+              const [cRes, dRes] = await Promise.allSettled([
+                tryFetchWithProxies(`${endpoint}/v8/finance/chart/${target}?interval=1d&range=3mo`, true),
+                tryFetchWithProxies(`${endpoint}/v8/finance/chart/${target}?interval=1mo&range=5y&events=div`, false)
+              ]);
+
+              if (cRes.status === 'fulfilled' && cRes.value?.chart?.result?.[0]) {
+                finalChartRes = cRes.value.chart.result[0];
+                if (dRes.status === 'fulfilled' && dRes.value?.chart?.result?.[0]?.events?.dividends) {
+                  finalDivRes = dRes.value.chart.result[0].events.dividends;
+                }
                 break;
               }
-            } catch (e) {
-              console.warn(`[StockChart] Attempt failed for ${target} @ ${endpoint}`);
+            } catch (e) {}
+          }
+        }
+
+        // Phase 2: Fallback to Search by Name if no chart found and name exists
+        if (!finalChartRes && selectedStock.name && selectedStock.name.length > 1) {
+          try {
+            console.log(`[StockChart] Trying search fallback for: ${selectedStock.name}`);
+            const searchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(selectedStock.name)}`;
+            const searchData = await tryFetchWithProxies(searchUrl, false);
+            const firstResult = searchData?.quotes?.[0];
+            if (firstResult?.symbol) {
+              const target = firstResult.symbol;
+              for (const endpoint of endpoints) {
+                try {
+                  const [cRes, dRes] = await Promise.allSettled([
+                    tryFetchWithProxies(`${endpoint}/v8/finance/chart/${target}?interval=1d&range=3mo`, true),
+                    tryFetchWithProxies(`${endpoint}/v8/finance/chart/${target}?interval=1mo&range=5y&events=div`, false)
+                  ]);
+                  if (cRes.status === 'fulfilled' && cRes.value?.chart?.result?.[0]) {
+                    finalChartRes = cRes.value.chart.result[0];
+                    if (dRes.status === 'fulfilled' && dRes.value?.chart?.result?.[0]?.events?.dividends) {
+                      finalDivRes = dRes.value.chart.result[0].events.dividends;
+                    }
+                    break;
+                  }
+                } catch (e) {}
+              }
             }
+          } catch (e) {
+            console.warn('[StockChart] Search fallback failed', e);
           }
         }
 
@@ -3451,29 +3491,31 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
           const closes = quoteIndicator.close || [];
           const opens = quoteIndicator.open || [];
           
+          let lastValidClose = meta.regularMarketPrice;
           let changePercent = 0;
           let openPrice = null;
 
-          if (closes.length >= 2) {
-            // Find valid closes backwards
+          if (closes.length > 0) {
             let lastIdx = closes.length - 1;
-            while (lastIdx >= 0 && closes[lastIdx] === null) lastIdx--;
-            let prevIdx = lastIdx - 1;
-            while (prevIdx >= 0 && closes[prevIdx] === null) prevIdx--;
+            while (lastIdx >= 0 && (closes[lastIdx] === null || closes[lastIdx] === undefined)) lastIdx--;
             
-            if (lastIdx >= 0) openPrice = opens[lastIdx];
-            if (lastIdx >= 0 && prevIdx >= 0) {
-               const lastClose = closes[lastIdx];
-               const prevClose = closes[prevIdx];
-               if (prevClose > 0) {
-                 changePercent = ((lastClose - prevClose) / prevClose) * 100;
-               }
+            if (lastIdx >= 0) {
+              lastValidClose = closes[lastIdx];
+              openPrice = opens[lastIdx];
+              
+              let prevIdx = lastIdx - 1;
+              while (prevIdx >= 0 && (closes[prevIdx] === null || closes[prevIdx] === undefined)) prevIdx--;
+              if (prevIdx >= 0) {
+                const prevClose = closes[prevIdx];
+                if (prevClose > 0) {
+                  changePercent = ((lastValidClose - prevClose) / prevClose) * 100;
+                }
+              }
             }
           }
 
-          // Build Mock Quote
           setStockData({
-            regularMarketPrice: meta.regularMarketPrice,
+            regularMarketPrice: lastValidClose ?? meta.regularMarketPrice,
             currency: meta.currency,
             regularMarketChangePercent: changePercent,
             regularMarketOpen: openPrice,
@@ -3485,20 +3527,30 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
             const hist = timestamps.map((t: number, i: number) => ({
               date: t * 1000,
               close: closes[i]
-            })).filter((h: any) => h.close !== null).sort((a: any, b: any) => a.date - b.date);
+            })).filter((h: any) => h.close !== null && h.close !== undefined).sort((a: any, b: any) => a.date - b.date);
             setHistoryData(hist);
           }
-        } else {
-          console.warn(`[StockChart] No data could be retrieved for ${selectedStock.symbol}`);
+
+          if (finalDivRes && typeof finalDivRes === 'object') {
+            const divArray = Object.values(finalDivRes)
+              .filter((d: any) => d && typeof d === 'object' && d.date && d.amount !== undefined)
+              .map((d: any) => ({
+                date: d.date * 1000,
+                amount: d.amount
+              }))
+              .sort((a, b) => b.date - a.date);
+            setDividendData(divArray);
+          }
         }
       } catch (err) {
-        console.error('Stock detail error:', err);
+        console.error('Stock detail fetch error:', err);
       } finally {
         setIsFetchingData(false);
       }
     };
     fetchData();
   }, [selectedStock]);
+
 
   const filteredStocks = stocks.filter(s => selectedSource === 'all' || s.source === selectedSource);
   const filteredFunds = funds.filter(f => (selectedSource === 'all' || f.source === selectedSource) && f.source === 'FundRich');
@@ -3900,6 +3952,36 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                     <div className="font-bold">{stockData?.regularMarketDayHigh ?? 'N/A'}</div>
                   </div>
                 </div>
+
+                {dividendData.length > 0 && (
+                  <div className="border-t border-slate-100 pt-6 mt-6">
+                    <h4 className="font-bold text-slate-800 mb-4">歷史配息紀錄 (過去五年)</h4>
+                    <div className="max-h-48 overflow-y-auto w-full border border-slate-100 rounded-lg">
+                      <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-50 sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-slate-500 font-medium">除息日</th>
+                            <th className="px-3 py-2 text-slate-500 font-medium text-right">配息金額</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {Array.isArray(dividendData) && dividendData.map((d: any, idx: number) => {
+                            const dDate = d?.date ? new Date(d.date) : null;
+                            const dateStr = dDate && !isNaN(dDate.getTime()) ? dDate.toLocaleDateString() : 'N/A';
+                            const amountNum = Number(d?.amount);
+                            const amountStr = !isNaN(amountNum) ? amountNum.toFixed(4).replace(/\.?0+$/, '') : 'N/A';
+                            return (
+                              <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="px-3 py-2">{dateStr}</td>
+                                <td className="px-3 py-2 text-right font-medium text-emerald-600">${amountStr}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
 
                 <div className="border-t border-slate-100 pt-6 mt-6">
                   <h4 className="font-bold text-slate-800 mb-4">庫存資訊與設定</h4>
