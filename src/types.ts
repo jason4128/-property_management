@@ -25,6 +25,7 @@ export interface SalaryRecord {
   healthInsurance: number; // 健保費
   pensionFund: number; // 退撫離職金
   otherDeduction: number; // 其他(支)
+  withholdingTax?: number; // 扣繳稅額
   
   // Tax
   taxableIncome?: number; // 應稅所得
@@ -32,8 +33,6 @@ export interface SalaryRecord {
   // Expected values for comparison
   expectedBasicPay?: number; // 應領本薪
   expectedProfessionalAllowance?: number; // 應領專業加給
-  
-  note?: string;
 }
 
 export interface YearlyStandard {

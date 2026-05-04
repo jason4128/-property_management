@@ -50,7 +50,8 @@ import {
   ArrowUpRight,
   ClipboardCheck,
   Search,
-  HelpCircle
+  HelpCircle,
+  Coffee
 } from 'lucide-react';
 import { askChildBudgetAdvisor, extractSubsidiesFromFile, extractSubsidiesFromText, genericAiCall } from './services/aiService';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -624,7 +625,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
         };
       }
       const totalIncome = (r.basicPay || 0) + (r.professionalAllowance || 0) + (r.medicalIncentive || 0) + (r.overtimePay || 0) + (r.yearEndBonus || 0) + (r.performanceBonus || 0) + (r.otherIncome || 0);
-      const totalDeduction = (r.civilServiceInsurance || 0) + (r.healthInsurance || 0) + (r.pensionFund || 0) + (r.otherDeduction || 0);
+      const totalDeduction = (r.civilServiceInsurance || 0) + (r.healthInsurance || 0) + (r.pensionFund || 0) + (r.otherDeduction || 0) + (r.withholdingTax || 0);
       
       acc[year]['實領薪資'] += (totalIncome - totalDeduction);
       acc[year]['固定月薪(含加給/獎勵)'] += (r.basicPay || 0) + (r.professionalAllowance || 0) + (r.medicalIncentive || 0);
@@ -1634,6 +1635,19 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                   }}
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-600">扣繳稅額</label>
+                <input 
+                  type="text" 
+                  inputMode="numeric"
+                  className="w-full mt-1 p-2 border rounded-md"
+                  value={newRecord.withholdingTax === 0 ? "" : newRecord.withholdingTax}
+                  onChange={e => {
+                    const val = e.target.value.replace(/[^\d]/g, '');
+                    setNewRecord({...newRecord, withholdingTax: val === "" ? 0 : Number(val)});
+                  }}
+                />
+              </div>
             </div>
           </div>
 
@@ -1675,6 +1689,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
               <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">公保</th>
               <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">健保</th>
               <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">退撫</th>
+              <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">扣繳稅額</th>
               <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">應追領</th>
               <th className="px-2 py-3 font-bold text-slate-600 text-right bg-emerald-50 whitespace-nowrap">合計實領</th>
               {isComparing && (
@@ -1682,7 +1697,6 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
               )}
               <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">應稅所得</th>
               <th className="px-2 py-3 font-bold text-slate-600 text-right whitespace-nowrap">應稅(年)</th>
-              <th className="px-2 py-3 font-bold text-slate-600">備註</th>
               <th className="px-2 py-3 font-bold text-slate-600 text-center">操作</th>
             </tr>
           </thead>
@@ -1697,7 +1711,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                 .sort((a, b) => b.date.localeCompare(a.date))
                 .map(r => {
                 const totalIncome = (r.basicPay || 0) + (r.professionalAllowance || 0) + (r.medicalIncentive || 0) + (r.overtimePay || 0) + (r.yearEndBonus || 0) + (r.performanceBonus || 0) + (r.otherIncome || 0);
-                const totalDeduction = (r.civilServiceInsurance || 0) + (r.healthInsurance || 0) + (r.pensionFund || 0) + (r.otherDeduction || 0);
+                const totalDeduction = (r.civilServiceInsurance || 0) + (r.healthInsurance || 0) + (r.pensionFund || 0) + (r.otherDeduction || 0) + (r.withholdingTax || 0);
                 const net = totalIncome - totalDeduction;
                 
                 const year = r.date.split('-')[0];
@@ -1807,6 +1821,9 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                         <div className="text-[10px] text-rose-400">預估: ${(diff.expectedDeductions.pensionFund || 0).toLocaleString()}</div>
                       )}
                     </td>
+                    <td className="px-2 py-2 text-right text-rose-500 whitespace-nowrap">
+                      <EditableCell value={r.withholdingTax} type="number" onSave={(val) => handleUpdate(r.id, 'withholdingTax', val)} />
+                    </td>
                     <td className="px-2 py-2 text-right text-amber-600 whitespace-nowrap">
                       <EditableCell value={r.retroactivePay} type="number" onSave={(val) => handleUpdate(r.id, 'retroactivePay', val)} />
                     </td>
@@ -1822,9 +1839,6 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                       ${calculateTaxableIncome(r).toLocaleString()}
                     </td>
                     <td className="px-2 py-2 text-right text-slate-400 whitespace-nowrap">${(annualTaxable || 0).toLocaleString()}</td>
-                    <td className="px-2 py-2 text-slate-500 italic max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap">
-                      <EditableCell value={r.note || ""} onSave={(val) => handleUpdate(r.id, 'note', val)} className="w-full" />
-                    </td>
                     <td className="px-2 py-2 text-center whitespace-nowrap">
                       <button 
                         onClick={() => handleDelete(r.id, r.date)}
@@ -2690,7 +2704,7 @@ ${text}
                     )}
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   {renderNumberInput('年度利率 (%)', newAccount.interestRate, val => setNewAccount({...newAccount, interestRate: val}), "0.001")}
                   {newAccount.type === 'high-yield' && renderNumberInput('優惠存款上限', newAccount.balanceLimit, val => setNewAccount({...newAccount, balanceLimit: val}))}
                   <div className="md:col-span-2 space-y-1">
@@ -4842,6 +4856,20 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
     }
   };
 
+  const fetchWithholdingFromRecords = (year: number) => {
+    const westernYearPrefix = (year + 1911).toString();
+    const rocYearPrefix = year.toString();
+    const annualWithholding = salaryRecords
+      .filter(r => r.date.startsWith(westernYearPrefix + '-') || r.date.startsWith(rocYearPrefix + '-'))
+      .reduce((sum, r) => sum + (r.withholdingTax || 0), 0);
+    
+    if (annualWithholding > 0) {
+      setNewTax(prev => ({ ...prev, withholding: annualWithholding }));
+    } else {
+      alert(`找不到 ${year} 年度的薪資扣繳稅額紀錄。`);
+    }
+  };
+
   const fetchInterestFromBanks = () => {
     const totalExpectedInterest = bankAccounts.reduce((sum, acc) => {
       if (acc.interestRate && acc.balance > 0 && acc.type !== 'loan') {
@@ -5587,7 +5615,16 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
                       </p>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400">扣繳稅額 (各項收入已扣)</label>
+                      <div className="flex justify-between items-end">
+                        <label className="text-[10px] font-bold text-slate-400">扣繳稅額 (各項收入已扣)</label>
+                        <button 
+                          onClick={() => fetchWithholdingFromRecords(newTax.parameterYear || newTax.year || 113)}
+                          className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded transition-colors"
+                          title="從薪資紀錄帶入"
+                        >
+                          帶入 {newTax.parameterYear || newTax.year || 113} 年扣繳稅
+                        </button>
+                      </div>
                       <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={newTax.withholding ?? 0} onChange={e => setNewTax({...newTax, withholding: Number(e.target.value)})} />
                     </div>
                     <div className="space-y-1">
@@ -7343,7 +7380,7 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
     if (currentYearSalaries.length > 0) {
       const totalIncome = currentYearSalaries.reduce((sum, r) => {
         const income = (r.basicPay || 0) + (r.professionalAllowance || 0) + (r.medicalIncentive || 0) + (r.overtimePay || 0) + (r.yearEndBonus || 0) + (r.performanceBonus || 0) + (r.otherIncome || 0);
-        const deduction = (r.civilServiceInsurance || 0) + (r.healthInsurance || 0) + (r.pensionFund || 0) + (r.otherDeduction || 0);
+        const deduction = (r.civilServiceInsurance || 0) + (r.healthInsurance || 0) + (r.pensionFund || 0) + (r.otherDeduction || 0) + (r.withholdingTax || 0);
         return sum + (income - deduction);
       }, 0);
       avgMonthlyIncome = totalIncome / currentYearSalaries.length;
@@ -8141,6 +8178,215 @@ const GenericPage = ({ title, icon: Icon, type }: { title: string, icon: any, ty
   );
 };
 
+const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
+  const [salaries, setSalaries] = useState<SalaryRecord[]>([]);
+  const [retireConfig, setRetireConfig] = useState({
+    birthYear: 80, // 民國年
+    startYear: 111, // 任職民國年
+    retirementAge: 65, // 退休年齡 (實歲)
+    customBasicPay: 0 // 可自訂本薪，0表示自動抓取
+  });
+
+  useEffect(() => {
+    const targetUids = getAppTargetUids(user);
+    const q = query(collection(db, 'salaryRecords'));
+    const unsub = onSnapshot(q, (snap) => {
+      let recs: SalaryRecord[] = [];
+      snap.forEach(d => {
+        const data = d.data();
+        if (targetUids.includes(data.uid)) {
+          recs.push({ ...data, id: d.id } as SalaryRecord);
+        }
+      });
+      recs.sort((a,b) => b.date.localeCompare(a.date));
+      setSalaries(recs);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, 'salaryRecords');
+    });
+    return () => unsub();
+  }, [user.uid]);
+
+  const getAverageBasicPay = () => {
+    if (salaries.length === 0) return 0;
+    // 取最後15年 (最高 180 個月) 的平均本薪
+    const recordsToUse = salaries.slice(0, 180);
+    const sum = recordsToUse.reduce((acc, curr) => acc + (curr.basicPay || 0), 0);
+    return Math.round(sum / recordsToUse.length);
+  };
+
+  const autoBasicPay = getAverageBasicPay();
+  const basicPay = retireConfig.customBasicPay || autoBasicPay;
+
+  // 計算年資 (years of service)
+  const retireRocYear = retireConfig.birthYear + retireConfig.retirementAge;
+  const yearsOfService = Math.max(0, retireRocYear - retireConfig.startYear);
+  
+  // 計算一次養老給付 (公保)
+  const maxInsuranceMonths = 42;
+  const insuranceMonths = Math.min(maxInsuranceMonths, yearsOfService * 1.2);
+  const insuranceLumpSum = basicPay * insuranceMonths;
+
+  // 計算月退休金 (舊制/確定給付制)
+  const basePensionAmount = basicPay * 2;
+  let replacementRatio = 0;
+  if (yearsOfService >= 15) {
+    // 依據118.1.1以後的標準，滿15年為30%，此後每年增加1.5%，最高40年67.5%
+    replacementRatio = Math.min(67.5, 30 + Math.max(0, yearsOfService - 15) * 1.5);
+  }
+  const monthlyPension = basePensionAmount * (replacementRatio / 100);
+  const lumpSumPension = basePensionAmount * 1.5 * yearsOfService; // 一般一次退休金公式(近似)
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <Coffee size={28} className="text-indigo-600" />
+            退休規劃與試算
+          </h2>
+          <p className="text-sm text-slate-500">111年任職適用舊制(確定給付制)退休俸與公保試算</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* 設定區塊 */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-6 lg:col-span-1">
+          <h3 className="font-bold text-slate-700 flex items-center gap-2 border-b pb-2">
+            <Settings size={18} /> 個人參數設定
+          </h3>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-slate-600 mb-1">出生年 (民國)</label>
+              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.birthYear} onChange={e => setRetireConfig({...retireConfig, birthYear: Number(e.target.value)})} />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-bold text-slate-600 mb-1">任職年份 (民國)</label>
+              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.startYear} onChange={e => setRetireConfig({...retireConfig, startYear: Number(e.target.value)})} />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-600 mb-1">預計退休年齡</label>
+              <div className="flex items-center gap-4">
+                <input type="range" min="65" max="75" className="flex-1 accent-indigo-600" value={retireConfig.retirementAge} onChange={e => setRetireConfig({...retireConfig, retirementAge: Number(e.target.value)})} />
+                <span className="font-black text-xl text-indigo-600 w-12 text-right">{retireConfig.retirementAge} 歲</span>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100">
+              <label className="block text-sm font-bold text-slate-600 mb-1">計算基準本薪 (自動計算最後15年平均)</label>
+              <div className="flex gap-2">
+                <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.customBasicPay || autoBasicPay} onChange={e => setRetireConfig({...retireConfig, customBasicPay: Number(e.target.value)})} placeholder={`最後15年平均: ${autoBasicPay}`} />
+                {retireConfig.customBasicPay > 0 && (
+                  <button onClick={() => setRetireConfig({...retireConfig, customBasicPay: 0})} className="px-3 bg-slate-200 text-slate-600 rounded-xl hover:bg-slate-300 text-xs font-bold transition-colors">
+                    重置
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 試算結果區塊 */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 p-6 rounded-2xl text-white shadow-lg relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mr-4 -mt-4 opacity-10">
+                <Coffee size={120} />
+              </div>
+              <h4 className="text-indigo-100 font-medium mb-1">預估月退休金 (滿15年)</h4>
+              <div className="text-3xl font-black mb-2 flex items-baseline gap-1">
+                ${yearsOfService >= 15 ? Math.round(monthlyPension).toLocaleString() : 0} <span className="text-sm font-medium opacity-80">/ 月</span>
+              </div>
+              <div className="text-xs text-indigo-200">
+                {yearsOfService >= 15 ? '適用確定給付制月退 (滿65歲起支已考量所得替代率上限)' : '年資未滿15年，僅能支領一次退休金'}
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-emerald-500 to-teal-700 p-6 rounded-2xl text-white shadow-lg relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mr-4 -mt-4 opacity-10">
+                <ShieldCheck size={120} />
+              </div>
+              <h4 className="text-emerald-100 font-medium mb-1">公保一次養老給付</h4>
+              <div className="text-3xl font-black mb-2 flex items-baseline gap-1">
+                ${Math.round(insuranceLumpSum).toLocaleString()} <span className="text-sm font-medium opacity-80">一次領</span>
+              </div>
+              <div className="text-xs text-emerald-100">
+                依據保險年資最高發給 42 個月
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-6">
+            <h3 className="font-bold text-slate-700 flex items-center gap-2 border-b pb-2">
+              <HelpCircle size={18} /> 計算式解析與參數
+            </h3>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <div className="text-xs text-slate-500 font-bold mb-1">退休民國年</div>
+                <div className="text-xl font-black text-slate-700">{retireRocYear} 年</div>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <div className="text-xs text-slate-500 font-bold mb-1">推算年資</div>
+                <div className="text-xl font-black text-indigo-600">{yearsOfService} 年</div>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <div className="text-xs text-slate-500 font-bold mb-1">退休金基準</div>
+                <div className="text-xl font-black text-slate-700">${basePensionAmount.toLocaleString()}</div>
+                <div className="text-[10px] text-slate-400 mt-1">本薪 x 2</div>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <div className="text-xs text-slate-500 font-bold mb-1">所得替代率</div>
+                <div className="text-xl font-black text-rose-600">{replacementRatio.toFixed(1)}%</div>
+                <div className="text-[10px] text-slate-400 mt-1">上限 67.5%</div>
+              </div>
+            </div>
+
+            <div className="space-y-4 text-sm bg-slate-50 p-4 rounded-xl border border-slate-100">
+              <div className="flex gap-3">
+                <div className="font-bold text-slate-700 min-w-[80px]">月退休金:</div>
+                <div className="text-slate-600 font-mono flex-1">
+                  {yearsOfService >= 15 ? (
+                    <>
+                      <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-200">
+                        <span>{basicPay.toLocaleString()} (本薪) × 2 × {replacementRatio.toFixed(1)}% (替代率) = </span>
+                        <span className="font-black text-indigo-600 text-lg">${Math.round(monthlyPension).toLocaleString()}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-rose-500">年資未滿15年不符月退資格。一次退約為 ${(Math.round(lumpSumPension)).toLocaleString()}</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <div className="font-bold text-slate-700 min-w-[80px]">公保給付:</div>
+                <div className="text-slate-600 font-mono flex-1">
+                  <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-200">
+                    <span>{basicPay.toLocaleString()} (本薪) × {insuranceMonths.toFixed(1)} 個月 (基數) = </span>
+                    <span className="font-black text-emerald-600 text-lg">${Math.round(insuranceLumpSum).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <p className="text-xs text-slate-400 leading-relaxed italic mt-4">
+              <strong>備註與參考法規：</strong><br />
+              1. 111 年任職者適用修正後之舊制 (確定給付制)。112/7/1 後初任人員始適用確定提撥制 (新制)。<br />
+              2. 預設滿 65 歲為月退法定起支年齡。<br />
+              3. 所得替代率依據年改法案最終調降標準 (自 118 年起適用)。滿 15 年為 30%，之後每年增加 1.5%，最高滿 40 年為 67.5%。<br />
+              4. 此試算系統僅依現行法規估算，最終給付金額以權責機關核定為準。
+            </p>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [activeTheme, setActiveTheme] = useState<'neo' | 'midnight' | 'minimalist'>('neo');
@@ -8374,6 +8620,7 @@ export default function App() {
       case 'insurance': return <InsurancePage {...pageProps} />;
       case 'budget': return <BudgetPage {...pageProps} />;
       case 'tax': return <TaxPage {...pageProps} />;
+      case 'retirement': return <RetirementPage {...pageProps} />;
       default: return <DashboardPage user={user} summary={summary} />;
     }
   };
@@ -8464,7 +8711,8 @@ export default function App() {
                 BarChart3,
                 PieChart,
                 FileText,
-                ShieldCheck
+                ShieldCheck,
+                Coffee
               }[tab.icon as string];
 
               const isActive = activeTab === tab.id;
@@ -8659,7 +8907,8 @@ export default function App() {
                 TrendingUp,
                 BarChart3,
                 PieChart,
-                FileText
+                FileText,
+                Coffee
               }[tab.icon as string];
 
               return (
