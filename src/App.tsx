@@ -303,7 +303,6 @@ const analyzeSalaryInput = async (input: { text?: string, image?: string, mimeTy
   - 退撫離職金 -> pensionFund
   - 其他 (支) -> otherDeduction
   - 應追領 -> retroactivePay
-  - 應稅所得 -> taxableIncome
 
   請確保：
   1. 返回的是一個包含多個物件的陣列，對應表格中的每一行。
@@ -346,14 +345,13 @@ const analyzeSalaryInput = async (input: { text?: string, image?: string, mimeTy
             civilServiceInsurance: { type: Type.NUMBER },
             healthInsurance: { type: Type.NUMBER },
             pensionFund: { type: Type.NUMBER },
-            otherDeduction: { type: Type.NUMBER },
-            taxableIncome: { type: Type.NUMBER },
+            otherDeduction: { type: Type.NUMBER }
           },
           required: [
             "date", "rank", "salaryPoint", "basicPay", "professionalAllowance", 
             "medicalIncentive", "overtimePay", "yearEndBonus", "performanceBonus", 
             "otherIncome", "retroactivePay", "civilServiceInsurance", "healthInsurance", 
-            "pensionFund", "otherDeduction", "taxableIncome"
+            "pensionFund", "otherDeduction"
           ]
         }
       }
@@ -578,6 +576,18 @@ const normalizeRank = (rank: string): string => {
   return r;
 };
 
+export const calculateTaxableIncome = (r: Partial<SalaryRecord>) => {
+  return Math.max(0, (r.basicPay || 0) + 
+    (r.professionalAllowance || 0) + 
+    (r.medicalIncentive || 0) + 
+    (r.yearEndBonus || 0) + 
+    (r.performanceBonus || 0) + 
+    (r.otherIncome || 0) + 
+    (r.retroactivePay || 0) + 
+    (r.overtimePay || 0) - 
+    (r.pensionFund || 0));
+};
+
 const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [records, setRecords] = useState<SalaryRecord[]>([]);
   const [isAdding, setIsAdding] = useState(false);
@@ -650,7 +660,6 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
     healthInsurance: 0,
     pensionFund: 0,
     otherDeduction: 0,
-    taxableIncome: 0,
   });
 
   useEffect(() => {
@@ -723,8 +732,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
         civilServiceInsurance: 0,
         healthInsurance: 0,
         pensionFund: 0,
-        otherDeduction: 0,
-        taxableIncome: 0
+        otherDeduction: 0
       });
     }
     setIsAdding(true);
@@ -1629,21 +1637,6 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
             </div>
           </div>
 
-          <div className="space-y-4">
-            <h4 className="font-bold text-indigo-700 border-b pb-1">稅務資訊 (Tax)</h4>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-600">應稅所得</label>
-                <input 
-                  type="number" 
-                  className="w-full mt-1 p-2 border rounded-md"
-                  value={newRecord.taxableIncome ?? 0}
-                  onChange={e => setNewRecord({...newRecord, taxableIncome: Number(e.target.value)})}
-                />
-              </div>
-            </div>
-          </div>
-
           <div className="flex justify-end gap-3 pt-4">
             <button 
               onClick={() => setIsAdding(false)}
@@ -1710,7 +1703,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                 const year = r.date.split('-')[0];
                 const annualTaxable = records
                   .filter(item => item.date.startsWith(year))
-                  .reduce((sum, item) => sum + (item.taxableIncome || 0), 0);
+                  .reduce((sum, item) => sum + calculateTaxableIncome(item), 0);
 
                 const diff = calculateDifference(r);
 
@@ -1826,7 +1819,7 @@ const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                     )}
 
                     <td className="px-2 py-2 text-right text-indigo-600 font-medium whitespace-nowrap">
-                      <EditableCell value={r.taxableIncome} type="number" onSave={(val) => handleUpdate(r.id, 'taxableIncome', val)} />
+                      ${calculateTaxableIncome(r).toLocaleString()}
                     </td>
                     <td className="px-2 py-2 text-right text-slate-400 whitespace-nowrap">${(annualTaxable || 0).toLocaleString()}</td>
                     <td className="px-2 py-2 text-slate-500 italic max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap">
@@ -4788,7 +4781,7 @@ const CalculationBreakdown = ({
 };
 
 const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
-  const [viewMode, setViewMode] = useState<'calculator' | 'records' | 'standards'>('records');
+  const [viewMode, setViewMode] = useState<'calculator' | 'records' | 'standards' | 'analytics'>('records');
   const [taxes, setTaxes] = useState<TaxRecord[]>([]);
   const [standards, setStandards] = useState<TaxStandard[]>([]);
   const [salaryRecords, setSalaryRecords] = useState<SalaryRecord[]>([]);
@@ -4840,7 +4833,7 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
     const rocYearPrefix = year.toString();
     const annualTaxableSalary = salaryRecords
       .filter(r => r.date.startsWith(westernYearPrefix + '-') || r.date.startsWith(rocYearPrefix + '-'))
-      .reduce((sum, r) => sum + (r.taxableIncome || 0), 0);
+      .reduce((sum, r) => sum + calculateTaxableIncome(r), 0);
     
     if (annualTaxableSalary > 0) {
       setNewTax(prev => ({ ...prev, salaryUser: annualTaxableSalary }));
@@ -5169,6 +5162,7 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
           <button onClick={() => setViewMode('records')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'records' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>紀錄</button>
           <button onClick={() => setViewMode('calculator')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'calculator' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>計算器</button>
           <button onClick={() => setViewMode('standards')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'standards' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>參數設定</button>
+          <button onClick={() => setViewMode('analytics')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'analytics' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>圖表分析</button>
         </div>
       </div>
 
@@ -5694,6 +5688,105 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
             />
         </div>
       )}
+
+      {viewMode === 'analytics' && (() => {
+        // Prepare data chart
+        const chartData = [...taxes]
+          .sort((a, b) => a.year - b.year)
+          .map(record => {
+            const res = calculateResult(record);
+            return {
+              year: record.year,
+              totalIncome: res.totalIncome,
+              netTaxableIncome: Math.max(0, res.netTaxableIncome),
+              taxPayable: res.taxPayable,
+              finalTaxDue: res.finalTaxDue,
+              exemptionsAndDeductions: res.totalExemptions + res.standardDeduction + res.specialDeductionsTotal + res.savingsDeduction
+            };
+          });
+
+        if (chartData.length === 0) {
+          return <div className="text-center text-slate-500 py-10 bg-slate-50 rounded-2xl">尚無稅務紀錄可供分析</div>;
+        }
+
+        return (
+          <div className="space-y-6">
+            <h3 className="font-bold text-slate-800 text-lg">歷年所得與稅負趨勢</h3>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Income Chart */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                <h4 className="text-slate-600 font-bold mb-4">總所得 vs 課稅所得</h4>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#818cf8" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#818cf8" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="colorTaxable" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis dataKey="year" tickFormatter={(val) => `${val}年`} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={(val) => (val/10000).toFixed(0) + '萬'} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(value: number) => [`$${value.toLocaleString()}`, '']} labelFormatter={(label) => `${label}年度`} />
+                      <Legend />
+                      <Area type="monotone" dataKey="totalIncome" name="總所得" stroke="#818cf8" fillOpacity={1} fill="url(#colorTotal)" />
+                      <Area type="monotone" dataKey="netTaxableIncome" name="課稅所得(淨額)" stroke="#f43f5e" fillOpacity={1} fill="url(#colorTaxable)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Tax Chart */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                <h4 className="text-slate-600 font-bold mb-4">應納稅額趨勢</h4>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis dataKey="year" tickFormatter={(val) => `${val}年`} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={(val) => (val/10000).toFixed(1) + '萬'} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(value: number) => [`$${value.toLocaleString()}`, '金額']} labelFormatter={(label) => `${label}年度`} />
+                      <Legend />
+                      <Bar dataKey="taxPayable" name="應納稅額(扣抵前)" fill="#cbd5e1" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="finalTaxDue" name="最終應繳納稅額" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Deductions Chart */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm lg:col-span-2">
+                <h4 className="text-slate-600 font-bold mb-4">免稅額與扣除額變化</h4>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorDed" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis dataKey="year" tickFormatter={(val) => `${val}年`} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={(val) => (val/10000).toFixed(0) + '萬'} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(value: number) => [`$${value.toLocaleString()}`, '免稅額與扣除額']} labelFormatter={(label) => `${label}年度`} />
+                      <Legend />
+                      <Area type="monotone" dataKey="exemptionsAndDeductions" name="總免稅額與扣除額" stroke="#f59e0b" fillOpacity={1} fill="url(#colorDed)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

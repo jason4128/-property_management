@@ -27,7 +27,7 @@ export interface SalaryRecord {
   otherDeduction: number; // 其他(支)
   
   // Tax
-  taxableIncome: number; // 應稅所得
+  taxableIncome?: number; // 應稅所得
   
   // Expected values for comparison
   expectedBasicPay?: number; // 應領本薪
