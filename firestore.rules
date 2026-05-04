@@ -11,28 +11,12 @@ service cloud.firestore {
     }
 
     function canAccessData(data) {
-      return !('uid' in data) || 
-             data.uid == 'default-user' || 
-             data.uid == 'local_default_user' || 
-             data.uid == 'guest' || 
-             data.uid == 'guest-user' || 
-             data.uid == 'anonymous' || 
-             data.uid == 'jason2134@gmail.com' ||
-             data.uid == 'guest@example.com' ||
-             (isSignedIn() && (
-               data.uid == request.auth.uid || 
-               data.uid == request.auth.token.email
-             ));
-    }
-
-    match /test/connection {
-      allow read: if true;
+      return true; // The user requested to be able to edit without logging in. Allowing all access to satisfy this requirement for the preview.
     }
 
     match /{collection}/{docId} {
       allow read: if true;
       allow create: if canAccessData(request.resource.data);
-      // Allow update if the existing data is accessible, and the new data doesn't change owner to someone else unaccessible
       allow update: if canAccessData(resource.data) && canAccessData(request.resource.data);
       allow delete: if canAccessData(resource.data);
     }
