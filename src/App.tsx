@@ -8181,9 +8181,9 @@ const GenericPage = ({ title, icon: Icon, type }: { title: string, icon: any, ty
 const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [salaries, setSalaries] = useState<SalaryRecord[]>([]);
   const [retireConfig, setRetireConfig] = useState({
-    birthYear: 80, // 民國年
-    startYear: 111, // 任職民國年
-    retirementAge: 65, // 退休年齡 (實歲)
+    birthDate: '1988-09-27', // 民國77年9月27日
+    startDate: '2022-11-11', // 民國111年11月11日
+    retirementDate: '2053-11-11', // 預設退休日
     customBasicPay: 0 // 可自訂本薪，0表示自動抓取
   });
 
@@ -8217,10 +8217,41 @@ const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
   const autoBasicPay = getAverageBasicPay();
   const basicPay = retireConfig.customBasicPay || autoBasicPay;
 
-  // 計算年資 (years of service)
-  const retireRocYear = retireConfig.birthYear + retireConfig.retirementAge;
-  const yearsOfService = Math.max(0, retireRocYear - retireConfig.startYear);
+  const calculateDelta = (startStr: string, endStr: string) => {
+    const s = new Date(startStr);
+    const e = new Date(endStr);
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || s > e) return { years: 0, months: 0, days: 0, decimal: 0 };
+    
+    let years = e.getFullYear() - s.getFullYear();
+    let months = e.getMonth() - s.getMonth();
+    let days = e.getDate() - s.getDate();
+
+    if (days < 0) {
+      months -= 1;
+      const prevMonth = new Date(e.getFullYear(), e.getMonth(), 0);
+      days += prevMonth.getDate();
+    }
+    if (months < 0) {
+      years -= 1;
+      months += 12;
+    }
+    
+    const decimal = years + (months / 12) + (days / 365.25);
+    return { years, months, days, decimal };
+  };
+
+  const serviceDelta = calculateDelta(retireConfig.startDate, retireConfig.retirementDate);
+  const yearsOfService = serviceDelta.decimal;
   
+  const ageDelta = calculateDelta(retireConfig.birthDate, retireConfig.retirementDate);
+  const ageAtRetirement = ageDelta.decimal;
+
+  const getRocYear = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? 0 : d.getFullYear() - 1911;
+  };
+  const retireRocYear = getRocYear(retireConfig.retirementDate);
+
   // 計算一次養老給付 (公保)
   const maxInsuranceMonths = 42;
   const insuranceMonths = Math.min(maxInsuranceMonths, yearsOfService * 1.2);
@@ -8229,9 +8260,15 @@ const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
   // 計算月退休金 (舊制/確定給付制)
   const basePensionAmount = basicPay * 2;
   let replacementRatio = 0;
-  if (yearsOfService >= 15) {
+  if (yearsOfService >= 15 && ageAtRetirement >= 65) {
     // 依據118.1.1以後的標準，滿15年為30%，此後每年增加1.5%，最高40年67.5%
     replacementRatio = Math.min(67.5, 30 + Math.max(0, yearsOfService - 15) * 1.5);
+  } else if (yearsOfService >= 15 && ageAtRetirement < 65) {
+     // 減額月退休金預估 (這邊簡單帶入未達65歲不符合支領全額月退標準)
+     // 實際減額是每提前一年減額4%，最多減20%
+     const earlyYears = Math.min(5, Math.ceil(65 - ageAtRetirement));
+     let baseRatio = Math.min(67.5, 30 + Math.max(0, yearsOfService - 15) * 1.5);
+     replacementRatio = baseRatio * (1 - (earlyYears * 0.04));
   }
   const monthlyPension = basePensionAmount * (replacementRatio / 100);
   const lumpSumPension = basePensionAmount * 1.5 * yearsOfService; // 一般一次退休金公式(近似)
@@ -8257,21 +8294,18 @@ const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
           
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-bold text-slate-600 mb-1">出生年 (民國)</label>
-              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.birthYear} onChange={e => setRetireConfig({...retireConfig, birthYear: Number(e.target.value)})} />
+              <label className="block text-sm font-bold text-slate-600 mb-1">出生日期</label>
+              <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.birthDate} onChange={e => setRetireConfig({...retireConfig, birthDate: e.target.value})} />
             </div>
             
             <div>
-              <label className="block text-sm font-bold text-slate-600 mb-1">任職年份 (民國)</label>
-              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.startYear} onChange={e => setRetireConfig({...retireConfig, startYear: Number(e.target.value)})} />
+              <label className="block text-sm font-bold text-slate-600 mb-1">任職日期</label>
+              <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.startDate} onChange={e => setRetireConfig({...retireConfig, startDate: e.target.value})} />
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-slate-600 mb-1">預計退休年齡</label>
-              <div className="flex items-center gap-4">
-                <input type="range" min="65" max="75" className="flex-1 accent-indigo-600" value={retireConfig.retirementAge} onChange={e => setRetireConfig({...retireConfig, retirementAge: Number(e.target.value)})} />
-                <span className="font-black text-xl text-indigo-600 w-12 text-right">{retireConfig.retirementAge} 歲</span>
-              </div>
+              <label className="block text-sm font-bold text-slate-600 mb-1">預計退休日期</label>
+              <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.retirementDate} onChange={e => setRetireConfig({...retireConfig, retirementDate: e.target.value})} />
             </div>
 
             <div className="pt-2 border-t border-slate-100">
@@ -8300,7 +8334,9 @@ const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
                 ${yearsOfService >= 15 ? Math.round(monthlyPension).toLocaleString() : 0} <span className="text-sm font-medium opacity-80">/ 月</span>
               </div>
               <div className="text-xs text-indigo-200">
-                {yearsOfService >= 15 ? '適用確定給付制月退 (滿65歲起支已考量所得替代率上限)' : '年資未滿15年，僅能支領一次退休金'}
+                {yearsOfService >= 15 && ageAtRetirement >= 65 ? '適用確定給付制月退 (滿65歲起支)' : 
+                 yearsOfService >= 15 && ageAtRetirement < 65 ? `未滿65歲，適用減額月退 (按比例核扣)` :
+                 '年資未滿15年，僅能支領一次退休金'}
               </div>
             </div>
 
@@ -8325,12 +8361,14 @@ const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                <div className="text-xs text-slate-500 font-bold mb-1">退休民國年</div>
-                <div className="text-xl font-black text-slate-700">{retireRocYear} 年</div>
+                <div className="text-xs text-slate-500 font-bold mb-1">退休時實歲</div>
+                <div className="text-xl font-black text-slate-700">{Math.floor(ageAtRetirement)} 歲</div>
+                <div className="text-[10px] text-slate-400 mt-1">{ageDelta.years}年{ageDelta.months}個月{ageDelta.days}天</div>
               </div>
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                <div className="text-xs text-slate-500 font-bold mb-1">推算年資</div>
-                <div className="text-xl font-black text-indigo-600">{yearsOfService} 年</div>
+                <div className="text-xs text-slate-500 font-bold mb-1">推算精確年資</div>
+                <div className="text-xl font-black text-indigo-600">{yearsOfService.toFixed(2)} 年</div>
+                <div className="text-[10px] text-slate-400 mt-1">{serviceDelta.years}年{serviceDelta.months}個月{serviceDelta.days}天</div>
               </div>
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                 <div className="text-xs text-slate-500 font-bold mb-1">退休金基準</div>
@@ -8339,8 +8377,8 @@ const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
               </div>
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                 <div className="text-xs text-slate-500 font-bold mb-1">所得替代率</div>
-                <div className="text-xl font-black text-rose-600">{replacementRatio.toFixed(1)}%</div>
-                <div className="text-[10px] text-slate-400 mt-1">上限 67.5%</div>
+                <div className="text-xl font-black text-rose-600">{replacementRatio.toFixed(2)}%</div>
+                <div className="text-[10px] text-slate-400 mt-1">{ageAtRetirement < 65 ? '含提前退休減額' : '上限 67.5%'}</div>
               </div>
             </div>
 
@@ -8351,7 +8389,7 @@ const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
                   {yearsOfService >= 15 ? (
                     <>
                       <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-200">
-                        <span>{basicPay.toLocaleString()} (本薪) × 2 × {replacementRatio.toFixed(1)}% (替代率) = </span>
+                        <span>{basicPay.toLocaleString()} (本薪) × 2 × {replacementRatio.toFixed(2)}% (替代率) = </span>
                         <span className="font-black text-indigo-600 text-lg">${Math.round(monthlyPension).toLocaleString()}</span>
                       </div>
                     </>
@@ -8365,7 +8403,7 @@ const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
                 <div className="font-bold text-slate-700 min-w-[80px]">公保給付:</div>
                 <div className="text-slate-600 font-mono flex-1">
                   <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-200">
-                    <span>{basicPay.toLocaleString()} (本薪) × {insuranceMonths.toFixed(1)} 個月 (基數) = </span>
+                    <span>{basicPay.toLocaleString()} (本薪) × {insuranceMonths.toFixed(2)} 個月 (基數) = </span>
                     <span className="font-black text-emerald-600 text-lg">${Math.round(insuranceLumpSum).toLocaleString()}</span>
                   </div>
                 </div>
@@ -8377,7 +8415,7 @@ const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
               1. 111 年任職者適用修正後之舊制 (確定給付制)。112/7/1 後初任人員始適用確定提撥制 (新制)。<br />
               2. 預設滿 65 歲為月退法定起支年齡。<br />
               3. 所得替代率依據年改法案最終調降標準 (自 118 年起適用)。滿 15 年為 30%，之後每年增加 1.5%，最高滿 40 年為 67.5%。<br />
-              4. 此試算系統僅依現行法規估算，最終給付金額以權責機關核定為準。
+              4. 年資計算已精確至日數換算小數年。此試算系統僅依現行法規估算，最終給付與年資進位以權責機關核定為準。
             </p>
 
           </div>
