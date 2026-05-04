@@ -50,122 +50,108 @@ service cloud.firestore {
 
     // --- Entity Validators ---
     function isValidSalaryRecord(data) {
-      return data.uid is string &&
+      return (!('uid' in data) || data.uid is string) &&
              canAccessData(data) &&
-             data.date is string &&
-             data.date.size() <= 10 &&
-             data.basicPay is number;
+             (!('date' in data) || (data.date is string && data.date.size() <= 10)) &&
+             (!('basicPay' in data) || data.basicPay is number);
     }
 
     function isValidYearlyStandard(data) {
-      return data.uid is string &&
+      return (!('uid' in data) || data.uid is string) &&
              canAccessData(data) &&
-             data.year is string &&
-             data.year.size() <= 4 &&
-             data.basicPay is number &&
-             data.professionalAllowance is number;
+             (!('year' in data) || (data.year is string && data.year.size() <= 4)) &&
+             (!('basicPay' in data) || data.basicPay is number) &&
+             (!('professionalAllowance' in data) || data.professionalAllowance is number);
     }
 
     function isValidCreditCard(data) {
-      return data.uid is string &&
+      return (!('uid' in data) || data.uid is string) &&
              canAccessData(data) &&
-             data.name is string &&
-             data.name.size() <= 100 &&
-             data.bank is string &&
-             data.bank.size() <= 100 &&
-             data.statementDate is number &&
-             data.dueDate is number;
+             (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
+             (!('bank' in data) || (data.bank is string && data.bank.size() <= 100)) &&
+             (!('statementDate' in data) || data.statementDate is number) &&
+             (!('dueDate' in data) || data.dueDate is number);
     }
 
     function isValidCreditCardBill(data) {
-      return data.uid is string &&
+      return (!('uid' in data) || data.uid is string) &&
              canAccessData(data) &&
-             data.cardId is string &&
-             data.month is string &&
-             data.amount is number;
+             (!('cardId' in data) || data.cardId is string) &&
+             (!('month' in data) || data.month is string) &&
+             (!('amount' in data) || data.amount is number);
     }
 
     function isValidInsurance(data) {
-      return data.uid is string &&
+      return (!('uid' in data) || data.uid is string) &&
              canAccessData(data) &&
-             data.name is string &&
-             data.name.size() <= 200;
+             (!('name' in data) || (data.name is string && data.name.size() <= 200));
     }
 
     function isValidInsurancePremium(data) {
-      return data.uid is string &&
+      return (!('uid' in data) || data.uid is string) &&
              canAccessData(data) &&
-             data.insuranceId is string &&
-             data.age is number &&
-             data.premium is number;
+             (!('insuranceId' in data) || data.insuranceId is string) &&
+             (!('age' in data) || data.age is number) &&
+             (!('premium' in data) || data.premium is number);
     }
 
     function isValidBankAccount(data) {
-      return data.uid is string &&
+      return (!('uid' in data) || data.uid is string) &&
              canAccessData(data) &&
-             data.name is string &&
-             data.name.size() <= 100 &&
-             data.bankName is string &&
-             data.bankName.size() <= 100 &&
-             data.balance is number &&
-             data.type is string;
+             (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
+             (!('bankName' in data) || (data.bankName is string && data.bankName.size() <= 100)) &&
+             (!('balance' in data) || data.balance is number) &&
+             (!('type' in data) || data.type is string);
     }
 
     function isValidFund(data) {
-      return data.uid is string &&
+      return (!('uid' in data) || data.uid is string) &&
              canAccessData(data) &&
-             data.name is string &&
-             data.name.size() <= 100 &&
-             data.cost is number &&
-             data.currentValue is number &&
-             data.units is number;
+             (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
+             (!('cost' in data) || data.cost is number) &&
+             (!('currentValue' in data) || data.currentValue is number) &&
+             (!('units' in data) || data.units is number);
     }
 
     function isValidStock(data) {
-      return data.uid is string &&
+      return (!('uid' in data) || data.uid is string) &&
              canAccessData(data) &&
-             data.symbol is string &&
-             data.symbol.size() <= 20 &&
-             data.name is string &&
-             data.name.size() <= 100 &&
-             data.shares is number &&
-             data.averageCost is number &&
-             data.currentPrice is number;
+             (!('symbol' in data) || (data.symbol is string && data.symbol.size() <= 20)) &&
+             (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
+             (!('shares' in data) || data.shares is number) &&
+             (!('averageCost' in data) || data.averageCost is number) &&
+             (!('currentPrice' in data) || data.currentPrice is number);
     }
 
     function isValidBudget(data) {
-      return data.uid is string &&
+      return (!('uid' in data) || data.uid is string) &&
              canAccessData(data) &&
-             data.category is string &&
-             data.category.size() <= 50 &&
-             data.allocated is number &&
-             data.spent is number &&
-             data.year is number;
+             (!('category' in data) || (data.category is string && data.category.size() <= 50)) &&
+             (!('allocated' in data) || data.allocated is number) &&
+             (!('spent' in data) || data.spent is number) &&
+             (!('year' in data) || data.year is number);
     }
 
     function isValidTaxRecord(data) {
-      return data.uid is string &&
+      return (!('uid' in data) || data.uid is string) &&
              canAccessData(data) &&
-             data.year is number;
+             (!('year' in data) || data.year is number);
     }
 
     function isValidTaxStandard(data) {
-      return data.uid is string &&
+      return (!('uid' in data) || data.uid is string) &&
              canAccessData(data) &&
-             data.year is number;
+             (!('year' in data) || data.year is number);
     }
 
     function isValidChildRecord(data) {
-      return data.uid is string &&
+      return (!('uid' in data) || data.uid is string) &&
              canAccessData(data) &&
-             data.type is string &&
-             (data.type == 'income' || data.type == 'expense') &&
-             data.category is string &&
-             data.category.size() <= 100 &&
-             data.amount is number &&
-             data.frequency is string &&
-             (data.frequency == 'monthly' || data.frequency == 'quarterly' || data.frequency == 'half-yearly' || data.frequency == 'yearly') &&
-             data.year is number;
+             (!('type' in data) || (data.type is string && (data.type == 'income' || data.type == 'expense'))) &&
+             (!('category' in data) || (data.category is string && data.category.size() <= 100)) &&
+             (!('amount' in data) || data.amount is number) &&
+             (!('frequency' in data) || (data.frequency is string && (data.frequency == 'monthly' || data.frequency == 'quarterly' || data.frequency == 'half-yearly' || data.frequency == 'yearly'))) &&
+             (!('year' in data) || data.year is number);
     }
 
     // --- Collection matching ---
