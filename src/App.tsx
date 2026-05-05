@@ -2966,31 +2966,6 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
   const [selectedStocks, setSelectedStocks] = useState<Set<string>>(new Set());
   const [usdRate, setUsdRate] = useState(32.5); // Default rate
 
-  const fetchWithProxy = async (url: string) => {
-    const proxies = [
-      (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-      (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-      (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-      (u: string) => u // Direct fetch fallback
-    ];
-
-    const errors: Error[] = [];
-    for (const proxy of proxies) {
-      try {
-        const fetchUrl = proxy(url);
-        const res = await fetch(fetchUrl);
-        if (!res.ok) throw new Error(`Proxy failed with status ${res.status}`);
-        const data = await res.json();
-        // If it's a string (from allorigins raw sometimes if not handled correctly), parse it
-        return typeof data === 'string' ? JSON.parse(data) : data;
-      } catch (err: any) {
-        errors.push(err);
-      }
-    }
-    console.error('All proxies failed for:', url, errors);
-    throw new Error('無法取得即時資料，請稍後再試');
-  };
-
   // AI Recognition State
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [aiFileData, setAiFileData] = useState<{ url: string, type: string, name: string } | null>(null);
@@ -3012,37 +2987,6 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
 
     try {
       let successCount = 0;
-      
-      const proxies = [
-        (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-        (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-        (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-        (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`
-      ];
-
-      const fetchWithProxy = async (url: string) => {
-        let errors = [];
-        for (const proxy of proxies) {
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000);
-            const res = await fetch(proxy(url), { signal: controller.signal }).finally(() => clearTimeout(timeoutId));
-            if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
-            
-            const rawJson = await res.json();
-            const parsed = typeof rawJson.contents === 'string' ? JSON.parse(rawJson.contents) : (rawJson.contents || rawJson);
-            
-            // Check if response has expected Yahoo structure
-            if (parsed.quoteResponse || parsed.chart) {
-                return parsed;
-            }
-            throw new Error('Invalid Yahoo structure');
-          } catch (e: any) {
-            errors.push(e.message);
-          }
-        }
-        throw new Error(`All proxies failed: ${errors.join(', ')}`);
-      };
 
       const chunkSize = 10;
       for (let i = 0; i < stocks.length; i += chunkSize) {
@@ -3054,33 +2998,17 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
             const sym = stock.symbol.trim();
             if (!sym || sym === 'NA') return;
 
-            const isTaiwan = /^\d[0-9]{3,5}$/.test(sym);
-            const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
-            
             let price = null;
-            for (const target of targets) {
-              try {
-                // Try quote endpoint
-                const urlQuote = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
-                try {
-                  const data = await fetchWithProxy(urlQuote);
-                  const result = data?.quoteResponse?.result?.[0];
-                  
-                  if (result && result.regularMarketPrice) {
-                    price = result.regularMarketPrice;
-                    break;
-                  }
-                } catch(e){}
-
-                // Fallback to chart endpoint if quote fails (common due to Yahoo crumb changes)
-                const urlChart = `https://query2.finance.yahoo.com/v8/finance/chart/${target}?interval=1d&range=1d`;
-                const dataChart = await fetchWithProxy(urlChart);
-                const chartResult = dataChart?.chart?.result?.[0];
-                if (chartResult && chartResult.meta && chartResult.meta.regularMarketPrice) {
-                  price = chartResult.meta.regularMarketPrice;
-                  break;
+            try {
+              const res = await fetch(`/api/stock/${encodeURIComponent(sym)}`);
+              if (res.ok) {
+                const data = await res.json();
+                if (data && data.regularMarketPrice) {
+                  price = data.regularMarketPrice;
                 }
-              } catch (e) {}
+              }
+            } catch (e) {
+              console.warn(`Failed backend fetch for ${sym}, falling back`);
             }
             
             if (price !== null) {
@@ -3115,45 +3043,16 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
     try {
       const fetchDividends = async (stock: Stock) => {
         const sym = stock.symbol.trim();
-        const isTaiwan = /^\d{4,6}$/.test(sym);
-        const targets = isTaiwan ? [`${sym}.TW`, `${sym}.TWO`] : [sym];
         let chartData = null;
         let quote = null;
 
-        const proxies = [
-          (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-          (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-          (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`
-        ];
-
-        const fetchWithProxy = async (url: string) => {
-          return await Promise.any(proxies.map(async proxy => {
-            const res = await fetch(proxy(url));
-            if (!res.ok) throw new Error('failed');
-            const rawJson = await res.json();
-            const content = rawJson.contents || rawJson;
-            return typeof content === 'string' ? JSON.parse(content) : content;
-          }));
-        };
-
-        for (const target of targets) {
-          try {
-            const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${target}`;
-            const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${target}?interval=1mo&range=5y&events=div`;
-            
-            try {
-              if (!quote) {
-                const qParsed = await fetchWithProxy(quoteUrl);
-                quote = qParsed.quoteResponse?.result?.[0];
-              }
-              if (!chartData) {
-                const cParsed = await fetchWithProxy(chartUrl);
-                chartData = cParsed.chart?.result?.[0];
-              }
-            } catch (e) {}
-
-            if (chartData || quote) break;
-          } catch (e) {}
+        try {
+          const qRes = await fetch(`/api/stock/${encodeURIComponent(sym)}`);
+          if (qRes.ok) quote = await qRes.json();
+          const cRes = await fetch(`/api/stock/dividends/${encodeURIComponent(sym)}`);
+          if (cRes.ok) chartData = await cRes.json();
+        } catch (e) {
+             console.error(`Failed fetching dividends API for ${sym}`, e);
         }
 
         return { stockId: stock.id, sym, quote, chartData };
@@ -3386,152 +3285,65 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       setHistoryData([]);
       setDividendData([]);
 
-      const tryFetchWithProxies = async (url: string, isChart = true) => {
-        const proxies = [
-          (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-          (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-          (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-          (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
-        ];
-
-        return Promise.any(proxies.map(async (proxyFn) => {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
-          try {
-            const res = await fetch(proxyFn(url), { signal: controller.signal });
-            if (!res.ok) throw new Error('Proxy fail');
-            const data = await res.json();
-            const contents = data.contents || data;
-            const parsed = typeof contents === 'string' ? JSON.parse(contents) : contents;
-            
-            if (isChart && !parsed?.chart?.result?.[0]?.meta) {
-               throw new Error('Invalid chart data');
-            }
-            return parsed;
-          } finally {
-            clearTimeout(timeoutId);
-          }
-        }));
-      };
-
       try {
         const sym = selectedStock.symbol.trim();
-        const stocksToTry = [];
-        
-        const isTaiwan = /^\d{4,6}[a-zA-Z]?$/.test(sym);
-        if (isTaiwan) {
-          stocksToTry.push(`${sym}.TW`, `${sym}.TWO`);
-        } else if (sym && sym !== 'NA') {
-          stocksToTry.push(sym);
-        }
+        let finalChartRes: { meta?: any, quotes?: any[] } | null = null;
+        let finalDivRes: any = null;
 
-        let finalChartRes = null;
-        let finalDivRes = null;
-        const endpoints = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
+        try {
+          const cRes = await fetch(`/api/stock/history/${encodeURIComponent(sym)}`);
+          if (cRes.ok) {
+            const quotes = await cRes.json();
+            finalChartRes = { quotes };
+             
+            const qRes = await fetch(`/api/stock/${encodeURIComponent(sym)}`);
+            if (qRes.ok) finalChartRes.meta = await qRes.json();
 
-        // Phase 1: Try direct symbols
-        for (const target of stocksToTry) {
-          if (finalChartRes) break;
-          for (const endpoint of endpoints) {
-            try {
-              const [cRes, dRes] = await Promise.allSettled([
-                tryFetchWithProxies(`${endpoint}/v8/finance/chart/${target}?interval=1d&range=3mo`, true),
-                tryFetchWithProxies(`${endpoint}/v8/finance/chart/${target}?interval=1mo&range=5y&events=div`, false)
-              ]);
-
-              if (cRes.status === 'fulfilled' && cRes.value?.chart?.result?.[0]) {
-                finalChartRes = cRes.value.chart.result[0];
-                if (dRes.status === 'fulfilled' && dRes.value?.chart?.result?.[0]?.events?.dividends) {
-                  finalDivRes = dRes.value.chart.result[0].events.dividends;
-                }
-                break;
-              }
-            } catch (e) {}
-          }
-        }
-
-        // Phase 2: Fallback to Search by Name if no chart found and name exists
-        if (!finalChartRes && selectedStock.name && selectedStock.name.length > 1) {
-          try {
-            console.log(`[StockChart] Trying search fallback for: ${selectedStock.name}`);
-            const searchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(selectedStock.name)}`;
-            const searchData = await tryFetchWithProxies(searchUrl, false);
-            const firstResult = searchData?.quotes?.[0];
-            if (firstResult?.symbol) {
-              const target = firstResult.symbol;
-              for (const endpoint of endpoints) {
-                try {
-                  const [cRes, dRes] = await Promise.allSettled([
-                    tryFetchWithProxies(`${endpoint}/v8/finance/chart/${target}?interval=1d&range=3mo`, true),
-                    tryFetchWithProxies(`${endpoint}/v8/finance/chart/${target}?interval=1mo&range=5y&events=div`, false)
-                  ]);
-                  if (cRes.status === 'fulfilled' && cRes.value?.chart?.result?.[0]) {
-                    finalChartRes = cRes.value.chart.result[0];
-                    if (dRes.status === 'fulfilled' && dRes.value?.chart?.result?.[0]?.events?.dividends) {
-                      finalDivRes = dRes.value.chart.result[0].events.dividends;
-                    }
-                    break;
-                  }
-                } catch (e) {}
-              }
+            const dRes = await fetch(`/api/stock/dividends/${encodeURIComponent(sym)}`);
+            if (dRes.ok) {
+              const { events, meta } = await dRes.json();
+              if (finalChartRes.meta) finalChartRes.meta = { ...finalChartRes.meta, ...meta };
+              else finalChartRes.meta = meta;
+              if (events && events.dividends) finalDivRes = events.dividends;
             }
-          } catch (e) {
-            console.warn('[StockChart] Search fallback failed', e);
           }
-        }
+        } catch (e) {}
 
-        if (finalChartRes) {
-          const meta = finalChartRes.meta;
-          const timestamps = finalChartRes.timestamp || [];
-          const quoteIndicator = finalChartRes.indicators?.quote?.[0] || {};
-          const closes = quoteIndicator.close || [];
-          const opens = quoteIndicator.open || [];
+        if (finalChartRes && finalChartRes.quotes && finalChartRes.quotes.length > 0) {
+          const meta = finalChartRes.meta || {};
+          const quotes = finalChartRes.quotes;
           
-          let lastValidClose = meta.regularMarketPrice;
+          let lastValidClose = quotes[quotes.length - 1]?.close ?? meta.regularMarketPrice;
           let changePercent = 0;
-          let openPrice = null;
+          let openPrice = quotes[quotes.length - 1]?.open ?? null;
 
-          if (closes.length > 0) {
-            let lastIdx = closes.length - 1;
-            while (lastIdx >= 0 && (closes[lastIdx] === null || closes[lastIdx] === undefined)) lastIdx--;
-            
-            if (lastIdx >= 0) {
-              lastValidClose = closes[lastIdx];
-              openPrice = opens[lastIdx];
-              
-              let prevIdx = lastIdx - 1;
-              while (prevIdx >= 0 && (closes[prevIdx] === null || closes[prevIdx] === undefined)) prevIdx--;
-              if (prevIdx >= 0) {
-                const prevClose = closes[prevIdx];
-                if (prevClose > 0) {
-                  changePercent = ((lastValidClose - prevClose) / prevClose) * 100;
-                }
-              }
-            }
+          if (quotes.length >= 2) {
+             const prevClose = quotes[quotes.length - 2]?.close;
+             if (prevClose && prevClose > 0) {
+               changePercent = ((lastValidClose - prevClose) / prevClose) * 100;
+             }
           }
 
           setStockData({
-            regularMarketPrice: lastValidClose ?? meta.regularMarketPrice,
-            currency: meta.currency,
+            regularMarketPrice: lastValidClose,
+            currency: meta.currency || 'TWD',
             regularMarketChangePercent: changePercent,
             regularMarketOpen: openPrice,
-            regularMarketDayHigh: meta.regularMarketDayHigh,
-            regularMarketDayLow: meta.regularMarketDayLow,
+            regularMarketDayHigh: quotes[quotes.length - 1]?.high || null,
+            regularMarketDayLow: quotes[quotes.length - 1]?.low || null,
           });
 
-          if (timestamps.length > 0 && closes.length > 0) {
-            const hist = timestamps.map((t: number, i: number) => ({
-              date: t * 1000,
-              close: closes[i]
-            })).filter((h: any) => h.close !== null && h.close !== undefined).sort((a: any, b: any) => a.date - b.date);
-            setHistoryData(hist);
-          }
+          const hist = quotes.map((q: any) => ({
+            date: new Date(q.date).getTime(),
+            close: q.close
+          })).filter((h: any) => h.close !== null && h.close !== undefined).sort((a: any, b: any) => a.date - b.date);
+          setHistoryData(hist);
 
           if (finalDivRes && typeof finalDivRes === 'object') {
             const divArray = Object.values(finalDivRes)
               .filter((d: any) => d && typeof d === 'object' && d.date && d.amount !== undefined)
               .map((d: any) => ({
-                date: d.date * 1000,
+                date: (d.date > 1e11 ? d.date : d.date * 1000),
                 amount: d.amount
               }))
               .sort((a, b) => b.date - a.date);

@@ -140,6 +140,34 @@ async function startServer() {
     }
   });
 
+  app.get("/api/stock/dividends/:symbol", async (req, res) => {
+    try {
+      let { symbol } = req.params;
+      const getDividends = async (sym: string) => {
+        const data = await yf.chart(sym, { period1: '2019-01-01' });
+        return { events: data.events, meta: data.meta };
+      };
+
+      if (/^\d{4,6}[a-zA-Z]?$/.test(symbol)) {
+        try {
+          res.json(await getDividends(`${symbol}.TW`));
+          return;
+        } catch (e) {
+          try {
+             res.json(await getDividends(`${symbol}.TWO`));
+             return;
+          } catch(e2) {
+             throw e2;
+          }
+        }
+      }
+      res.json(await getDividends(symbol));
+    } catch (error) {
+      console.error(`Error fetching dividends for ${req.params.symbol}:`, error);
+      res.status(500).json({ error: "Failed to fetch dividend data", details: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
