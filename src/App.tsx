@@ -3078,30 +3078,39 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
         if (dividends && Object.keys(dividends).length > 0) {
           const yearDivs: Record<number, any[]> = {};
           Object.values(dividends).forEach((div: any) => {
-             const date = new Date(div.date * 1000);
+             const divDateObj = typeof div.date === 'string' ? new Date(div.date) : new Date(div.date * 1000);
+             const date = isNaN(divDateObj.getTime()) ? new Date() : divDateObj;
              const year = date.getFullYear();
              if (!yearDivs[year]) yearDivs[year] = [];
              yearDivs[year].push({ amount: div.amount, date: div.date });
           });
           const years = Object.keys(yearDivs).map(Number).sort((a,b) => b - a);
-          const maxYear = years[0];
-          const lastYear = years[1];
-          let frequencyCount = 0;
-          if (yearDivs[maxYear]) frequencyCount = Math.max(frequencyCount, yearDivs[maxYear].length);
-          if (lastYear && yearDivs[lastYear]) frequencyCount = Math.max(frequencyCount, yearDivs[lastYear].length);
           
-          if (frequencyCount >= 10) freqStr = '月配';
-          else if (frequencyCount >= 3) freqStr = '季配';
-          else if (frequencyCount == 2) freqStr = '半年配';
-          else if (frequencyCount == 1) freqStr = '年配';
-
           const currentYear = new Date().getFullYear();
+          
+          let frequencyCount = 0;
+          if (years.length > 0) {
+            frequencyCount = yearDivs[years[0]].length;
+            if (years.length > 1) {
+              frequencyCount = Math.max(frequencyCount, yearDivs[years[1]].length);
+            }
+            if (years.length > 2) {
+               frequencyCount = Math.max(frequencyCount, yearDivs[years[2]].length);
+            }
+          }
+          // Some ETFs pay slightly irregularly, making the count vary. 
+          if (frequencyCount >= 10) freqStr = '月配';
+          else if (frequencyCount >= 5) freqStr = '雙月配';
+          else if (frequencyCount >= 3) freqStr = '季配';
+          else if (frequencyCount === 2) freqStr = '半年配';
+          else if (frequencyCount === 1) freqStr = '年配';
+
           const targetYear = currentYear - 1;
 
           if (yearDivs[targetYear]) {
             predictedDiv = yearDivs[targetYear].reduce((sum, d) => sum + d.amount, 0);
-          } else if (yearDivs[maxYear]) {
-            predictedDiv = yearDivs[maxYear].reduce((sum, d) => sum + d.amount, 0);
+          } else if (years.length > 0 && yearDivs[years[0]]) {
+            predictedDiv = yearDivs[years[0]].reduce((sum, d) => sum + d.amount, 0);
           }
         }
 
@@ -3342,10 +3351,13 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
           if (finalDivRes && typeof finalDivRes === 'object') {
             const divArray = Object.values(finalDivRes)
               .filter((d: any) => d && typeof d === 'object' && d.date && d.amount !== undefined)
-              .map((d: any) => ({
-                date: (d.date > 1e11 ? d.date : d.date * 1000),
-                amount: d.amount
-              }))
+              .map((d: any) => {
+                let parsedDate = typeof d.date === 'string' ? new Date(d.date).getTime() : (d.date > 1e11 ? d.date : d.date * 1000);
+                return {
+                  date: parsedDate,
+                  amount: d.amount
+                };
+              })
               .sort((a, b) => b.date - a.date);
             setDividendData(divArray);
           }
