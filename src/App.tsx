@@ -8003,7 +8003,7 @@ const GenericPage = ({ title, icon: Icon, type }: { title: string, icon: any, ty
   );
 };
 
-const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
+const SelfRetirementTab = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [salaries, setSalaries] = useState<SalaryRecord[]>([]);
   const [retireConfig, setRetireConfig] = useState({
     birthDate: '1988-09-27', // 民國77年9月27日
@@ -8267,7 +8267,7 @@ const LABOR_FUND_HISTORY = [
   { year: 2012, return: 5.02 }
 ];
 
-const WifeRetirementPage = ({ user }: { user: User }) => {
+const WifeRetirementTab = ({ user }: { user: User }) => {
   const [retireConfig, setRetireConfig] = useState({
     birthDate: '1989-01-07',
     retirementAge: 65,
@@ -8541,6 +8541,32 @@ const WifeRetirementPage = ({ user }: { user: User }) => {
   );
 };
 
+const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget?: (target: any) => void }) => {
+  const [activeTab, setActiveTab] = useState<'self' | 'wife'>('self');
+
+  return (
+    <div className="space-y-6">
+      <div className="flex gap-2 p-1 bg-slate-200/50 rounded-xl w-fit">
+        <button
+          onClick={() => setActiveTab('self')}
+          className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'self' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+        >
+          自己的退休規劃
+        </button>
+        <button
+          onClick={() => setActiveTab('wife')}
+          className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${activeTab === 'wife' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+        >
+          <Heart size={16} className={activeTab === 'wife' ? 'text-rose-500' : ''} /> 老婆的退休金
+        </button>
+      </div>
+
+      {activeTab === 'self' && <SelfRetirementTab user={user} setDeleteTarget={setDeleteTarget || (() => {})} />}
+      {activeTab === 'wife' && <WifeRetirementTab user={user} />}
+    </div>
+  );
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [activeTheme, setActiveTheme] = useState<'neo' | 'midnight' | 'minimalist'>('neo');
@@ -8775,7 +8801,6 @@ export default function App() {
       case 'budget': return <BudgetPage {...pageProps} />;
       case 'tax': return <TaxPage {...pageProps} />;
       case 'retirement': return <RetirementPage {...pageProps} />;
-      case 'wife-retirement': return <WifeRetirementPage user={user} />;
       default: return <DashboardPage user={user} summary={summary} />;
     }
   };
