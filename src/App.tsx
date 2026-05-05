@@ -8098,6 +8098,19 @@ const SelfRetirementTab = ({ user, setDeleteTarget }: { user: User, setDeleteTar
   const monthlyPension = basePensionAmount * (replacementRatio / 100);
   const lumpSumPension = basePensionAmount * 1.5 * yearsOfService; // 一般一次退休金公式(近似)
 
+  // 退職所得稅試算 (公保全額免稅，退撫依月領或一次領計算)
+  const annualAnnuityExemption = 859000;
+  let monthlyTaxableIncomeAnnual = Math.max(0, (monthlyPension * 12) - annualAnnuityExemption);
+
+  const exemptionThreshold1 = 198000 * yearsOfService;
+  const exemptionThreshold2 = 398000 * yearsOfService;
+  let lumpSumTaxableIncome = 0;
+  if (lumpSumPension > exemptionThreshold2) {
+    lumpSumTaxableIncome = ((exemptionThreshold2 - exemptionThreshold1) / 2) + (lumpSumPension - exemptionThreshold2);
+  } else if (lumpSumPension > exemptionThreshold1) {
+    lumpSumTaxableIncome = (lumpSumPension - exemptionThreshold1) / 2;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -8230,6 +8243,59 @@ const SelfRetirementTab = ({ user, setDeleteTarget }: { user: User, setDeleteTar
                   <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-200">
                     <span>{basicPay.toLocaleString()} (本薪) × {insuranceMonths.toFixed(2)} 個月 (基數) = </span>
                     <span className="font-black text-emerald-600 text-lg">${Math.round(insuranceLumpSum).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-100 p-6 rounded-2xl text-sm text-slate-600 leading-relaxed mt-4">
+              <h4 className="font-bold text-slate-700 flex items-center gap-2 mb-3">
+                <FileText size={16} className="text-rose-500" /> 退職所得稅負評估 (僅適用退撫金，公保一次給付免稅)
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                  <div className="font-bold text-slate-700 mb-2">選項一：一次領取</div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">預估領取總額</span>
+                      <span className="font-medium">${Math.round(lumpSumPension).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">免稅額度 (19.8萬 × 年資)</span>
+                      <span className="font-medium">${Math.round(exemptionThreshold1).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">半數課稅上限 (39.8萬 × 年資)</span>
+                      <span className="font-medium">${Math.round(exemptionThreshold2).toLocaleString()}</span>
+                    </div>
+                    <div className="pt-2 mt-2 border-t border-slate-200">
+                      <div className="flex justify-between text-sm font-bold">
+                        <span className="text-rose-600">應申報退職所得</span>
+                        <span className="text-rose-600">${Math.round(lumpSumTaxableIncome).toLocaleString()}</span>
+                      </div>
+                    </div>
+                    {yearsOfService >= 15 && <p className="text-[10px] text-slate-400 mt-2">＊您符合月退資格，若選擇一次領，則依上列計算應稅所得。</p>}
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                  <div className="font-bold text-slate-700 mb-2">選項二：分期領取 (月領)</div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">預估首年領取總額</span>
+                      <span className="font-medium">${Math.round(monthlyPension * 12).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">每年免稅額</span>
+                      <span className="font-medium">${annualAnnuityExemption.toLocaleString()}</span>
+                    </div>
+                    <div className="pt-2 mt-2 border-t border-slate-200">
+                      <div className="flex justify-between text-sm font-bold">
+                        <span className="text-rose-600">應申報退職所得 (年)</span>
+                        <span className="text-rose-600">${Math.round(monthlyTaxableIncomeAnnual).toLocaleString()}</span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-2">＊如領取金額未超過85.9萬元/年，則免申報。</p>
                   </div>
                 </div>
               </div>
