@@ -52,7 +52,8 @@ import {
   Search,
   HelpCircle,
   Coffee,
-  Heart
+  Heart,
+  CheckCircle
 } from 'lucide-react';
 import { askChildBudgetAdvisor, extractSubsidiesFromFile, extractSubsidiesFromText, genericAiCall } from './services/aiService';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -590,7 +591,7 @@ export const calculateTaxableIncome = (r: Partial<SalaryRecord>) => {
     (r.pensionFund || 0));
 };
 
-const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
+const SelfSalaryTab = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [records, setRecords] = useState<SalaryRecord[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
@@ -8295,20 +8296,10 @@ const SelfRetirementTab = ({ user, setDeleteTarget }: { user: User, setDeleteTar
                         <span className="text-rose-600">${Math.round(monthlyTaxableIncomeAnnual).toLocaleString()}</span>
                       </div>
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-2">＊如領取金額未超過85.9萬元/年，則免申報。</p>
                   </div>
                 </div>
               </div>
             </div>
-            
-            <p className="text-xs text-slate-400 leading-relaxed italic mt-4">
-              <strong>備註與參考法規：</strong><br />
-              1. 111 年任職者適用修正後之舊制 (確定給付制)。112/7/1 後初任人員始適用確定提撥制 (新制)。<br />
-              2. 預設滿 65 歲為月退法定起支年齡。<br />
-              3. 所得替代率依據年改法案最終調降標準 (自 118 年起適用)。滿 15 年為 30%，之後每年增加 1.5%，最高滿 40 年為 67.5%。<br />
-              4. 年資計算已精確至日數換算小數年。此試算系統僅依現行法規估算，最終給付與年資進位以權責機關核定為準。
-            </p>
-
           </div>
         </div>
       </div>
@@ -8316,90 +8307,322 @@ const SelfRetirementTab = ({ user, setDeleteTarget }: { user: User, setDeleteTar
   );
 };
 
+/* 
+const WifeSalaryTable = ({ targetUid, isFormMode = false }: { targetUid: string, isFormMode?: boolean }) => {
+  const [records, setRecords] = useState<any[]>([]);
+  const [editingRecord, setEditingRecord] = useState<any>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!targetUid) return;
+    const q = query(collection(db, 'laborSalaryRecords'), where('uid', '==', targetUid));
+    const unsub = onSnapshot(q, (snap: any) => {
+      let recs: any[] = [];
+      snap.forEach((d: any) => recs.push({ id: d.id, ...d.data() }));
+      recs.sort((a, b) => b.date.localeCompare(a.date));
+      setRecords(recs);
+    });
+    return () => unsub();
+  }, [targetUid]);
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'laborSalaryRecords', id));
+      setConfirmDeleteId(null);
+    } catch (e) {
+      console.error(e);
+      alert('刪除失敗');
+    }
+  };
+
+  const handleUpdateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRecord) return;
+    try {
+      const updates = {
+        date: editingRecord.date,
+        company: editingRecord.company,
+        baseSalary: Number(editingRecord.baseSalary) || 0,
+        mealAllowance: Number(editingRecord.mealAllowance) || 0,
+        positionAllowance: Number(editingRecord.positionAllowance) || 0,
+        overtimePay: Number(editingRecord.overtimePay) || 0,
+        attendanceBonus: Number(editingRecord.attendanceBonus) || 0,
+        performanceBonus: Number(editingRecord.performanceBonus) || 0,
+        yearEndBonus: Number(editingRecord.yearEndBonus) || 0,
+        otherIncome: Number(editingRecord.otherIncome) || 0,
+        laborInsurance: Number(editingRecord.laborInsurance) || 0,
+        healthInsurance: Number(editingRecord.healthInsurance) || 0,
+        laborPensionVoluntary: Number(editingRecord.laborPensionVoluntary) || 0,
+        leaveDeduction: Number(editingRecord.leaveDeduction) || 0,
+        welfareFundDeduction: Number(editingRecord.welfareFundDeduction) || 0,
+        withholdingTax: Number(editingRecord.withholdingTax) || 0
+      };
+      await updateDoc(doc(db, 'laborSalaryRecords', editingRecord.id), updates);
+      alert('更新成功！');
+      setEditingRecord(null);
+    } catch (e) {
+      console.error(e);
+      alert('更新失敗');
+    }
+  };
+
+  if (records.length === 0) {
+    return (
+      <div className="p-8 text-center text-slate-400 flex flex-col items-center gap-3">
+        <div className="w-12 h-12 rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300">
+           <FileText size={20} />
+        </div>
+        尚未有填寫紀錄{isFormMode ? '，請從上方表單新增。' : '，請傳送連結請她填寫。'}
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto relative custom-scrollbar">
+      <table className="w-full text-sm text-left whitespace-nowrap">
+        <thead className="bg-slate-50 text-slate-600 border-b">
+          <tr>
+            <th className="px-4 py-3 font-bold sticky left-0 bg-slate-50 z-10 shadow-[1px_0_0_0_#e2e8f0]">給薪月份</th>
+            <th className="px-4 py-3 font-bold">公司</th>
+            <th className="px-4 py-3 font-bold text-emerald-600">底薪</th>
+            <th className="px-4 py-3 font-bold text-emerald-600">伙食津貼</th>
+            <th className="px-4 py-3 font-bold text-emerald-600">職務/津貼</th>
+            <th className="px-4 py-3 font-bold text-emerald-600">加班費</th>
+            <th className="px-4 py-3 font-bold text-emerald-600">全勤獎金</th>
+            <th className="px-4 py-3 font-bold text-emerald-600">績效獎金</th>
+            <th className="px-4 py-3 font-bold text-emerald-600">年終/其他</th>
+            <th className="px-4 py-3 font-bold text-emerald-700 bg-emerald-50/50">應發小計</th>
+            <th className="px-4 py-3 font-bold text-rose-600">勞保費</th>
+            <th className="px-4 py-3 font-bold text-rose-600">健保費</th>
+            <th className="px-4 py-3 font-bold text-rose-600">勞退自提</th>
+            <th className="px-4 py-3 font-bold text-rose-600">請假扣薪</th>
+            <th className="px-4 py-3 font-bold text-rose-600">福利金等</th>
+            <th className="px-4 py-3 font-bold text-rose-600">所得稅</th>
+            <th className="px-4 py-3 font-bold text-rose-700 bg-rose-50/50">應扣小計</th>
+            <th className="px-4 py-3 font-bold text-indigo-600 bg-indigo-50/50">實領薪資</th>
+            <th className="px-4 py-3 font-bold text-center sticky right-0 bg-slate-50 z-10 shadow-[-1px_0_0_0_#e2e8f0]">操作</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {records.map(rec => {
+            const income = (rec.baseSalary || 0) + (rec.mealAllowance || 0) + (rec.positionAllowance || 0) + (rec.overtimePay || 0) + (rec.attendanceBonus || 0) + (rec.performanceBonus || 0) + (rec.yearEndBonus || 0) + (rec.otherIncome || 0);
+            const deduct = (rec.laborInsurance || 0) + (rec.healthInsurance || 0) + (rec.laborPensionVoluntary || 0) + (rec.leaveDeduction || 0) + (rec.welfareFundDeduction || 0) + (rec.withholdingTax || 0);
+            return (
+              <tr key={rec.id} className="hover:bg-slate-50/50">
+                <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white shadow-[1px_0_0_0_#e2e8f0] group-hover:bg-slate-50/50">{rec.date}</td>
+                <td className="px-4 py-2 text-slate-500">{rec.company || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.baseSalary?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.mealAllowance?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.positionAllowance?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.overtimePay?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.attendanceBonus?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.performanceBonus?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{(Number(rec.yearEndBonus || 0) + Number(rec.otherIncome || 0)).toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 font-medium text-emerald-700 bg-emerald-50/30">${income.toLocaleString()}</td>
+                
+                <td className="px-4 py-2 text-slate-600">{rec.laborInsurance?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.healthInsurance?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.laborPensionVoluntary?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.leaveDeduction?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.welfareFundDeduction?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.withholdingTax?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 font-medium text-rose-700 bg-rose-50/30">-${deduct.toLocaleString()}</td>
+                
+                <td className="px-4 py-2 font-bold text-indigo-700 bg-indigo-50/30">${(income - deduct).toLocaleString()}</td>
+                <td className="px-4 py-2 flex gap-1 justify-center sticky right-0 bg-white shadow-[-1px_0_0_0_#e2e8f0] group-hover:bg-slate-50/50">
+                  <button onClick={() => setEditingRecord(rec)} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"><Edit2 size={16} /></button>
+                  <button onClick={() => setConfirmDeleteId(rec.id)} className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 size={16} /></button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {confirmDeleteId && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[120] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 shadow-2xl max-w-sm w-full animate-in fade-in zoom-in duration-200">
+            <h3 className="text-xl font-bold text-slate-800 mb-2">確定要刪除嗎？</h3>
+            <p className="text-slate-500 mb-6">這筆薪資紀錄刪除後將無法恢復。</p>
+            <div className="flex gap-3 justify-end">
+              <button 
+                onClick={() => setConfirmDeleteId(null)}
+                className="px-4 py-2 rounded-xl font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+              >取消</button>
+              <button 
+                onClick={() => handleDelete(confirmDeleteId)}
+                className="px-4 py-2 rounded-xl font-bold text-white bg-rose-500 hover:bg-rose-600 shadow-md shadow-rose-200 transition-all active:scale-95"
+              >確定刪除</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingRecord && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold flex items-center gap-2"><Edit2 size={24} className="text-indigo-600" /> 編輯紀錄</h3>
+              <button onClick={() => setEditingRecord(null)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full"><X size={20} /></button>
+            </div>
+            
+            <form onSubmit={handleUpdateSubmit} className="space-y-6">
+              <div className="space-y-4">
+                <h3 className="font-bold text-slate-700 border-b pb-2">基本資訊</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-600 mb-1">給薪月份</label>
+                    <input type="month" required value={editingRecord.date} onChange={e => setEditingRecord({...editingRecord, date: e.target.value})} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-600 mb-1">公司名稱 (選填)</label>
+                    <input type="text" value={editingRecord.company} onChange={e => setEditingRecord({...editingRecord, company: e.target.value})} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="font-bold text-emerald-700 border-b pb-2">應發薪資 (收入)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">底薪</label><input type="number" required value={editingRecord.baseSalary} onChange={e => setEditingRecord({...editingRecord, baseSalary: e.target.value})} className="w-full p-2 bg-slate-50 border border-emerald-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">伙食津貼</label><input type="number" value={editingRecord.mealAllowance} onChange={e => setEditingRecord({...editingRecord, mealAllowance: e.target.value})} className="w-full p-2 bg-slate-50 border border-emerald-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">職務/津貼</label><input type="number" value={editingRecord.positionAllowance} onChange={e => setEditingRecord({...editingRecord, positionAllowance: e.target.value})} className="w-full p-2 bg-slate-50 border border-emerald-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">加班費</label><input type="number" value={editingRecord.overtimePay} onChange={e => setEditingRecord({...editingRecord, overtimePay: e.target.value})} className="w-full p-2 bg-slate-50 border border-emerald-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">全勤獎金</label><input type="number" value={editingRecord.attendanceBonus} onChange={e => setEditingRecord({...editingRecord, attendanceBonus: e.target.value})} className="w-full p-2 bg-slate-50 border border-emerald-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">業績獎金</label><input type="number" value={editingRecord.performanceBonus} onChange={e => setEditingRecord({...editingRecord, performanceBonus: e.target.value})} className="w-full p-2 bg-slate-50 border border-emerald-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">年終/其他</label><input type="number" value={editingRecord.yearEndBonus} onChange={e => setEditingRecord({...editingRecord, yearEndBonus: e.target.value})} className="w-full p-2 bg-slate-50 border border-emerald-100 rounded-lg" /></div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="font-bold text-rose-700 border-b pb-2">應扣金額 (扣除)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">勞保費</label><input type="number" value={editingRecord.laborInsurance} onChange={e => setEditingRecord({...editingRecord, laborInsurance: e.target.value})} className="w-full p-2 bg-slate-50 border border-rose-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">健保費</label><input type="number" value={editingRecord.healthInsurance} onChange={e => setEditingRecord({...editingRecord, healthInsurance: e.target.value})} className="w-full p-2 bg-slate-50 border border-rose-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">勞退自提</label><input type="number" value={editingRecord.laborPensionVoluntary} onChange={e => setEditingRecord({...editingRecord, laborPensionVoluntary: e.target.value})} className="w-full p-2 bg-slate-50 border border-rose-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">請假扣薪</label><input type="number" value={editingRecord.leaveDeduction} onChange={e => setEditingRecord({...editingRecord, leaveDeduction: e.target.value})} className="w-full p-2 bg-slate-50 border border-rose-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">福利金等</label><input type="number" value={editingRecord.welfareFundDeduction} onChange={e => setEditingRecord({...editingRecord, welfareFundDeduction: e.target.value})} className="w-full p-2 bg-slate-50 border border-rose-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">扣繳稅額</label><input type="number" value={editingRecord.withholdingTax} onChange={e => setEditingRecord({...editingRecord, withholdingTax: e.target.value})} className="w-full p-2 bg-slate-50 border border-rose-100 rounded-lg" /></div>
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4 border-t border-slate-100">
+                <button type="button" onClick={() => setEditingRecord(null)} className="px-4 py-2 font-medium text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
+                <button type="submit" className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-sm flex items-center gap-2"><CheckCircle size={18} /> 儲存變更</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+*/
+
 const LABOR_FUND_HISTORY = [
-  { year: 2025, return: 15.60 },
-  { year: 2024, return: 16.16 },
-  { year: 2023, return: 12.60 },
-  { year: 2022, return: -6.67 },
-  { year: 2021, return: 9.66 },
-  { year: 2020, return: 6.94 },
-  { year: 2019, return: 11.45 },
-  { year: 2018, return: -2.07 },
-  { year: 2017, return: 7.93 },
-  { year: 2016, return: 3.23 },
-  { year: 2015, return: -0.09 },
+  { year: 2012, return: 11.18 },
+  { year: 2013, return: 7.93 },
   { year: 2014, return: 6.38 },
-  { year: 2013, return: 5.68 },
-  { year: 2012, return: 5.02 }
+  { year: 2015, return: -0.09 },
+  { year: 2016, return: 3.23 },
+  { year: 2017, return: 7.93 },
+  { year: 2018, return: -2.07 },
+  { year: 2019, return: 11.45 },
+  { year: 2020, return: 6.94 },
+  { year: 2021, return: 9.66 },
+  { year: 2022, return: -6.67 },
+  { year: 2023, return: 12.60 },
+  { year: 2024, return: 10.32 } 
 ];
 
 const WifeRetirementTab = ({ user }: { user: User }) => {
+  const [salaries, setSalaries] = useState<any[]>([]);
   const [retireConfig, setRetireConfig] = useState({
-    birthDate: '1989-01-07',
-    retirementAge: 65,
-    accumulatedYears: 10.5, // 從圖片預估過去累積年資約 10年半
-    avgSalary60: 45800, // 最高60個月平均投保薪資
-    laborPensionBalance: 300000, // 勞退帳戶目前累積金額 (自訂)
-    currentSalary: 45800, // 目前薪資 (計算未來勞保與勞退)
-    expectedReturn: 6.36, // 勞退預估年報酬率 %, 預設為14年歷史幾何平均
+    birthDate: '1988-10-31', 
+    startDate: '2012-08-01', 
+    retirementDate: '2053-10-31', 
+    customBasicPay: 0,
+    currentFundBalance: 200000,
+    estimatedReturnRate: 6.36
   });
 
-  const getAge = (birthDateStr: string) => {
-    const d = new Date(birthDateStr);
-    if (isNaN(d.getTime())) return 0;
-    const today = new Date();
-    let age = today.getFullYear() - d.getFullYear();
-    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) {
-      age--;
-    }
-    return Math.max(0, age);
+  useEffect(() => {
+    const targetUids = getAppTargetUids(user);
+    const q = query(collection(db, 'laborSalaryRecords'));
+    const unsub = onSnapshot(q, (snap) => {
+      let recs: any[] = [];
+      snap.forEach(d => {
+        const data = d.data();
+        if (targetUids.includes(data.uid)) {
+          recs.push({ ...data, id: d.id });
+        }
+      });
+      recs.sort((a,b) => b.date.localeCompare(a.date));
+      setSalaries(recs);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, 'laborSalaryRecords');
+    });
+    return () => unsub();
+  }, [user.uid]);
+
+  const getAverageBasicPay = () => {
+    if (salaries.length === 0) return 40000;
+    const recordsToUse = salaries.slice(0, 60); // 勞保取最高60個月
+    const sum = recordsToUse.reduce((acc, curr) => acc + (curr.baseSalary || curr.basicPay || 0), 0);
+    return Math.round(sum / recordsToUse.length);
   };
 
-  const currentAge = getAge(retireConfig.birthDate);
-  const yearsToRetire = Math.max(0, retireConfig.retirementAge - currentAge);
-  
-  // 預估未來到退休時的總年資
-  const totalYears = retireConfig.accumulatedYears + yearsToRetire;
+  const autoBasicPay = getAverageBasicPay() || 40000;
+  const basicPay = retireConfig.customBasicPay || autoBasicPay;
 
-  // 1. 勞保老年年金試算 (以最高60個月平均投保薪資為基礎)
-  // 公式 A: 平均月投保薪資 × 年資 × 0.775% + 3,000元
-  // 公式 B: 平均月投保薪資 × 年資 × 1.55%
-  // 擇優發給 (通常薪資不低的話公式B會較高)
-  const avgSal = retireConfig.avgSalary60;
-  const pensionA = avgSal * totalYears * 0.00775 + 3000;
-  const pensionB = avgSal * totalYears * 0.0155;
-  const laborInsurancePension = Math.max(pensionA, pensionB); // 月領
+  const calculateDelta = (startStr: string, endStr: string) => {
+    const s = new Date(startStr);
+    const e = new Date(endStr);
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || s > e) return { years: 0, months: 0, days: 0, decimal: 0 };
+    
+    let years = e.getFullYear() - s.getFullYear();
+    let months = e.getMonth() - s.getMonth();
+    let days = e.getDate() - s.getDate();
 
-  // 2. 勞工退休金 (勞退新制)
-  // 計算未來累積本金與收益 (複利計算)
-  // 每月提撥 6% (這裡假設僅雇主提撥，若有自提可變更)
-  const monthlyContribution = retireConfig.currentSalary * 0.06;
-  const annualContribution = monthlyContribution * 12;
-  const r = retireConfig.expectedReturn / 100;
-  
-  let futureBalance = retireConfig.laborPensionBalance;
-  for (let i = 0; i < yearsToRetire; i++) {
-    futureBalance = (futureBalance + annualContribution) * (1 + r);
-  }
-
-  // 勞退新制月退金粗估（期初年金法，假設退休後餘命20年(240個月)，利率與投資相同）
-  // 簡單估算公式: PMT(r/12, 240, -futureBalance)
-  let laborPensionMonthly = 0;
-  if (futureBalance > 0) {
-    const rMonthly = r / 12;
-    if (rMonthly === 0) {
-      laborPensionMonthly = futureBalance / 240;
-    } else {
-      laborPensionMonthly = (futureBalance * rMonthly * Math.pow(1 + rMonthly, 240)) / (Math.pow(1 + rMonthly, 240) - 1);
+    if (days < 0) {
+      months -= 1;
+      const prevMonth = new Date(e.getFullYear(), e.getMonth(), 0);
+      days += prevMonth.getDate();
     }
-  }
+    if (months < 0) {
+      years -= 1;
+      months += 12;
+    }
+    
+    const decimal = years + (months / 12) + (days / 365.25);
+    return { years, months, days, decimal };
+  };
 
-  const totalMonthlyRetirement = laborInsurancePension + laborPensionMonthly;
+  const serviceDelta = calculateDelta(retireConfig.startDate, retireConfig.retirementDate);
+  const yearsOfService = serviceDelta.decimal;
+  
+  const ageDelta = calculateDelta(retireConfig.birthDate, retireConfig.retirementDate);
+  const ageAtRetirement = ageDelta.decimal;
 
-  // 退職所得稅試算 (勞保年金免稅，僅針對勞退)
-  // 1. 一次領
-  const exemptionThreshold1 = 198000 * totalYears;
-  const exemptionThreshold2 = 398000 * totalYears;
+  const calc1 = basicPay * yearsOfService * 0.00775 + 3000;
+  const calc2 = basicPay * yearsOfService * 0.0155;
+  const laborInsuranceMonthly = Math.max(calc1, calc2);
+  
+  const laborInsuranceLumpSum = basicPay * Math.min(50, yearsOfService * 1.5);
+
+  const monthlyContribution = basicPay * 0.06;
+  const growthRate = retireConfig.estimatedReturnRate / 100;
+  const monthsToRetire = (new Date(retireConfig.retirementDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+  const futureBalance = retireConfig.currentFundBalance * Math.pow(1 + growthRate/12, Math.max(0, monthsToRetire)) + 
+    monthlyContribution * (Math.pow(1 + growthRate/12, Math.max(0, monthsToRetire)) - 1) / (growthRate/12);
+
+  const laborPensionMonthly = futureBalance / (20 * 12);
+
+  const annualAnnuityExemption = 859000;
+  let monthlyTaxableIncomeAnnual = Math.max(0, (laborPensionMonthly * 12) - annualAnnuityExemption);
+
+  const exemptionThreshold1 = 198000 * yearsOfService;
+  const exemptionThreshold2 = 398000 * yearsOfService;
   let lumpSumTaxableIncome = 0;
   if (futureBalance > exemptionThreshold2) {
     lumpSumTaxableIncome = ((exemptionThreshold2 - exemptionThreshold1) / 2) + (futureBalance - exemptionThreshold2);
@@ -8407,118 +8630,110 @@ const WifeRetirementTab = ({ user }: { user: User }) => {
     lumpSumTaxableIncome = (futureBalance - exemptionThreshold1) / 2;
   }
 
-  // 2. 分次領 (每年免稅額 85.9萬元)
-  const annualAnnuityExemption = 859000;
-  let monthlyTaxableIncomeAnnual = Math.max(0, (laborPensionMonthly * 12) - annualAnnuityExemption);
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-rose-700 flex items-center gap-2">
+          <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <Heart size={28} className="text-rose-500" />
-            老婆退休規劃 (勞保/勞退)
+            老婆的退休規劃與試算
           </h2>
-          <p className="text-sm text-slate-500">基於勞工保險及勞退新制計算退休金</p>
+          <p className="text-sm text-slate-500">適用勞保年金與勞工退休金(新制)試算</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 設定區塊 */}
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-6 lg:col-span-1">
           <h3 className="font-bold text-slate-700 flex items-center gap-2 border-b pb-2">
-            <Settings size={18} /> 參數設定
+            <Settings size={18} /> 個人參數設定
           </h3>
-          
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-bold text-slate-600 mb-1">出生日期</label>
               <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.birthDate} onChange={e => setRetireConfig({...retireConfig, birthDate: e.target.value})} />
-              <div className="text-xs text-slate-400 mt-1">目前年齡: {currentAge} 歲</div>
             </div>
-
             <div>
-              <label className="block text-sm font-bold text-slate-600 mb-1">預計退休年齡</label>
-              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.retirementAge} onChange={e => setRetireConfig({...retireConfig, retirementAge: Number(e.target.value)})} />
+              <label className="block text-sm font-bold text-slate-600 mb-1">任職日期</label>
+              <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.startDate} onChange={e => setRetireConfig({...retireConfig, startDate: e.target.value})} />
             </div>
-
             <div>
-              <label className="block text-sm font-bold text-slate-600 mb-1">目前累計勞保年資 (年)</label>
-              <input type="number" step="0.1" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.accumulatedYears} onChange={e => setRetireConfig({...retireConfig, accumulatedYears: Number(e.target.value)})} />
-              <div className="text-xs text-rose-500 font-medium mt-1">＊系統已依據高師大、義守大學等投保紀錄，預設約 10.5 年</div>
+              <label className="block text-sm font-bold text-slate-600 mb-1">預計退休日期</label>
+              <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.retirementDate} onChange={e => setRetireConfig({...retireConfig, retirementDate: e.target.value})} />
             </div>
-
             <div className="pt-2 border-t border-slate-100">
-              <label className="block text-sm font-bold text-slate-600 mb-1">最高60個月平均薪資</label>
-              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.avgSalary60} onChange={e => setRetireConfig({...retireConfig, avgSalary60: Number(e.target.value)})} />
-              <div className="text-xs text-slate-400 mt-1">目前高師大投保薪級約 45,800</div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-bold text-slate-600 mb-1">目前勞退專戶餘額 (選填)</label>
-              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.laborPensionBalance} onChange={e => setRetireConfig({...retireConfig, laborPensionBalance: Number(e.target.value)})} />
-            </div>
+              <label className="block text-sm font-bold text-slate-600 mb-1">目前勞退專戶餘額</label>
+              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mb-4" value={retireConfig.currentFundBalance} onChange={e => setRetireConfig({...retireConfig, currentFundBalance: Number(e.target.value)})} />
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">目前月薪(算提撥)</label>
-                <input type="number" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={retireConfig.currentSalary} onChange={e => setRetireConfig({...retireConfig, currentSalary: Number(e.target.value)})} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">預估年化報酬(%)</label>
-                <input type="number" step="0.1" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={retireConfig.expectedReturn} onChange={e => setRetireConfig({...retireConfig, expectedReturn: Number(e.target.value)})} />
+              <label className="block text-sm font-bold text-slate-600 mb-1">預估年化報酬率 (%)</label>
+              <input type="number" step="0.01" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mb-4" value={retireConfig.estimatedReturnRate} onChange={e => setRetireConfig({...retireConfig, estimatedReturnRate: Number(e.target.value)})} />
+              
+              <label className="block text-sm font-bold text-slate-600 mb-1">最高60個月平均薪資</label>
+              <div className="flex gap-2">
+                <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.customBasicPay || autoBasicPay} onChange={e => setRetireConfig({...retireConfig, customBasicPay: Number(e.target.value)})} placeholder={`系統試算: ${autoBasicPay}`} />
+                {retireConfig.customBasicPay > 0 && (
+                  <button onClick={() => setRetireConfig({...retireConfig, customBasicPay: 0})} className="px-3 bg-slate-200 text-slate-600 rounded-xl hover:bg-slate-300 text-xs font-bold transition-colors">
+                    重置
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* 試算結果區塊 */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-3 bg-gradient-to-br from-rose-500 to-pink-700 p-6 rounded-2xl text-white shadow-lg relative overflow-hidden flex items-center justify-between">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-gradient-to-br from-rose-500 to-rose-700 p-6 rounded-2xl text-white shadow-lg relative overflow-hidden">
               <div className="absolute top-0 right-0 -mr-4 -mt-4 opacity-10">
-                <Heart size={140} />
+                <Heart size={120} />
               </div>
-              <div className="z-10">
-                <h4 className="text-rose-100 font-medium mb-1">預估總計每月退休金</h4>
-                <div className="text-4xl font-black mb-2 flex items-baseline gap-1">
-                  ${Math.round(totalMonthlyRetirement).toLocaleString()} <span className="text-sm font-medium opacity-80">/ 月</span>
-                </div>
-                <div className="text-sm text-rose-100">包含勞保老年年金與勞退新制按月撥領</div>
+              <h4 className="text-rose-100 font-medium mb-1">預估勞保老年年金</h4>
+              <div className="text-3xl font-black mb-2 flex items-baseline gap-1">
+                ${Math.round(laborInsuranceMonthly).toLocaleString()} <span className="text-sm font-medium opacity-80">/ 月</span>
               </div>
-            </div>
-
-            <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm">
-              <h4 className="text-slate-500 text-sm font-bold mb-2">① 勞保老年年金 (月領)</h4>
-              <div className="text-2xl font-black text-rose-600">${Math.round(laborInsurancePension).toLocaleString()}</div>
-              <div className="text-xs text-slate-400 mt-2">
-                以總年資 {totalYears.toFixed(1)} 年計算<br/>公式: 平均薪資 × 年資 × 1.55%
+              <div className="text-xs text-rose-200">
+                到達法定請領年齡 (65歲) 時適用
               </div>
             </div>
 
-            <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm">
-              <h4 className="text-slate-500 text-sm font-bold mb-2">② 勞退新制 (月領粗估)</h4>
-              <div className="text-2xl font-black text-indigo-600">${Math.round(laborPensionMonthly).toLocaleString()}</div>
-              <div className="text-xs text-slate-400 mt-2">
-                至 {retireConfig.retirementAge} 歲預估本息和:<br/>
-                ${Math.round(futureBalance).toLocaleString()} <br/>
-                (按餘命20年攤提)
+            <div className="bg-gradient-to-br from-emerald-500 to-teal-700 p-6 rounded-2xl text-white shadow-lg relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mr-4 -mt-4 opacity-10">
+                <ShieldCheck size={120} />
               </div>
-            </div>
-
-            <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm">
-              <h4 className="text-slate-500 text-sm font-bold mb-2">預估勞退本息累積</h4>
-              <div className="text-2xl font-black text-emerald-600">${Math.round(futureBalance).toLocaleString()}</div>
-              <div className="text-xs text-slate-400 mt-2">
-                每年提撥約 ${(annualContribution).toLocaleString()}<br/>
-                複利成長 {yearsToRetire} 年
+              <h4 className="text-emerald-100 font-medium mb-1">勞工退休金 (新制) 月領</h4>
+              <div className="text-3xl font-black mb-2 flex items-baseline gap-1">
+                ${Math.round(laborPensionMonthly).toLocaleString()} <span className="text-sm font-medium opacity-80">/ 月</span>
+              </div>
+              <div className="text-xs text-emerald-100">
+                專戶累積本金與收益分配計算
               </div>
             </div>
           </div>
 
-          <div className="bg-white border border-slate-100 p-6 rounded-2xl shadow-sm text-sm text-slate-600 leading-relaxed mt-4">
-            <h4 className="font-bold text-slate-700 flex items-center gap-2 mb-3">
-              <FileText size={16} className="text-rose-500" /> 退職所得稅負評估 (僅適用勞退，不含勞保)
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-6">
+            <h3 className="font-bold text-slate-700 flex items-center gap-2 border-b pb-2">
+              <HelpCircle size={18} /> 計算式解析與參數
+            </h3>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <div className="text-xs text-slate-500 font-bold mb-1">退休時實歲</div>
+                <div className="text-xl font-black text-slate-700">{Math.floor(ageAtRetirement)} 歲</div>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <div className="text-xs text-slate-500 font-bold mb-1">推算精確年資</div>
+                <div className="text-xl font-black text-indigo-600">{yearsOfService.toFixed(2)} 年</div>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 col-span-2 md:col-span-2">
+                <div className="text-xs text-slate-500 font-bold mb-1">試算說明</div>
+                <div className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  結合勞保與勞退兩層保障。勞保視年資給予不中斷的月年金，勞退則是個人專戶（包含本金與多年複合投資收益）。
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-100 p-6 rounded-2xl text-sm text-slate-600 leading-relaxed mt-4">
+              <h4 className="font-bold text-slate-700 flex items-center gap-2 mb-3">
+                <FileText size={16} className="text-rose-500" /> 退職所得稅負評估 (僅適用勞退，不含勞保)
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
@@ -8566,6 +8781,7 @@ const WifeRetirementTab = ({ user }: { user: User }) => {
                 </div>
               </div>
             </div>
+          </div>
           </div>
 
           <div className="bg-white border border-slate-100 p-6 rounded-2xl shadow-sm text-sm text-slate-600 leading-relaxed mt-4">
@@ -8633,13 +8849,497 @@ const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
   );
 };
 
+const WifeSalaryTable = ({ targetUid, isFormMode = false }: { targetUid: string, isFormMode?: boolean }) => {
+  const [records, setRecords] = useState<any[]>([]);
+  const [editingRecord, setEditingRecord] = useState<any>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!targetUid) return;
+    const q = query(collection(db, 'laborSalaryRecords'), where('uid', '==', targetUid));
+    const unsub = onSnapshot(q, (snap: any) => {
+      let recs: any[] = [];
+      snap.forEach((d: any) => recs.push({ id: d.id, ...d.data() }));
+      recs.sort((a, b) => b.date.localeCompare(a.date));
+      setRecords(recs);
+    });
+    return () => unsub();
+  }, [targetUid]);
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'laborSalaryRecords', id));
+      setConfirmDeleteId(null);
+    } catch (e) {
+      console.error(e);
+      alert('刪除失敗');
+    }
+  };
+
+  const handleUpdateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRecord) return;
+    try {
+      const updates = {
+        date: editingRecord.date,
+        company: editingRecord.company,
+        baseSalary: Number(editingRecord.baseSalary) || 0,
+        mealAllowance: Number(editingRecord.mealAllowance) || 0,
+        positionAllowance: Number(editingRecord.positionAllowance) || 0,
+        overtimePay: Number(editingRecord.overtimePay) || 0,
+        attendanceBonus: Number(editingRecord.attendanceBonus) || 0,
+        performanceBonus: Number(editingRecord.performanceBonus) || 0,
+        yearEndBonus: Number(editingRecord.yearEndBonus) || 0,
+        otherIncome: Number(editingRecord.otherIncome) || 0,
+        laborInsurance: Number(editingRecord.laborInsurance) || 0,
+        healthInsurance: Number(editingRecord.healthInsurance) || 0,
+        laborPensionVoluntary: Number(editingRecord.laborPensionVoluntary) || 0,
+        leaveDeduction: Number(editingRecord.leaveDeduction) || 0,
+        welfareFundDeduction: Number(editingRecord.welfareFundDeduction) || 0,
+        withholdingTax: Number(editingRecord.withholdingTax) || 0
+      };
+      await updateDoc(doc(db, 'laborSalaryRecords', editingRecord.id), updates);
+      alert('更新成功！');
+      setEditingRecord(null);
+    } catch (e) {
+      console.error(e);
+      alert('更新失敗');
+    }
+  };
+
+  if (records.length === 0) {
+    return (
+      <div className="p-8 text-center text-slate-400 flex flex-col items-center gap-3">
+        <div className="w-12 h-12 rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300">
+           <FileText size={20} />
+        </div>
+        尚未有填寫紀錄{isFormMode ? '，請從上方表單新增。' : '，請傳送連結請她填寫。'}
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto relative custom-scrollbar">
+      <table className="w-full text-sm text-left whitespace-nowrap">
+        <thead className="bg-slate-50 text-slate-600 border-b">
+          <tr>
+            <th className="px-4 py-3 font-bold sticky left-0 bg-slate-50 z-10 shadow-[1px_0_0_0_#e2e8f0]">給薪月份</th>
+            <th className="px-4 py-3 font-bold">公司</th>
+            <th className="px-4 py-3 font-bold text-emerald-600">底薪</th>
+            <th className="px-4 py-3 font-bold text-emerald-600">伙食津貼</th>
+            <th className="px-4 py-3 font-bold text-emerald-600">職務/津貼</th>
+            <th className="px-4 py-3 font-bold text-emerald-600">加班費</th>
+            <th className="px-4 py-3 font-bold text-emerald-600">全勤獎金</th>
+            <th className="px-4 py-3 font-bold text-emerald-600">績效獎金</th>
+            <th className="px-4 py-3 font-bold text-emerald-600">年終/其他</th>
+            <th className="px-4 py-3 font-bold text-emerald-700 bg-emerald-50/50">應發小計</th>
+            <th className="px-4 py-3 font-bold text-rose-600">勞保費</th>
+            <th className="px-4 py-3 font-bold text-rose-600">健保費</th>
+            <th className="px-4 py-3 font-bold text-rose-600">勞退自提</th>
+            <th className="px-4 py-3 font-bold text-rose-600">請假扣薪</th>
+            <th className="px-4 py-3 font-bold text-rose-600">福利金等</th>
+            <th className="px-4 py-3 font-bold text-rose-600">所得稅</th>
+            <th className="px-4 py-3 font-bold text-rose-700 bg-rose-50/50">應扣小計</th>
+            <th className="px-4 py-3 font-bold text-indigo-600 bg-indigo-50/50">實領薪資</th>
+            <th className="px-4 py-3 font-bold text-center sticky right-0 bg-slate-50 z-10 shadow-[-1px_0_0_0_#e2e8f0]">操作</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {records.map(rec => {
+            const income = (rec.baseSalary || 0) + (rec.mealAllowance || 0) + (rec.positionAllowance || 0) + (rec.overtimePay || 0) + (rec.attendanceBonus || 0) + (rec.performanceBonus || 0) + (rec.yearEndBonus || 0) + (rec.otherIncome || 0);
+            const deduct = (rec.laborInsurance || 0) + (rec.healthInsurance || 0) + (rec.laborPensionVoluntary || 0) + (rec.leaveDeduction || 0) + (rec.welfareFundDeduction || 0) + (rec.withholdingTax || 0);
+            return (
+              <tr key={rec.id} className="hover:bg-slate-50/50">
+                <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-white shadow-[1px_0_0_0_#e2e8f0] group-hover:bg-slate-50/50">{rec.date}</td>
+                <td className="px-4 py-2 text-slate-500">{rec.company || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.baseSalary?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.mealAllowance?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.positionAllowance?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.overtimePay?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.attendanceBonus?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.performanceBonus?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{(Number(rec.yearEndBonus || 0) + Number(rec.otherIncome || 0)).toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 font-medium text-emerald-700 bg-emerald-50/30">${income.toLocaleString()}</td>
+                
+                <td className="px-4 py-2 text-slate-600">{rec.laborInsurance?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.healthInsurance?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.laborPensionVoluntary?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.leaveDeduction?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.welfareFundDeduction?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 text-slate-600">{rec.withholdingTax?.toLocaleString() || '-'}</td>
+                <td className="px-4 py-2 font-medium text-rose-700 bg-rose-50/30">-${deduct.toLocaleString()}</td>
+                
+                <td className="px-4 py-2 font-bold text-indigo-700 bg-indigo-50/30">${(income - deduct).toLocaleString()}</td>
+                <td className="px-4 py-2 flex gap-1 justify-center sticky right-0 bg-white shadow-[-1px_0_0_0_#e2e8f0] group-hover:bg-slate-50/50">
+                  <button onClick={() => setEditingRecord(rec)} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"><Edit2 size={16} /></button>
+                  <button onClick={() => setConfirmDeleteId(rec.id)} className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"><Trash2 size={16} /></button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {confirmDeleteId && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[120] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 shadow-2xl max-w-sm w-full animate-in fade-in zoom-in duration-200">
+            <h3 className="text-xl font-bold text-slate-800 mb-2">確定要刪除嗎？</h3>
+            <p className="text-slate-500 mb-6">這筆薪資紀錄刪除後將無法恢復。</p>
+            <div className="flex gap-3 justify-end">
+              <button 
+                onClick={() => setConfirmDeleteId(null)}
+                className="px-4 py-2 rounded-xl font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+              >取消</button>
+              <button 
+                onClick={() => handleDelete(confirmDeleteId)}
+                className="px-4 py-2 rounded-xl font-bold text-white bg-rose-500 hover:bg-rose-600 shadow-md shadow-rose-200 transition-all active:scale-95"
+              >確定刪除</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingRecord && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold flex items-center gap-2"><Edit2 size={24} className="text-indigo-600" /> 編輯紀錄</h3>
+              <button onClick={() => setEditingRecord(null)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full"><X size={20} /></button>
+            </div>
+            
+            <form onSubmit={handleUpdateSubmit} className="space-y-6">
+              <div className="space-y-4">
+                <h3 className="font-bold text-slate-700 border-b pb-2">基本資訊</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-600 mb-1">給薪月份</label>
+                    <input type="month" required value={editingRecord.date} onChange={e => setEditingRecord({...editingRecord, date: e.target.value})} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-600 mb-1">公司名稱 (選填)</label>
+                    <input type="text" value={editingRecord.company} onChange={e => setEditingRecord({...editingRecord, company: e.target.value})} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="font-bold text-emerald-700 border-b pb-2">應發薪資 (收入)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">底薪</label><input type="number" required value={editingRecord.baseSalary} onChange={e => setEditingRecord({...editingRecord, baseSalary: e.target.value})} className="w-full p-2 bg-slate-50 border border-emerald-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">伙食津貼</label><input type="number" value={editingRecord.mealAllowance} onChange={e => setEditingRecord({...editingRecord, mealAllowance: e.target.value})} className="w-full p-2 bg-slate-50 border border-emerald-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">職務/津貼</label><input type="number" value={editingRecord.positionAllowance} onChange={e => setEditingRecord({...editingRecord, positionAllowance: e.target.value})} className="w-full p-2 bg-slate-50 border border-emerald-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">加班費</label><input type="number" value={editingRecord.overtimePay} onChange={e => setEditingRecord({...editingRecord, overtimePay: e.target.value})} className="w-full p-2 bg-slate-50 border border-emerald-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">全勤獎金</label><input type="number" value={editingRecord.attendanceBonus} onChange={e => setEditingRecord({...editingRecord, attendanceBonus: e.target.value})} className="w-full p-2 bg-slate-50 border border-emerald-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">業績獎金</label><input type="number" value={editingRecord.performanceBonus} onChange={e => setEditingRecord({...editingRecord, performanceBonus: e.target.value})} className="w-full p-2 bg-slate-50 border border-emerald-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">年終/其他</label><input type="number" value={editingRecord.yearEndBonus} onChange={e => setEditingRecord({...editingRecord, yearEndBonus: e.target.value})} className="w-full p-2 bg-slate-50 border border-emerald-100 rounded-lg" /></div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="font-bold text-rose-700 border-b pb-2">應扣金額 (扣除)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">勞保費</label><input type="number" value={editingRecord.laborInsurance} onChange={e => setEditingRecord({...editingRecord, laborInsurance: e.target.value})} className="w-full p-2 bg-slate-50 border border-rose-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">健保費</label><input type="number" value={editingRecord.healthInsurance} onChange={e => setEditingRecord({...editingRecord, healthInsurance: e.target.value})} className="w-full p-2 bg-slate-50 border border-rose-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">勞退自提</label><input type="number" value={editingRecord.laborPensionVoluntary} onChange={e => setEditingRecord({...editingRecord, laborPensionVoluntary: e.target.value})} className="w-full p-2 bg-slate-50 border border-rose-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">請假扣薪</label><input type="number" value={editingRecord.leaveDeduction} onChange={e => setEditingRecord({...editingRecord, leaveDeduction: e.target.value})} className="w-full p-2 bg-slate-50 border border-rose-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">福利金等</label><input type="number" value={editingRecord.welfareFundDeduction} onChange={e => setEditingRecord({...editingRecord, welfareFundDeduction: e.target.value})} className="w-full p-2 bg-slate-50 border border-rose-100 rounded-lg" /></div>
+                  <div><label className="block text-xs font-bold text-slate-600 mb-1">扣繳稅額</label><input type="number" value={editingRecord.withholdingTax} onChange={e => setEditingRecord({...editingRecord, withholdingTax: e.target.value})} className="w-full p-2 bg-slate-50 border border-rose-100 rounded-lg" /></div>
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4 border-t border-slate-100">
+                <button type="button" onClick={() => setEditingRecord(null)} className="px-4 py-2 font-medium text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
+                <button type="submit" className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-sm flex items-center gap-2"><CheckCircle size={18} /> 儲存變更</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const WifeSalaryTab = ({ user }: { user: User }) => {
+  const [copied, setCopied] = useState(false);
+  
+  const handleCopyLink = () => {
+    const url = `${window.location.origin}/?tab=wife-salary-form&uid=${user.uid}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col items-center justify-center space-y-4 py-12">
+        <div className="w-16 h-16 bg-rose-100 text-rose-500 rounded-full flex items-center justify-center">
+          <Heart size={32} />
+        </div>
+        <h3 className="text-xl font-bold text-slate-700">邀請老婆填寫薪資紀錄</h3>
+        <p className="text-sm text-slate-500 text-center max-w-md">
+          複製專屬填寫網址給老婆，她可以在自己的手機上點開連結，直接填寫薪資資料（包含底薪、伙食、職務加給、勞健保等勞工薪資結構）。
+        </p>
+        <button 
+          onClick={handleCopyLink}
+          className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${
+            copied ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-indigo-600 text-white hover:bg-indigo-700'
+          }`}
+        >
+          {copied ? <CheckCircle size={18} /> : <Link size={18} />}
+          {copied ? '網址已複製！' : '複製專屬填寫網址'}
+        </button>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-slate-100 flex items-center gap-2">
+          <Wallet className="text-slate-400" size={18} />
+          <h3 className="font-bold text-slate-700">老婆薪資紀錄</h3>
+        </div>
+        <WifeSalaryTable targetUid={user.uid} />
+      </div>
+    </div>
+  );
+};
+
+const SalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
+  const [activeTab, setActiveTab] = useState<'self' | 'wife'>('self');
+
+  return (
+    <div className="space-y-6">
+      <div className="flex gap-2 p-1 bg-slate-200/50 rounded-xl w-fit">
+        <button
+          onClick={() => setActiveTab('self')}
+          className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'self' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+        >
+          自己的薪資紀錄 (公保)
+        </button>
+        <button
+          onClick={() => setActiveTab('wife')}
+          className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${activeTab === 'wife' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+        >
+          <Heart size={16} className={activeTab === 'wife' ? 'text-rose-500' : ''} /> 老婆的薪資紀錄 (勞保)
+        </button>
+      </div>
+
+      {activeTab === 'self' && <SelfSalaryTab user={user} setDeleteTarget={setDeleteTarget} />}
+      {activeTab === 'wife' && <WifeSalaryTab user={user} />}
+    </div>
+  );
+};
+
+const WifeSalaryFormPage = ({ targetUid }: { targetUid: string }) => {
+  const [copied, setCopied] = useState(false);
+  const [formData, setFormData] = useState({
+    date: new Date().toISOString().substring(0, 7),
+    company: '高雄師範大學',
+    baseSalary: '',
+    mealAllowance: '',
+    positionAllowance: '',
+    overtimePay: '',
+    attendanceBonus: '',
+    performanceBonus: '',
+    yearEndBonus: '',
+    otherIncome: '',
+    laborInsurance: '',
+    healthInsurance: '',
+    laborPensionVoluntary: '',
+    leaveDeduction: '',
+    welfareFundDeduction: '',
+    withholdingTax: ''
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const record = {
+        uid: targetUid,
+        date: formData.date,
+        company: formData.company,
+        baseSalary: Number(formData.baseSalary) || 0,
+        mealAllowance: Number(formData.mealAllowance) || 0,
+        positionAllowance: Number(formData.positionAllowance) || 0,
+        overtimePay: Number(formData.overtimePay) || 0,
+        attendanceBonus: Number(formData.attendanceBonus) || 0,
+        performanceBonus: Number(formData.performanceBonus) || 0,
+        yearEndBonus: Number(formData.yearEndBonus) || 0,
+        otherIncome: Number(formData.otherIncome) || 0,
+        laborInsurance: Number(formData.laborInsurance) || 0,
+        healthInsurance: Number(formData.healthInsurance) || 0,
+        laborPensionVoluntary: Number(formData.laborPensionVoluntary) || 0,
+        leaveDeduction: Number(formData.leaveDeduction) || 0,
+        welfareFundDeduction: Number(formData.welfareFundDeduction) || 0,
+        withholdingTax: Number(formData.withholdingTax) || 0
+      };
+      
+      await addDoc(collection(db, 'laborSalaryRecords'), record);
+      
+      alert('已成功送出薪資資料！');
+      // Reset main fields
+      setFormData(prev => ({
+        ...prev,
+        overtimePay: '',
+        attendanceBonus: '',
+        performanceBonus: '',
+        yearEndBonus: '',
+        otherIncome: '',
+        leaveDeduction: '',
+        withholdingTax: ''
+      }));
+    } catch (error) {
+      console.error(error);
+      alert('上傳失敗，請檢查網路連線。');
+    }
+  };
+
+  const [showForm, setShowForm] = useState(false);
+
+  return (
+    <div className="h-full w-full bg-slate-50 overflow-y-auto select-text">
+      <div className="min-h-full py-8 px-4 flex justify-center pb-20">
+        <div className="w-full max-w-7xl space-y-6">
+          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-xl w-full">
+            <div className="flex justify-between items-center border-b pb-4 mb-6">
+              <h3 className="text-xl md:text-2xl font-black text-slate-800 flex items-center gap-3">
+                <Heart size={28} className="text-rose-500" />
+                登記薪資紀錄
+              </h3>
+              {!showForm && (
+              <button 
+                onClick={() => setShowForm(true)} 
+                className="flex items-center gap-2 bg-rose-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-rose-700 shadow-md transition-all active:scale-95"
+              >
+                <Plus size={20} /> 新增月薪紀錄
+              </button>
+            )}
+            {showForm && (
+              <button 
+                onClick={() => setShowForm(false)} 
+                className="flex items-center gap-2 bg-slate-100 text-slate-600 px-5 py-2.5 rounded-xl font-bold hover:bg-slate-200 transition-all"
+              >
+                 取消新增
+              </button>
+            )}
+          </div>
+          
+          {!showForm ? (
+            <div className="bg-slate-50 rounded-2xl overflow-hidden shadow-inner border border-slate-200 p-2 md:p-4">
+              <WifeSalaryTable targetUid={targetUid} isFormMode={true} />
+            </div>
+          ) : (
+            <div className="max-w-4xl mx-auto py-4">
+              <div className="flex flex-col items-center justify-center space-y-2 mb-8">
+                <p className="text-slate-500 text-center font-medium">請輸入這個月的薪資紀錄（勞保結構）</p>
+              </div>
+
+              <form onSubmit={(e) => { handleSubmit(e); setShowForm(false); }} className="space-y-8 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                <div className="space-y-4">
+                  <h3 className="font-bold text-slate-700 border-b border-slate-200 pb-2 text-lg">基本資訊</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">給薪月份</label>
+                      <input type="month" required value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-rose-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">公司名稱 (選填)</label>
+                      <input type="text" value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} placeholder="例如: 台積電" className="w-full p-3 bg-white border border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-rose-500 focus:outline-none" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-bold text-emerald-700 border-b border-emerald-100 pb-2 text-lg">應發薪資 (收入)</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">底薪</label>
+                      <input type="number" required value={formData.baseSalary} onChange={e => setFormData({...formData, baseSalary: e.target.value})} className="w-full p-3 bg-white border border-emerald-100 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">伙食津貼</label>
+                      <input type="number" value={formData.mealAllowance} onChange={e => setFormData({...formData, mealAllowance: e.target.value})} className="w-full p-3 bg-white border border-emerald-100 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">職務/其他津貼</label>
+                      <input type="number" value={formData.positionAllowance} onChange={e => setFormData({...formData, positionAllowance: e.target.value})} className="w-full p-3 bg-white border border-emerald-100 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">加班費</label>
+                      <input type="number" value={formData.overtimePay} onChange={e => setFormData({...formData, overtimePay: e.target.value})} className="w-full p-3 bg-white border border-emerald-100 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">全勤獎金</label>
+                      <input type="number" value={formData.attendanceBonus} onChange={e => setFormData({...formData, attendanceBonus: e.target.value})} className="w-full p-3 bg-white border border-emerald-100 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">業績/績效獎金</label>
+                      <input type="number" value={formData.performanceBonus} onChange={e => setFormData({...formData, performanceBonus: e.target.value})} className="w-full p-3 bg-white border border-emerald-100 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">年終獎金/其他</label>
+                      <input type="number" value={formData.yearEndBonus} onChange={e => setFormData({...formData, yearEndBonus: e.target.value})} className="w-full p-3 bg-white border border-emerald-100 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-bold text-rose-700 border-b border-rose-100 pb-2 text-lg">應扣金額 (扣除)</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">勞保費</label>
+                      <input type="number" value={formData.laborInsurance} onChange={e => setFormData({...formData, laborInsurance: e.target.value})} className="w-full p-3 bg-white border border-rose-100 rounded-xl shadow-sm focus:ring-2 focus:ring-rose-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">健保費</label>
+                      <input type="number" value={formData.healthInsurance} onChange={e => setFormData({...formData, healthInsurance: e.target.value})} className="w-full p-3 bg-white border border-rose-100 rounded-xl shadow-sm focus:ring-2 focus:ring-rose-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">勞退自提</label>
+                      <input type="number" value={formData.laborPensionVoluntary} onChange={e => setFormData({...formData, laborPensionVoluntary: e.target.value})} className="w-full p-3 bg-white border border-rose-100 rounded-xl shadow-sm focus:ring-2 focus:ring-rose-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">請假扣薪</label>
+                      <input type="number" value={formData.leaveDeduction} onChange={e => setFormData({...formData, leaveDeduction: e.target.value})} className="w-full p-3 bg-white border border-rose-100 rounded-xl shadow-sm focus:ring-2 focus:ring-rose-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">福利金等其他</label>
+                      <input type="number" value={formData.welfareFundDeduction} onChange={e => setFormData({...formData, welfareFundDeduction: e.target.value})} className="w-full p-3 bg-white border border-rose-100 rounded-xl shadow-sm focus:ring-2 focus:ring-rose-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-600 mb-2">扣繳稅額</label>
+                      <input type="number" value={formData.withholdingTax} onChange={e => setFormData({...formData, withholdingTax: e.target.value})} className="w-full p-3 bg-white border border-rose-100 rounded-xl shadow-sm focus:ring-2 focus:ring-rose-500 focus:outline-none" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button type="submit" className="w-full bg-rose-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-rose-700 transition-all flex items-center justify-center gap-2 text-lg active:scale-95">
+                    <CheckCircle size={24} /> 送出薪資紀錄
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
+      </div>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
+  const queryParams = new URLSearchParams(window.location.search);
+  const isFormMode = queryParams.get('tab') === 'wife-salary-form';
+  const targetUid = queryParams.get('uid') || '';
+
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [activeTheme, setActiveTheme] = useState<'neo' | 'midnight' | 'minimalist'>('neo');
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
   const [user, setUser] = useState<any>({ uid: 'default-user', email: 'guest@example.com' });
   const [loading, setLoading] = useState(true);
+
+  if (isFormMode) {
+    return <WifeSalaryFormPage targetUid={targetUid} />;
+  }
 
   // Handle window resize for sidebar
   useEffect(() => {

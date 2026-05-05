@@ -43,6 +43,33 @@ export interface YearlyStandard {
   professionalAllowance: number;
 }
 
+export interface LaborSalaryRecord {
+  id: string;
+  uid?: string;
+  date: string; // YYYY-MM
+  company?: string; // 公司名稱
+  
+  // Income
+  baseSalary: number; // 底薪
+  mealAllowance: number; // 伙食津貼
+  positionAllowance: number; // 津貼/職務加給
+  overtimePay: number; // 加班費
+  attendanceBonus: number; // 全勤獎金
+  performanceBonus: number; // 績效/業績獎金
+  yearEndBonus: number; // 年終獎金
+  otherIncome: number; // 其他津貼
+  
+  // Deductions
+  laborInsurance: number; // 勞保費
+  healthInsurance: number; // 健保費
+  laborPensionVoluntary: number; // 勞退自提
+  leaveDeduction: number; // 請假扣薪
+  welfareFundDeduction: number; // 福利金及其他
+  withholdingTax?: number; // 扣繳稅額
+  
+  taxableIncome?: number;
+}
+
 export interface CreditCard {
   id: string;
   uid?: string;
