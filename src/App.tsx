@@ -51,7 +51,8 @@ import {
   ClipboardCheck,
   Search,
   HelpCircle,
-  Coffee
+  Coffee,
+  Heart
 } from 'lucide-react';
 import { askChildBudgetAdvisor, extractSubsidiesFromFile, extractSubsidiesFromText, genericAiCall } from './services/aiService';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -4138,8 +4139,8 @@ const DashboardPage = ({ user, summary }: { user: User, summary: any }) => {
                 <YAxis dataKey="name" type="category" stroke="#cbd5e1" width={90} tick={{ fill: '#cbd5e1', fontSize: 12, fontWeight: 'bold' }} tickLine={false} axisLine={false} />
                 <Tooltip 
                   cursor={{ fill: '#1e293b' }}
-                  contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', border: 'none', color: '#fff' }}
-                  itemStyle={{ fontWeight: 'bold' }}
+                  contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', border: '1px solid #334155', color: '#f8fafc' }}
+                  itemStyle={{ color: '#e2e8f0', fontWeight: 'bold' }}
                   formatter={(value: number) => [`$${Math.round(value).toLocaleString()}`, '金額']}
                 />
                 <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={24}>
@@ -8249,6 +8250,297 @@ const RetirementPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
   );
 };
 
+const LABOR_FUND_HISTORY = [
+  { year: 2025, return: 15.60 },
+  { year: 2024, return: 16.16 },
+  { year: 2023, return: 12.60 },
+  { year: 2022, return: -6.67 },
+  { year: 2021, return: 9.66 },
+  { year: 2020, return: 6.94 },
+  { year: 2019, return: 11.45 },
+  { year: 2018, return: -2.07 },
+  { year: 2017, return: 7.93 },
+  { year: 2016, return: 3.23 },
+  { year: 2015, return: -0.09 },
+  { year: 2014, return: 6.38 },
+  { year: 2013, return: 5.68 },
+  { year: 2012, return: 5.02 }
+];
+
+const WifeRetirementPage = ({ user }: { user: User }) => {
+  const [retireConfig, setRetireConfig] = useState({
+    birthDate: '1989-01-07',
+    retirementAge: 65,
+    accumulatedYears: 10.5, // 從圖片預估過去累積年資約 10年半
+    avgSalary60: 45800, // 最高60個月平均投保薪資
+    laborPensionBalance: 300000, // 勞退帳戶目前累積金額 (自訂)
+    currentSalary: 45800, // 目前薪資 (計算未來勞保與勞退)
+    expectedReturn: 6.36, // 勞退預估年報酬率 %, 預設為14年歷史幾何平均
+  });
+
+  const getAge = (birthDateStr: string) => {
+    const d = new Date(birthDateStr);
+    if (isNaN(d.getTime())) return 0;
+    const today = new Date();
+    let age = today.getFullYear() - d.getFullYear();
+    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) {
+      age--;
+    }
+    return Math.max(0, age);
+  };
+
+  const currentAge = getAge(retireConfig.birthDate);
+  const yearsToRetire = Math.max(0, retireConfig.retirementAge - currentAge);
+  
+  // 預估未來到退休時的總年資
+  const totalYears = retireConfig.accumulatedYears + yearsToRetire;
+
+  // 1. 勞保老年年金試算 (以最高60個月平均投保薪資為基礎)
+  // 公式 A: 平均月投保薪資 × 年資 × 0.775% + 3,000元
+  // 公式 B: 平均月投保薪資 × 年資 × 1.55%
+  // 擇優發給 (通常薪資不低的話公式B會較高)
+  const avgSal = retireConfig.avgSalary60;
+  const pensionA = avgSal * totalYears * 0.00775 + 3000;
+  const pensionB = avgSal * totalYears * 0.0155;
+  const laborInsurancePension = Math.max(pensionA, pensionB); // 月領
+
+  // 2. 勞工退休金 (勞退新制)
+  // 計算未來累積本金與收益 (複利計算)
+  // 每月提撥 6% (這裡假設僅雇主提撥，若有自提可變更)
+  const monthlyContribution = retireConfig.currentSalary * 0.06;
+  const annualContribution = monthlyContribution * 12;
+  const r = retireConfig.expectedReturn / 100;
+  
+  let futureBalance = retireConfig.laborPensionBalance;
+  for (let i = 0; i < yearsToRetire; i++) {
+    futureBalance = (futureBalance + annualContribution) * (1 + r);
+  }
+
+  // 勞退新制月退金粗估（期初年金法，假設退休後餘命20年(240個月)，利率與投資相同）
+  // 簡單估算公式: PMT(r/12, 240, -futureBalance)
+  let laborPensionMonthly = 0;
+  if (futureBalance > 0) {
+    const rMonthly = r / 12;
+    if (rMonthly === 0) {
+      laborPensionMonthly = futureBalance / 240;
+    } else {
+      laborPensionMonthly = (futureBalance * rMonthly * Math.pow(1 + rMonthly, 240)) / (Math.pow(1 + rMonthly, 240) - 1);
+    }
+  }
+
+  const totalMonthlyRetirement = laborInsurancePension + laborPensionMonthly;
+
+  // 退職所得稅試算 (勞保年金免稅，僅針對勞退)
+  // 1. 一次領
+  const exemptionThreshold1 = 198000 * totalYears;
+  const exemptionThreshold2 = 398000 * totalYears;
+  let lumpSumTaxableIncome = 0;
+  if (futureBalance > exemptionThreshold2) {
+    lumpSumTaxableIncome = ((exemptionThreshold2 - exemptionThreshold1) / 2) + (futureBalance - exemptionThreshold2);
+  } else if (futureBalance > exemptionThreshold1) {
+    lumpSumTaxableIncome = (futureBalance - exemptionThreshold1) / 2;
+  }
+
+  // 2. 分次領 (每年免稅額 85.9萬元)
+  const annualAnnuityExemption = 859000;
+  let monthlyTaxableIncomeAnnual = Math.max(0, (laborPensionMonthly * 12) - annualAnnuityExemption);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-rose-700 flex items-center gap-2">
+            <Heart size={28} className="text-rose-500" />
+            老婆退休規劃 (勞保/勞退)
+          </h2>
+          <p className="text-sm text-slate-500">基於勞工保險及勞退新制計算退休金</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* 設定區塊 */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-6 lg:col-span-1">
+          <h3 className="font-bold text-slate-700 flex items-center gap-2 border-b pb-2">
+            <Settings size={18} /> 參數設定
+          </h3>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-slate-600 mb-1">出生日期</label>
+              <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.birthDate} onChange={e => setRetireConfig({...retireConfig, birthDate: e.target.value})} />
+              <div className="text-xs text-slate-400 mt-1">目前年齡: {currentAge} 歲</div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-600 mb-1">預計退休年齡</label>
+              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.retirementAge} onChange={e => setRetireConfig({...retireConfig, retirementAge: Number(e.target.value)})} />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-600 mb-1">目前累計勞保年資 (年)</label>
+              <input type="number" step="0.1" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.accumulatedYears} onChange={e => setRetireConfig({...retireConfig, accumulatedYears: Number(e.target.value)})} />
+              <div className="text-xs text-rose-500 font-medium mt-1">＊系統已依據高師大、義守大學等投保紀錄，預設約 10.5 年</div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100">
+              <label className="block text-sm font-bold text-slate-600 mb-1">最高60個月平均薪資</label>
+              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.avgSalary60} onChange={e => setRetireConfig({...retireConfig, avgSalary60: Number(e.target.value)})} />
+              <div className="text-xs text-slate-400 mt-1">目前高師大投保薪級約 45,800</div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-bold text-slate-600 mb-1">目前勞退專戶餘額 (選填)</label>
+              <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.laborPensionBalance} onChange={e => setRetireConfig({...retireConfig, laborPensionBalance: Number(e.target.value)})} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">目前月薪(算提撥)</label>
+                <input type="number" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={retireConfig.currentSalary} onChange={e => setRetireConfig({...retireConfig, currentSalary: Number(e.target.value)})} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">預估年化報酬(%)</label>
+                <input type="number" step="0.1" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={retireConfig.expectedReturn} onChange={e => setRetireConfig({...retireConfig, expectedReturn: Number(e.target.value)})} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 試算結果區塊 */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-3 bg-gradient-to-br from-rose-500 to-pink-700 p-6 rounded-2xl text-white shadow-lg relative overflow-hidden flex items-center justify-between">
+              <div className="absolute top-0 right-0 -mr-4 -mt-4 opacity-10">
+                <Heart size={140} />
+              </div>
+              <div className="z-10">
+                <h4 className="text-rose-100 font-medium mb-1">預估總計每月退休金</h4>
+                <div className="text-4xl font-black mb-2 flex items-baseline gap-1">
+                  ${Math.round(totalMonthlyRetirement).toLocaleString()} <span className="text-sm font-medium opacity-80">/ 月</span>
+                </div>
+                <div className="text-sm text-rose-100">包含勞保老年年金與勞退新制按月撥領</div>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm">
+              <h4 className="text-slate-500 text-sm font-bold mb-2">① 勞保老年年金 (月領)</h4>
+              <div className="text-2xl font-black text-rose-600">${Math.round(laborInsurancePension).toLocaleString()}</div>
+              <div className="text-xs text-slate-400 mt-2">
+                以總年資 {totalYears.toFixed(1)} 年計算<br/>公式: 平均薪資 × 年資 × 1.55%
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm">
+              <h4 className="text-slate-500 text-sm font-bold mb-2">② 勞退新制 (月領粗估)</h4>
+              <div className="text-2xl font-black text-indigo-600">${Math.round(laborPensionMonthly).toLocaleString()}</div>
+              <div className="text-xs text-slate-400 mt-2">
+                至 {retireConfig.retirementAge} 歲預估本息和:<br/>
+                ${Math.round(futureBalance).toLocaleString()} <br/>
+                (按餘命20年攤提)
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm">
+              <h4 className="text-slate-500 text-sm font-bold mb-2">預估勞退本息累積</h4>
+              <div className="text-2xl font-black text-emerald-600">${Math.round(futureBalance).toLocaleString()}</div>
+              <div className="text-xs text-slate-400 mt-2">
+                每年提撥約 ${(annualContribution).toLocaleString()}<br/>
+                複利成長 {yearsToRetire} 年
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-100 p-6 rounded-2xl shadow-sm text-sm text-slate-600 leading-relaxed mt-4">
+            <h4 className="font-bold text-slate-700 flex items-center gap-2 mb-3">
+              <FileText size={16} className="text-rose-500" /> 退職所得稅負評估 (僅適用勞退，不含勞保)
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div className="font-bold text-slate-700 mb-2">選項一：一次領取</div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">預估領取總額</span>
+                    <span className="font-medium">${Math.round(futureBalance).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">免稅額度 (19.8萬 × 年資)</span>
+                    <span className="font-medium">${Math.round(exemptionThreshold1).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">半數課稅上限 (39.8萬 × 年資)</span>
+                    <span className="font-medium">${Math.round(exemptionThreshold2).toLocaleString()}</span>
+                  </div>
+                  <div className="pt-2 mt-2 border-t border-slate-200">
+                    <div className="flex justify-between text-sm font-bold">
+                      <span className="text-rose-600">應申報退職所得</span>
+                      <span className="text-rose-600">${Math.round(lumpSumTaxableIncome).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div className="font-bold text-slate-700 mb-2">選項二：分期領取 (月領)</div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">預估首年領取總額</span>
+                    <span className="font-medium">${Math.round(laborPensionMonthly * 12).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">每年免稅額</span>
+                    <span className="font-medium">${annualAnnuityExemption.toLocaleString()}</span>
+                  </div>
+                  <div className="pt-2 mt-2 border-t border-slate-200">
+                    <div className="flex justify-between text-sm font-bold">
+                      <span className="text-rose-600">應申報退職所得 (年)</span>
+                      <span className="text-rose-600">${Math.round(monthlyTaxableIncomeAnnual).toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2">＊如領取金額未超過85.9萬元/年，則免申報。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-100 p-6 rounded-2xl shadow-sm text-sm text-slate-600 leading-relaxed mt-4">
+            <h4 className="font-bold text-slate-700 flex items-center gap-2 mb-3">
+              <TrendingUp size={16} className="text-indigo-500" /> 勞工退休金基金歷史收益 (2012-2025)
+            </h4>
+            <p className="mb-4 text-xs text-slate-500">
+              透過過去 14 年的歷史年化報酬率資料分析，勞工退休金基金的平均幾何年化報酬率約為 <strong className="text-indigo-600 font-bold">6.36%</strong>。系統已預設以此為基準計算未來勞退收益。
+            </p>
+            <div className="overflow-x-auto custom-scrollbar pb-2">
+              <div className="flex gap-2 min-w-max">
+                {LABOR_FUND_HISTORY.map((item, idx) => (
+                  <div key={idx} className="bg-slate-50 border border-slate-100 rounded-lg p-2 min-w-[70px] text-center">
+                    <div className="text-[10px] text-slate-400 font-bold mb-1 border-b border-slate-200 pb-1">{item.year}</div>
+                    <div className={`font-bold text-sm ${item.return >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      {item.return > 0 ? '+' : ''}{item.return}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-50 border border-slate-100 p-6 rounded-2xl shadow-inner text-sm text-slate-600 leading-relaxed">
+            <h4 className="font-bold text-slate-700 flex items-center gap-2 mb-3">
+              <HelpCircle size={16} /> 試算公式與假定條件
+            </h4>
+            <ul className="space-y-2 list-disc list-inside marker:text-rose-400">
+              <li><strong>勞保年金擇優發給：</strong> 系統將自動比較「平均月薪×年資×0.775%+3000」與「平均月薪×年資×1.55%」，取較高者發給。</li>
+              <li><strong>勞工退休金 (勞退新制)：</strong> 勞保局有專戶儲存雇主每月提繳之6%及個人自提。此處假設至退休前持續每月提撥、且帳戶以固定複利成長，到期後以簡易年金法轉換為月退額。</li>
+              <li><strong>法定退休年齡：</strong> 勞保年金法定請領年齡逐步提高至65歲。勞退新制則滿60歲即可請領。此試算以使用者設定之「預計退休年齡」同步啟用月退計算。</li>
+              <li><strong>各階段歷史投保紀錄總結：</strong> 已合併高市關懷協會、華群、高師大、臺南大學、萬寶華、義守大學等投遞紀錄，推估截至目前約 10.5 年。未來會將距離退休的年份自動加上去計算。</li>
+            </ul>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [activeTheme, setActiveTheme] = useState<'neo' | 'midnight' | 'minimalist'>('neo');
@@ -8483,6 +8775,7 @@ export default function App() {
       case 'budget': return <BudgetPage {...pageProps} />;
       case 'tax': return <TaxPage {...pageProps} />;
       case 'retirement': return <RetirementPage {...pageProps} />;
+      case 'wife-retirement': return <WifeRetirementPage user={user} />;
       default: return <DashboardPage user={user} summary={summary} />;
     }
   };
@@ -8574,7 +8867,8 @@ export default function App() {
                 PieChart,
                 FileText,
                 ShieldCheck,
-                Coffee
+                Coffee,
+                Heart
               }[tab.icon as string];
 
               const isActive = activeTab === tab.id;
@@ -8770,7 +9064,9 @@ export default function App() {
                 BarChart3,
                 PieChart,
                 FileText,
-                Coffee
+                ShieldCheck,
+                Coffee,
+                Heart
               }[tab.icon as string];
 
               return (

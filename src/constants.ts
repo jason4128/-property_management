@@ -13,6 +13,7 @@ export const TABS = [
   { id: 'budget', label: '年度支出預算', icon: 'PieChart' },
   { id: 'tax', label: '所得稅管理', icon: 'FileText' },
   { id: 'retirement', label: '退休規劃', icon: 'Coffee' },
+  { id: 'wife-retirement', label: '老婆退休金', icon: 'Heart' },
 ] as const;
 
 export type TabId = typeof TABS[number]['id'];
