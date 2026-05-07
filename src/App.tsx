@@ -605,6 +605,59 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState(false);
+
+  // 退休金參數狀態提升
+  const [retireConfig, setRetireConfig] = useState({
+    birthDate: '1989-01-07',
+    retirementAge: 65,
+    accumulatedYears: 10.5, 
+    avgSalary60: 45800, 
+    laborPensionBalance: 300000, 
+    currentSalary: 45800, 
+    expectedReturn: 6.36, 
+  });
+
+  // 計算邏輯
+  const getAge = (birthDateStr: string) => {
+    const d = new Date(birthDateStr);
+    if (isNaN(d.getTime())) return 0;
+    const today = new Date();
+    let age = today.getFullYear() - d.getFullYear();
+    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) {
+      age--;
+    }
+    return Math.max(0, age);
+  };
+
+  const currentAge = getAge(retireConfig.birthDate);
+  const yearsToRetire = Math.max(0, retireConfig.retirementAge - currentAge);
+  const totalYears = retireConfig.accumulatedYears + yearsToRetire;
+  const avgSal = retireConfig.avgSalary60;
+  const pensionA = avgSal * totalYears * 0.00775 + 3000;
+  const pensionB = avgSal * totalYears * 0.0155;
+  const laborInsurancePension = Math.max(pensionA, pensionB);
+
+  const monthlyContribution = retireConfig.currentSalary * 0.06;
+  const annualContribution = monthlyContribution * 12;
+  const r = retireConfig.expectedReturn / 100;
+  
+  let futureBalance = retireConfig.laborPensionBalance;
+  for (let i = 0; i < yearsToRetire; i++) {
+    futureBalance = (futureBalance + annualContribution) * (1 + r);
+  }
+
+  let laborPensionMonthly = 0;
+  if (futureBalance > 0) {
+    const rMonthly = r / 12;
+    if (rMonthly === 0) {
+      laborPensionMonthly = futureBalance / 240;
+    } else {
+      laborPensionMonthly = (futureBalance * rMonthly * Math.pow(1 + rMonthly, 240)) / (Math.pow(1 + rMonthly, 240) - 1);
+    }
+  }
+
+  const totalMonthlyRetirement = laborInsurancePension + laborPensionMonthly;
+
   const [formData, setFormData] = useState({
     date: new Date().toISOString().substring(0, 7),
     actualSalary: 0,
@@ -905,7 +958,20 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
       </div>
         </>
       ) : (
-        <WifeRetirementTab user={user} />
+        <WifeRetirementTab 
+          user={user} 
+          retireConfig={retireConfig} 
+          setRetireConfig={setRetireConfig}
+          calculatedRetirement={{
+            totalMonthlyRetirement,
+            laborInsurancePension,
+            laborPensionMonthly,
+            futureBalance,
+            totalYears,
+            currentAge,
+            yearsToRetire
+          }}
+        />
       )}
 
       <AnimatePresence>
