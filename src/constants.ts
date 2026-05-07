@@ -15,7 +15,7 @@ export const TABS = [
   { id: 'retirement', label: '退休規劃', icon: 'Coffee' },
 ] as const;
 
-export type TabId = typeof TABS[number]['id'];
+export type TabId = typeof TABS[number]['id'] | 'wife-salary';
 
 export const CATEGORIES = [
   '食', '衣', '住', '行', '育', '樂', '其他'

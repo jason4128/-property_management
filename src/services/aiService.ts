@@ -196,3 +196,67 @@ export async function predictStockDividends(symbol: string, currentPrice: number
     return null;
   }
 }
+
+export async function analyzePortfolioStructure(stocks: any[], funds: any[], usdRate: number) {
+  try {
+    const ai = getAi();
+    if (!ai) throw new Error("API Key not found");
+
+    const portfolioData = [
+      ...stocks.map(s => ({
+        type: 'Stock',
+        name: s.name,
+        symbol: s.symbol,
+        shares: s.shares,
+        price: s.currentPrice,
+        cost: s.averageCost,
+        source: s.source,
+        currency: s.source === 'Firstrade' ? 'USD' : 'TWD'
+      })),
+      ...funds.map(f => ({
+        type: 'Fund',
+        name: f.name,
+        symbol: 'N/A',
+        shares: f.units,
+        price: f.units > 0 ? f.currentValue / f.units : 0,
+        cost: f.units > 0 ? f.cost / f.units : 0,
+        source: f.source,
+        currency: 'TWD'
+      }))
+    ];
+
+    const prompt = `你是一個專業的投資分析師。請針對以下投資組合明細進行深度分析。
+投資組合資料：
+${JSON.stringify(portfolioData)}
+目前的匯率 1 USD = ${usdRate} TWD。
+
+請根據每項資產的名稱與代號，運用你的知識庫進行分類（由你判斷其所屬國家、產業、性質）。
+請產生以下結構的 JSON 數據：
+
+1. countryWeight: 國家權重分配 (例如: [{"name": "台灣", "value": 70}, {"name": "美國", "value": 30}])
+2. industryWeight: 產業類別分佈 (例如: [{"name": "半導體", "value": 500000}, {"name": "高股息 ETF", "value": 300000}])
+3. riskConcentration: 
+   - top5Percentage: 前五大持股總佔比 (數字，0-100)
+   - top5Holdings: 前五大持股明細陣列，包含 name, percentage, riskComment (風險說明)
+4. diagnosis: 綜合診斷報告 (Markdown 格式)，內容包含：
+   - 市值型與高股息型佔比分析（若數據有此標籤或你能判斷）。
+   - 防禦力與成長性分析。
+   - 具體的調整建議。
+
+請確保金額計算考慮了匯率 (Firstrade 來源為 USD)。
+請只回傳 JSON。`;
+
+    const response = await withRetry(() => ai.models.generateContent({
+      model: "gemini-flash-latest",
+      contents: [{ parts: [{ text: prompt }] }],
+      config: {
+        responseMimeType: "application/json"
+      }
+    }));
+
+    return tryExtractJson(response.text || "{}");
+  } catch (error) {
+    console.error("Portfolio Analysis Error:", error);
+    throw error;
+  }
+}

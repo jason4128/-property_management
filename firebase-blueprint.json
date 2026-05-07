@@ -186,9 +186,42 @@
         "note": { "type": "string", "description": "Optional note" }
       },
       "required": ["uid", "type", "category", "amount", "date", "year", "frequency"]
+    },
+    "PortfolioAnalysis": {
+      "title": "PortfolioAnalysis",
+      "description": "Historical portfolio analysis results",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user ID of the owner" },
+        "createdAt": { "type": "string", "description": "ISO timestamp" },
+        "data": { "type": "object", "description": "The analysis result JSON" }
+      },
+      "required": ["uid", "createdAt", "data"]
+    },
+    "WifeSalary": {
+      "title": "WifeSalary",
+      "description": "Salary records for wife with labor insurance structure",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Owner UID" },
+        "date": { "type": "string", "description": "YYYY-MM" },
+        "baseSalary": { "type": "number", "description": "Gross salary before deductions" },
+        "laborIns": { "type": "number", "description": "Labor insurance deduction" },
+        "healthIns": { "type": "number", "description": "Health insurance deduction" },
+        "laborPension": { "type": "number", "description": "Labor pension (self-contribution)" },
+        "bonus": { "type": "number", "description": "Other bonuses" },
+        "otherDeductions": { "type": "number", "description": "Other deductions" },
+        "netAmount": { "type": "number", "description": "Net salary received" },
+        "note": { "type": "string", "description": "Optional notes" }
+      },
+      "required": ["uid", "date", "baseSalary", "laborIns", "healthIns", "laborPension"]
     }
   },
   "firestore": {
+    "/wifeSalaries/{salaryId}": {
+      "schema": "WifeSalary",
+      "description": "Collection of wife's salary records"
+    },
     "/salaryRecords/{recordId}": {
       "schema": "SalaryRecord",
       "description": "Collection of salary records"
@@ -232,6 +265,10 @@
     "/childRecords/{recordId}": {
       "schema": "ChildRecord",
       "description": "Collection of child expenses and income"
+    },
+    "/portfolioAnalyses/{analysisId}": {
+      "schema": "PortfolioAnalysis",
+      "description": "Collection of portfolio analysis reports"
     }
   }
 }

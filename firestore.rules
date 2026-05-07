@@ -1,24 +1,103 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny
+    // Default deny for safety, though specific rules below will override this
     match /{document=**} {
       allow read, write: if false;
     }
 
+    // Helper functions
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function canAccessData(data) {
-      return true; // The user requested to be able to edit without logging in. Allowing all access to satisfy this requirement for the preview.
+    // Relaxed validation for preview/prototype as requested
+    function isValidData(data) {
+      return true;
     }
 
-    match /{collection}/{docId} {
+    // Specific rules for each collection in the blueprint
+    // We allow read to everyone for the preview
+    // We allow write to everyone for the preview as well, matching the previous logic
+    
+    match /salaryRecords/{id} {
       allow read: if true;
-      allow create: if canAccessData(request.resource.data);
-      allow update: if canAccessData(resource.data) && canAccessData(request.resource.data);
-      allow delete: if canAccessData(resource.data);
+      allow write: if true;
+    }
+    
+    match /yearlyStandards/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    match /creditCards/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    match /creditCardBills/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    match /bankAccounts/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    match /funds/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    match /stocks/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    match /budgets/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    match /taxes/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    match /taxStandards/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    match /childRecords/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    match /portfolioAnalyses/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    match /wifeSalaries/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /insurances/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /insurancePremiums/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // For the connection test
+    match /test/{id} {
+      allow read: if true;
     }
   }
 }
