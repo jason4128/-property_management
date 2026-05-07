@@ -53,7 +53,9 @@ import {
   Search,
   HelpCircle,
   Coffee,
-  Heart
+  Heart,
+  Banknote,
+  CalendarRange
 } from 'lucide-react';
 import { 
   askChildBudgetAdvisor, 
@@ -598,6 +600,7 @@ export const calculateTaxableIncome = (r: Partial<SalaryRecord>) => {
 };
 
 const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
+  const [activeTab, setActiveTab] = useState<'salary' | 'retirement'>('salary');
   const [salaries, setSalaries] = useState<any[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -732,32 +735,61 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center px-4 md:px-0">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-4 md:px-0">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <Heart size={28} className="text-rose-500" />
-            老婆薪資紀錄
-          </h2>
-          <p className="text-sm text-slate-500">勞健保與個人所得管理</p>
+          <div className="flex items-baseline gap-3 mb-1">
+            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+              <Heart size={28} className="text-rose-500" />
+              老婆專屬專區
+            </h2>
+            <span className="text-xs font-bold bg-rose-50 text-rose-500 px-2 py-0.5 rounded-full border border-rose-100 uppercase tracking-widest">
+              Private
+            </span>
+          </div>
+          <p className="text-sm text-slate-500">
+            {activeTab === 'salary' ? '薪資與勞健保紀錄管理' : '退休生活支出與年金估算'}
+          </p>
         </div>
-        <div className="flex gap-2">
+        
+        <div className="flex bg-slate-100 p-1 rounded-xl self-stretch md:self-auto">
           <button 
-            onClick={copyShareLink}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold border ${copyStatus ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100'}`}
+            onClick={() => setActiveTab('salary')}
+            className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-lg font-bold text-sm transition-all ${activeTab === 'salary' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            {copyStatus ? <Check size={18} /> : <Link size={18} />}
-            {copyStatus ? '已複製連結' : '複製專屬連結'}
+            <Banknote size={18} />
+            薪資紀錄
           </button>
           <button 
-            onClick={() => setIsFormOpen(true)}
-            className="flex items-center gap-2 bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 transition-colors font-bold shadow-lg shadow-rose-200"
+            onClick={() => setActiveTab('retirement')}
+            className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-lg font-bold text-sm transition-all ${activeTab === 'retirement' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            <Plus size={20} /> 新增錄入
+            <CalendarRange size={18} />
+            退休規劃
           </button>
         </div>
+
+        {activeTab === 'salary' && (
+          <div className="flex gap-2 w-full md:w-auto">
+            <button 
+              onClick={copyShareLink}
+              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-bold border ${copyStatus ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+            >
+              {copyStatus ? <Check size={18} /> : <Link size={18} />}
+              {copyStatus ? '已複製' : '分享頁面'}
+            </button>
+            <button 
+              onClick={() => setIsFormOpen(true)}
+              className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-rose-600 text-white px-6 py-2 rounded-lg hover:bg-rose-700 transition-colors font-bold shadow-lg shadow-rose-200"
+            >
+              <Plus size={20} /> 新增
+            </button>
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 px-4 md:px-0">
+      {activeTab === 'salary' ? (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 px-4 md:px-0">
          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">平均月實領</p>
             <h3 className="text-3xl font-black text-slate-800">
@@ -834,6 +866,10 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
           </table>
         </div>
       </div>
+        </>
+      ) : (
+        <WifeRetirementTab user={user} />
+      )}
 
       <AnimatePresence>
         {isFormOpen && (
