@@ -607,7 +607,8 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
   const [copyStatus, setCopyStatus] = useState(false);
   const [formData, setFormData] = useState({
     date: new Date().toISOString().substring(0, 7),
-    baseSalary: 0,
+    actualSalary: 0,
+    insGrade: 0,
     laborIns: 0,
     healthIns: 0,
     laborPension: 0,
@@ -615,6 +616,34 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
     otherDeductions: 0,
     note: ''
   });
+
+  // 自動計算勞健保輔助函數
+  const calculateInsurance = (grade: number) => {
+    // 勞保上限 45800
+    const laborGrade = Math.min(grade, 45800);
+    // 勞退上限 150000
+    const pensionGrade = Math.min(grade, 150000);
+    
+    // 估算公式
+    const labor = Math.round(laborGrade * 0.12 * 0.2); // 勞保費(自付20%)
+    const health = Math.round(grade * 0.0517 * 0.3 * 1); // 健保費(自付30%，假設1口)
+    const pension = Math.round(pensionGrade * 0.06); // 勞退 6%
+
+    return { labor, health, pension };
+  };
+
+  useEffect(() => {
+    // 當級距改變時，嘗試更新欄位一次（若使用者沒手動改過）
+    if (formData.insGrade > 0) {
+      const { labor, health, pension } = calculateInsurance(formData.insGrade);
+      setFormData(prev => ({
+        ...prev,
+        laborIns: prev.laborIns || labor,
+        healthIns: prev.healthIns || health,
+        laborPension: prev.laborPension || pension
+      }));
+    }
+  }, [formData.insGrade]);
 
   useEffect(() => {
     const targetUids = getAppTargetUids(user);
@@ -638,7 +667,8 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
   const handleEdit = (record: any) => {
     setFormData({
       date: record.date,
-      baseSalary: record.baseSalary,
+      actualSalary: record.actualSalary || record.baseSalary || 0,
+      insGrade: record.insGrade || record.baseSalary || 0,
       laborIns: record.laborIns,
       healthIns: record.healthIns,
       laborPension: record.laborPension,
@@ -655,7 +685,8 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
     setEditingId(null);
     setFormData({
       date: new Date().toISOString().substring(0, 7),
-      baseSalary: 0,
+      actualSalary: 0,
+      insGrade: 0,
       laborIns: 0,
       healthIns: 0,
       laborPension: 0,
@@ -667,14 +698,15 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const netAmount = Number(formData.baseSalary) + Number(formData.bonus) - Number(formData.laborIns) - Number(formData.healthIns) - Number(formData.laborPension) - Number(formData.otherDeductions);
+    const netAmount = Number(formData.actualSalary) + Number(formData.bonus) - Number(formData.laborIns) - Number(formData.healthIns) - Number(formData.laborPension) - Number(formData.otherDeductions);
     
     try {
       if (editingId) {
         await updateDoc(doc(db, 'wifeSalaries', editingId), {
           ...formData,
           netAmount,
-          baseSalary: Number(formData.baseSalary),
+          actualSalary: Number(formData.actualSalary),
+          insGrade: Number(formData.insGrade),
           laborIns: Number(formData.laborIns),
           healthIns: Number(formData.healthIns),
           laborPension: Number(formData.laborPension),
@@ -686,7 +718,8 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
           ...formData,
           uid: user.uid,
           netAmount,
-          baseSalary: Number(formData.baseSalary),
+          actualSalary: Number(formData.actualSalary),
+          insGrade: Number(formData.insGrade),
           laborIns: Number(formData.laborIns),
           healthIns: Number(formData.healthIns),
           laborPension: Number(formData.laborPension),
@@ -805,7 +838,7 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">預估月領退休金</p>
             <h3 className="text-3xl font-black text-rose-600">
-              ${Math.round((salaries[0]?.baseSalary || 45100) * 0.0155 * (10.5 + 35) + (salaries[0]?.baseSalary || 45100) * 0.06 * 12 * 25 / 240).toLocaleString()}
+              ${Math.round((salaries[0]?.insGrade || 45800) * 0.0155 * (10.5 + 35) + (salaries[0]?.insGrade || 45800) * 0.06 * 12 * 25 / 240).toLocaleString()}
             </h3>
          </div>
          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
@@ -822,10 +855,9 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
             <thead className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
               <tr>
                 <th className="px-6 py-4">月份</th>
-                <th className="px-6 py-4 text-right">投保薪資/底薪</th>
-                <th className="px-6 py-4 text-center text-rose-500">勞保</th>
-                <th className="px-6 py-4 text-center text-blue-500">健保</th>
-                <th className="px-6 py-4 text-center text-indigo-500">勞退</th>
+                <th className="px-6 py-4 text-right">實領/投保薪資</th>
+                <th className="px-6 py-4 text-center text-rose-500">勞健保費</th>
+                <th className="px-6 py-4 text-center text-indigo-500">勞退提繳</th>
                 <th className="px-6 py-4 text-right">實領金額</th>
                 <th className="px-6 py-4"></th>
               </tr>
@@ -837,9 +869,14 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
                     <div className="font-bold text-slate-700">{s.date}</div>
                     {s.note && <div className="text-[10px] text-slate-400">{s.note}</div>}
                   </td>
-                  <td className="px-6 py-4 text-right font-mono">${s.baseSalary?.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-center font-mono text-rose-600">-${s.laborIns?.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-center font-mono text-blue-600">-${s.healthIns?.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="font-mono text-slate-600">${(s.actualSalary || s.baseSalary)?.toLocaleString()}</div>
+                    <div className="text-[10px] text-slate-400">級距: ${(s.insGrade || s.baseSalary)?.toLocaleString()}</div>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <div className="font-mono text-rose-600">-${(Number(s.laborIns || 0) + Number(s.healthIns || 0)).toLocaleString()}</div>
+                    <div className="text-[9px] text-slate-400">勞 {s.laborIns} | 健 {s.healthIns}</div>
+                  </td>
                   <td className="px-6 py-4 text-center font-mono text-indigo-600">-${s.laborPension?.toLocaleString()}</td>
                   <td className="px-6 py-4 text-right font-bold text-emerald-600 font-mono">${s.netAmount?.toLocaleString()}</td>
                   <td className="px-6 py-4 text-right">
@@ -901,16 +938,40 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">應領底薪/投保薪資</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">實際應領薪資</label>
                     <input 
                       type="number" 
                       required 
-                      value={formData.baseSalary}
-                      onChange={e => setFormData({...formData, baseSalary: Number(e.target.value)})}
+                      value={formData.actualSalary}
+                      onChange={e => {
+                        const val = Number(e.target.value);
+                        setFormData(prev => ({
+                          ...prev, 
+                          actualSalary: val,
+                          // 如果投保級距還是0，就默認帶入實際薪資
+                          insGrade: prev.insGrade === 0 ? val : prev.insGrade
+                        }));
+                      }}
                       className="w-full p-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-rose-500"
+                      placeholder="實際月薪"
                     />
                   </div>
                   <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">勞健保投保級距</label>
+                    <input 
+                      type="number" 
+                      required 
+                      value={formData.insGrade}
+                      onChange={e => setFormData({...formData, insGrade: Number(e.target.value)})}
+                      className="w-full p-4 bg-slate-100 border border-indigo-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 font-bold"
+                      placeholder="申報級距"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1 ml-1 leading-relaxed">以此計算勞退(MAX 15萬)<br/>及勞保(MAX 4.58萬)</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-2">其他獎金/加給</label>
                     <input 
                       type="number" 
@@ -918,6 +979,23 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
                       onChange={e => setFormData({...formData, bonus: Number(e.target.value)})}
                       className="w-full p-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-rose-500"
                     />
+                  </div>
+                  <div className="flex flex-center items-end pb-1">
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        const { labor, health, pension } = calculateInsurance(formData.insGrade);
+                        setFormData(prev => ({
+                          ...prev,
+                          laborIns: labor,
+                          healthIns: health,
+                          laborPension: pension
+                        }));
+                      }}
+                      className="w-full py-4 text-xs font-bold text-indigo-600 bg-indigo-50 rounded-2xl border border-indigo-100 hover:bg-indigo-100 transition-all"
+                    >
+                      💡 依照級距重新估算代扣
+                    </button>
                   </div>
                 </div>
 
@@ -977,7 +1055,7 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
                   <div className="text-left">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">預算實領</p>
                     <p className="text-xl font-black text-rose-600 font-mono">
-                      ${(Number(formData.baseSalary) + Number(formData.bonus) - Number(formData.laborIns) - Number(formData.healthIns) - Number(formData.laborPension) - Number(formData.otherDeductions)).toLocaleString()}
+                      ${(Number(formData.actualSalary) + Number(formData.bonus) - Number(formData.laborIns) - Number(formData.healthIns) - Number(formData.laborPension) - Number(formData.otherDeductions)).toLocaleString()}
                     </p>
                   </div>
                   <button type="submit" className="bg-rose-600 text-white px-8 py-4 rounded-2xl font-bold shadow-lg shadow-rose-200 hover:bg-rose-700 transition-all">
@@ -9222,7 +9300,7 @@ const WifeRetirementTab = ({ user }: { user: User }) => {
             <div className="pt-2 border-t border-slate-100">
               <label className="block text-sm font-bold text-slate-600 mb-1">最高60個月平均薪資</label>
               <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl" value={retireConfig.avgSalary60} onChange={e => setRetireConfig({...retireConfig, avgSalary60: Number(e.target.value)})} />
-              <div className="text-xs text-slate-400 mt-1">目前高師大投保薪級約 45,800</div>
+              <div className="text-xs text-slate-400 mt-1">勞保最高投保級距為 45,800</div>
             </div>
             
             <div>
@@ -9232,7 +9310,7 @@ const WifeRetirementTab = ({ user }: { user: User }) => {
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">目前月薪(算提撥)</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">提撥級距 (最高15萬)</label>
                 <input type="number" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" value={retireConfig.currentSalary} onChange={e => setRetireConfig({...retireConfig, currentSalary: Number(e.target.value)})} />
               </div>
               <div>
