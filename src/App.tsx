@@ -599,6 +599,76 @@ export const calculateTaxableIncome = (r: Partial<SalaryRecord>) => {
     (r.pensionFund || 0));
 };
 
+const calculateWifeRetirementLogic = (config: any) => {
+  const getAge = (birthDateStr: string) => {
+    const d = new Date(birthDateStr);
+    if (isNaN(d.getTime())) return 0;
+    const today = new Date();
+    let age = today.getFullYear() - d.getFullYear();
+    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) {
+      age--;
+    }
+    return Math.max(0, age);
+  };
+
+  const currentAge = getAge(config.birthDate);
+  const yearsToRetire = Math.max(0, config.retirementAge - currentAge);
+  const totalYears = config.accumulatedYears + yearsToRetire;
+  const avgSal = config.avgSalary60;
+  const pensionA = avgSal * totalYears * 0.00775 + 3000;
+  const pensionB = avgSal * totalYears * 0.0155;
+  const laborInsurancePension = Math.max(pensionA, pensionB);
+
+  const monthlyContribution = config.currentSalary * 0.06;
+  const annualContribution = monthlyContribution * 12;
+  const r = config.expectedReturn / 100;
+  
+  let futureBalance = config.laborPensionBalance;
+  for (let i = 0; i < yearsToRetire; i++) {
+    futureBalance = (futureBalance + annualContribution) * (1 + r);
+  }
+
+  let laborPensionMonthly = 0;
+  if (futureBalance > 0) {
+    const rMonthly = r / 12;
+    if (rMonthly === 0) {
+      laborPensionMonthly = futureBalance / 240;
+    } else {
+      laborPensionMonthly = (futureBalance * rMonthly * Math.pow(1 + rMonthly, 240)) / (Math.pow(1 + rMonthly, 240) - 1);
+    }
+  }
+
+  const totalMonthlyRetirement = laborInsurancePension + laborPensionMonthly;
+
+  const exemptionThreshold1 = 198000 * totalYears;
+  const exemptionThreshold2 = 398000 * totalYears;
+  let lumpSumTaxableIncome = 0;
+  if (futureBalance > exemptionThreshold2) {
+    lumpSumTaxableIncome = ((exemptionThreshold2 - exemptionThreshold1) / 2) + (futureBalance - exemptionThreshold2);
+  } else if (futureBalance > exemptionThreshold1) {
+    lumpSumTaxableIncome = (futureBalance - exemptionThreshold1) / 2;
+  }
+
+  const annualAnnuityExemption = 859000;
+  const monthlyTaxableIncomeAnnual = Math.max(0, (laborPensionMonthly * 12) - annualAnnuityExemption);
+
+  return {
+    totalMonthlyRetirement,
+    laborInsurancePension,
+    laborPensionMonthly,
+    futureBalance,
+    totalYears,
+    currentAge,
+    yearsToRetire,
+    annualContribution,
+    exemptionThreshold1,
+    exemptionThreshold2,
+    lumpSumTaxableIncome,
+    annualAnnuityExemption,
+    monthlyTaxableIncomeAnnual
+  };
+};
+
 const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [activeTab, setActiveTab] = useState<'salary' | 'retirement'>('salary');
   const [salaries, setSalaries] = useState<any[]>([]);
@@ -617,46 +687,8 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
     expectedReturn: 6.36, 
   });
 
-  // 計算邏輯
-  const getAge = (birthDateStr: string) => {
-    const d = new Date(birthDateStr);
-    if (isNaN(d.getTime())) return 0;
-    const today = new Date();
-    let age = today.getFullYear() - d.getFullYear();
-    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) {
-      age--;
-    }
-    return Math.max(0, age);
-  };
-
-  const currentAge = getAge(retireConfig.birthDate);
-  const yearsToRetire = Math.max(0, retireConfig.retirementAge - currentAge);
-  const totalYears = retireConfig.accumulatedYears + yearsToRetire;
-  const avgSal = retireConfig.avgSalary60;
-  const pensionA = avgSal * totalYears * 0.00775 + 3000;
-  const pensionB = avgSal * totalYears * 0.0155;
-  const laborInsurancePension = Math.max(pensionA, pensionB);
-
-  const monthlyContribution = retireConfig.currentSalary * 0.06;
-  const annualContribution = monthlyContribution * 12;
-  const r = retireConfig.expectedReturn / 100;
-  
-  let futureBalance = retireConfig.laborPensionBalance;
-  for (let i = 0; i < yearsToRetire; i++) {
-    futureBalance = (futureBalance + annualContribution) * (1 + r);
-  }
-
-  let laborPensionMonthly = 0;
-  if (futureBalance > 0) {
-    const rMonthly = r / 12;
-    if (rMonthly === 0) {
-      laborPensionMonthly = futureBalance / 240;
-    } else {
-      laborPensionMonthly = (futureBalance * rMonthly * Math.pow(1 + rMonthly, 240)) / (Math.pow(1 + rMonthly, 240) - 1);
-    }
-  }
-
-  const totalMonthlyRetirement = laborInsurancePension + laborPensionMonthly;
+  const calculatedRetirement = calculateWifeRetirementLogic(retireConfig);
+  const { totalMonthlyRetirement } = calculatedRetirement;
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().substring(0, 7),
@@ -891,7 +923,7 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">預估月領退休金</p>
             <h3 className="text-3xl font-black text-rose-600">
-              ${Math.round((salaries[0]?.insGrade || 45800) * 0.0155 * (10.5 + 35) + (salaries[0]?.insGrade || 45800) * 0.06 * 12 * 25 / 240).toLocaleString()}
+              ${Math.round(totalMonthlyRetirement).toLocaleString()}
             </h3>
          </div>
          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
@@ -962,15 +994,7 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
           user={user} 
           retireConfig={retireConfig} 
           setRetireConfig={setRetireConfig}
-          calculatedRetirement={{
-            totalMonthlyRetirement,
-            laborInsurancePension,
-            laborPensionMonthly,
-            futureBalance,
-            totalYears,
-            currentAge,
-            yearsToRetire
-          }}
+          calculatedRetirement={calculatedRetirement}
         />
       )}
 
@@ -9248,83 +9272,49 @@ const LABOR_FUND_HISTORY = [
   { year: 2012, return: 5.02 }
 ];
 
-const WifeRetirementTab = ({ user }: { user: User }) => {
-  const [retireConfig, setRetireConfig] = useState({
+const WifeRetirementTab = ({ 
+  user, 
+  retireConfig: propConfig, 
+  setRetireConfig: propSetRetireConfig,
+  calculatedRetirement: propCalculated 
+}: { 
+  user: User, 
+  retireConfig?: any, 
+  setRetireConfig?: (config: any) => void,
+  calculatedRetirement?: any
+}) => {
+  // 內部狀態作為回退（針對從 RetirementPage 獨立進入的情況）
+  const [internalConfig, setInternalConfig] = useState({
     birthDate: '1989-01-07',
     retirementAge: 65,
-    accumulatedYears: 10.5, // 從圖片預估過去累積年資約 10年半
-    avgSalary60: 45800, // 最高60個月平均投保薪資
-    laborPensionBalance: 300000, // 勞退帳戶目前累積金額 (自訂)
-    currentSalary: 45800, // 目前薪資 (計算未來勞保與勞退)
-    expectedReturn: 6.36, // 勞退預估年報酬率 %, 預設為14年歷史幾何平均
+    accumulatedYears: 10.5, 
+    avgSalary60: 45800, 
+    laborPensionBalance: 300000, 
+    currentSalary: 45800, 
+    expectedReturn: 6.36, 
   });
 
-  const getAge = (birthDateStr: string) => {
-    const d = new Date(birthDateStr);
-    if (isNaN(d.getTime())) return 0;
-    const today = new Date();
-    let age = today.getFullYear() - d.getFullYear();
-    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) {
-      age--;
-    }
-    return Math.max(0, age);
-  };
-
-  const currentAge = getAge(retireConfig.birthDate);
-  const yearsToRetire = Math.max(0, retireConfig.retirementAge - currentAge);
+  const retireConfig = propConfig || internalConfig;
+  const setRetireConfig = propSetRetireConfig || setInternalConfig;
   
-  // 預估未來到退休時的總年資
-  const totalYears = retireConfig.accumulatedYears + yearsToRetire;
+  // 計算結果回退
+  const calculatedRetirement = propCalculated || calculateWifeRetirementLogic(retireConfig);
 
-  // 1. 勞保老年年金試算 (以最高60個月平均投保薪資為基礎)
-  // 公式 A: 平均月投保薪資 × 年資 × 0.775% + 3,000元
-  // 公式 B: 平均月投保薪資 × 年資 × 1.55%
-  // 擇優發給 (通常薪資不低的話公式B會較高)
-  const avgSal = retireConfig.avgSalary60;
-  const pensionA = avgSal * totalYears * 0.00775 + 3000;
-  const pensionB = avgSal * totalYears * 0.0155;
-  const laborInsurancePension = Math.max(pensionA, pensionB); // 月領
-
-  // 2. 勞工退休金 (勞退新制)
-  // 計算未來累積本金與收益 (複利計算)
-  // 每月提撥 6% (這裡假設僅雇主提撥，若有自提可變更)
-  const monthlyContribution = retireConfig.currentSalary * 0.06;
-  const annualContribution = monthlyContribution * 12;
-  const r = retireConfig.expectedReturn / 100;
-  
-  let futureBalance = retireConfig.laborPensionBalance;
-  for (let i = 0; i < yearsToRetire; i++) {
-    futureBalance = (futureBalance + annualContribution) * (1 + r);
-  }
-
-  // 勞退新制月退金粗估（期初年金法，假設退休後餘命20年(240個月)，利率與投資相同）
-  // 簡單估算公式: PMT(r/12, 240, -futureBalance)
-  let laborPensionMonthly = 0;
-  if (futureBalance > 0) {
-    const rMonthly = r / 12;
-    if (rMonthly === 0) {
-      laborPensionMonthly = futureBalance / 240;
-    } else {
-      laborPensionMonthly = (futureBalance * rMonthly * Math.pow(1 + rMonthly, 240)) / (Math.pow(1 + rMonthly, 240) - 1);
-    }
-  }
-
-  const totalMonthlyRetirement = laborInsurancePension + laborPensionMonthly;
-
-  // 退職所得稅試算 (勞保年金免稅，僅針對勞退)
-  // 1. 一次領
-  const exemptionThreshold1 = 198000 * totalYears;
-  const exemptionThreshold2 = 398000 * totalYears;
-  let lumpSumTaxableIncome = 0;
-  if (futureBalance > exemptionThreshold2) {
-    lumpSumTaxableIncome = ((exemptionThreshold2 - exemptionThreshold1) / 2) + (futureBalance - exemptionThreshold2);
-  } else if (futureBalance > exemptionThreshold1) {
-    lumpSumTaxableIncome = (futureBalance - exemptionThreshold1) / 2;
-  }
-
-  // 2. 分次領 (每年免稅額 85.9萬元)
-  const annualAnnuityExemption = 859000;
-  let monthlyTaxableIncomeAnnual = Math.max(0, (laborPensionMonthly * 12) - annualAnnuityExemption);
+  const {
+    totalMonthlyRetirement,
+    laborInsurancePension,
+    laborPensionMonthly,
+    futureBalance,
+    totalYears,
+    currentAge,
+    yearsToRetire,
+    annualContribution,
+    exemptionThreshold1,
+    exemptionThreshold2,
+    lumpSumTaxableIncome,
+    annualAnnuityExemption,
+    monthlyTaxableIncomeAnnual
+  } = calculatedRetirement;
 
   return (
     <div className="space-y-6">
