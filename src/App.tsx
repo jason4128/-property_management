@@ -757,7 +757,7 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 px-4 md:px-0">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 px-4 md:px-0">
          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">平均月實領</p>
             <h3 className="text-3xl font-black text-slate-800">
@@ -768,6 +768,12 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">累計總收入</p>
             <h3 className="text-3xl font-black text-emerald-600">
               ${salaries.reduce((acc, s) => acc + (s.netAmount || 0), 0).toLocaleString()}
+            </h3>
+         </div>
+         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">預估月領退休金</p>
+            <h3 className="text-3xl font-black text-rose-600">
+              ${Math.round((salaries[0]?.baseSalary || 45100) * 0.0155 * (10.5 + 35) + (salaries[0]?.baseSalary || 45100) * 0.06 * 12 * 25 / 240).toLocaleString()}
             </h3>
          </div>
          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
@@ -9393,6 +9399,10 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, [isSidebarOpen]);
 
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [isLoginLoading, setIsLoginLoading] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
   // Global Summary States
   const [summary, setSummary] = useState({ banks: 0, stocks: 0, funds: 0, debt: 0, loans: 0, stockBreakdown: { total: 0, firstrade: 0, cathay: 0 } });
   const [deleteTarget, setDeleteTarget] = useState<{ type: string, id: string, name: string } | null>(null);
@@ -9576,25 +9586,82 @@ export default function App() {
     alert('API Key 已儲存');
   };
 
-  const handleLogin = async () => {
-    const provider = new GoogleAuthProvider();
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoginLoading(true);
     try {
-      await signInWithPopup(auth, provider);
+      await signInWithEmailAndPassword(auth, loginForm.email, loginForm.password);
+      setShowLoginModal(false);
+      setLoginForm({ email: '', password: '' });
     } catch (error: any) {
-      if (error.code === 'auth/popup-closed-by-user') {
-        console.warn('Login popup closed by user.');
-      } else if (error.code === 'auth/cancelled-popup-request') {
-        console.warn('Login request cancelled.');
-      } else {
-        console.error('Login Error:', error);
-        alert(`登入發生失敗：${error.message}`);
-      }
+      console.error('Email Login Error:', error);
+      let msg = '登入失敗，請檢查帳號密碼。';
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') msg = '帳號或密碼錯誤。';
+      if (error.code === 'auth/invalid-email') msg = '電子郵件格式不正確。';
+      alert(msg);
+    } finally {
+      setIsLoginLoading(false);
     }
   };
 
+  const handleLogin = () => {
+    setShowLoginModal(true);
+  };
+
   const renderContent = () => {
-    if (!user && activeTab !== 'wife-salary') return null;
-    const pageProps = { user: user || { uid: 'wife_guest_shared', email: 'guest@example.com' }, setDeleteTarget };
+    const isGuest = !user || user.email === 'guest@example.com';
+    
+    // 如果是老婆專屬頁面，不論是否登入都顯示
+    if (activeTab === 'wife-salary') {
+      const pageProps = { user: user || { uid: 'wife_guest_shared', email: 'guest@example.com' }, setDeleteTarget };
+      return <WifeSalaryPage {...pageProps} />;
+    }
+
+    // 主系統：未登入則顯示登入引導頁面
+    if (isGuest) {
+      return (
+        <div className="min-h-[80vh] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center space-y-8 max-w-lg w-full"
+          >
+            <div className="w-24 h-24 bg-indigo-600 text-white rounded-[2rem] flex items-center justify-center mx-auto shadow-2xl shadow-indigo-200">
+              <Calculator size={48} />
+            </div>
+            <div className="space-y-4">
+              <h1 className="text-5xl font-black text-slate-800 tracking-tight">財務規劃系統</h1>
+              <p className="text-slate-500 text-lg">職涯與個人財務管理工具，包含薪資、股票、基金、銀行及資產管理。</p>
+            </div>
+            <div className="pt-4">
+              <button 
+                onClick={handleLogin}
+                className="bg-indigo-600 text-white px-10 py-5 rounded-2xl font-black text-xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 hover:shadow-indigo-200 transition-all active:scale-95 flex items-center justify-center gap-3 mx-auto"
+              >
+                <LogIn size={24} />
+                立即登入系統
+              </button>
+            </div>
+            <div className="pt-12 grid grid-cols-3 gap-4 text-slate-400">
+              <div className="space-y-2">
+                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm"><ShieldCheck size={20} /></div>
+                <p className="text-[10px] font-bold uppercase tracking-widest">安全加密</p>
+              </div>
+              <div className="space-y-2">
+                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm"><BarChart3 size={20} /></div>
+                <p className="text-[10px] font-bold uppercase tracking-widest">數據分析</p>
+              </div>
+              <div className="space-y-2">
+                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm"><Coffee size={20} /></div>
+                <p className="text-[10px] font-bold uppercase tracking-widest">自動化規劃</p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      );
+    }
+
+    const pageProps = { user, setDeleteTarget };
     switch (activeTab) {
       case 'dashboard': return <DashboardPage user={user} summary={summary} />;
       case 'salary': return <SalaryPage {...pageProps} />;
@@ -9605,7 +9672,6 @@ export default function App() {
       case 'budget': return <BudgetPage {...pageProps} />;
       case 'tax': return <TaxPage {...pageProps} />;
       case 'retirement': return <RetirementPage {...pageProps} />;
-      case 'wife-salary': return <WifeSalaryPage {...pageProps} />;
       default: return <DashboardPage user={user} summary={summary} />;
     }
   };
@@ -9639,7 +9705,7 @@ export default function App() {
         </AnimatePresence>
 
         {/* Sidebar */}
-        {activeTab !== 'wife-salary' && (
+        {activeTab !== 'wife-salary' && user && user.email !== 'guest@example.com' && (
           <motion.aside 
           initial={false}
           animate={{ 
@@ -9657,7 +9723,7 @@ export default function App() {
                 <Calculator size={24} />
               </div>
               <h1 className={`text-xl font-bold ${currentTheme.text} leading-tight whitespace-nowrap`}>
-                財務管理<br/><span className={activeTheme === 'midnight' ? 'text-violet-400' : 'text-indigo-600'}>系統</span>
+                財務規劃<br/><span className={activeTheme === 'midnight' ? 'text-violet-400' : 'text-indigo-600'}>系統</span>
               </h1>
             </div>
             <button 
@@ -9752,6 +9818,70 @@ export default function App() {
         </motion.aside>
       )}
 
+        {/* Login Modal */}
+        {showLoginModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl space-y-6"
+            >
+              <div className="text-center space-y-2">
+                <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                  <ShieldCheck size={32} />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-800">系統登入</h3>
+                <p className="text-slate-500 text-sm">請輸入帳號密碼以進入規劃系統</p>
+              </div>
+
+              <form onSubmit={handleEmailLogin} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">電子郵件 / 帳號</label>
+                  <input 
+                    type="email" 
+                    required
+                    value={loginForm.email}
+                    onChange={(e) => setLoginForm({...loginForm, email: e.target.value})}
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all outline-none"
+                    placeholder="example@gmail.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1">安全密碼</label>
+                  <input 
+                    type="password" 
+                    required
+                    value={loginForm.password}
+                    onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all outline-none"
+                    placeholder="輸入密碼"
+                  />
+                </div>
+                <div className="pt-2 flex flex-col gap-3">
+                  <button 
+                    type="submit" 
+                    disabled={isLoginLoading}
+                    className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 hover:shadow-indigo-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    {isLoginLoading ? <Loader2 className="animate-spin" size={20} /> : <LogIn size={20} />}
+                    確認登入
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setShowLoginModal(false)}
+                    className="w-full text-slate-400 py-2 font-bold text-xs hover:text-slate-600"
+                  >
+                    暫時取消 / 訪客進入
+                  </button>
+                </div>
+              </form>
+              <div className="pt-4 border-t border-slate-100 italic text-[10px] text-slate-400 text-center">
+                ＊本系統採內部邀請制，請洽管理員設定帳號
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         {/* API Key Modal */}
         {isApiKeyModalOpen && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
@@ -9790,13 +9920,13 @@ export default function App() {
         {/* Main Content Area */}
         <div className={`flex-1 flex flex-col min-w-0 ${currentTheme.bg} relative transition-colors duration-500`}>
           {/* Header for mobile */}
-          {activeTab !== 'wife-salary' && (
+          {activeTab !== 'wife-salary' && user && user.email !== 'guest@example.com' && (
             <header className={`md:hidden ${activeTheme === 'midnight' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} px-4 pt-safe pb-3 flex shrink-0 items-center justify-between z-40 transition-colors`}>
               <div className="flex items-center gap-2 pt-2">
                 <div className={`w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white`}>
                   <Calculator size={18} />
                 </div>
-                <span className={`font-bold ${currentTheme.text}`}>財務管理系統</span>
+                <span className={`font-bold ${currentTheme.text}`}>財務規劃系統</span>
               </div>
               <button 
                 onClick={() => setIsSidebarOpen(true)}
@@ -9807,7 +9937,7 @@ export default function App() {
             </header>
           )}
 
-          {activeTab !== 'wife-salary' && (
+          {activeTab !== 'wife-salary' && user && user.email !== 'guest@example.com' && (
             <header className="hidden md:flex justify-between items-center p-6 pb-0 max-w-7xl mx-auto w-full">
               <div className="flex items-center gap-4">
                 {!isSidebarOpen && (
