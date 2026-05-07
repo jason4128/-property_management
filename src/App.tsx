@@ -9593,44 +9593,8 @@ export default function App() {
   };
 
   const renderContent = () => {
-    // 檢查是否為老婆薪資頁面且未登入
-    if (activeTab === 'wife-salary' && (user?.email === 'guest@example.com' || !user)) {
-      return (
-        <div className="min-h-[80vh] flex items-center justify-center p-4">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white p-8 md:p-12 rounded-[2.5rem] shadow-2xl border border-slate-100 max-w-md w-full text-center space-y-8"
-          >
-            <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto shadow-inner">
-              <Heart size={40} />
-            </div>
-            <div>
-              <h2 className="text-3xl font-black text-slate-800 mb-2">老婆請先登入</h2>
-              <p className="text-slate-500">登入後即可錄入與查看您的薪資記錄</p>
-            </div>
-            <button 
-              onClick={() => {
-                const provider = new GoogleAuthProvider();
-                signInWithPopup(auth, provider);
-              }}
-              className="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-200 text-slate-700 py-4 rounded-2xl font-bold hover:bg-slate-50 hover:border-indigo-200 transition-all group"
-            >
-              <div className="w-6 h-6 flex items-center justify-center text-rose-500 group-hover:scale-110 transition-transform">
-                <LogIn size={20} />
-              </div>
-              使用 Google 帳號登入
-            </button>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed">
-              系統採雲端同步儲存<br/>跨裝置登入即可查看歷史紀錄
-            </p>
-          </motion.div>
-        </div>
-      );
-    }
-    
-    if (!user) return null;
-    const pageProps = { user, setDeleteTarget };
+    if (!user && activeTab !== 'wife-salary') return null;
+    const pageProps = { user: user || { uid: 'wife_guest_shared', email: 'guest@example.com' }, setDeleteTarget };
     switch (activeTab) {
       case 'dashboard': return <DashboardPage user={user} summary={summary} />;
       case 'salary': return <SalaryPage {...pageProps} />;
