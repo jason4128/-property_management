@@ -95,6 +95,26 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    match /mockAccounts/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /mockPositions/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /mockTrades/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /mockWatchlists/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // For the connection test
     match /test/{id} {
       allow read: if true;

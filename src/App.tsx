@@ -92,6 +92,7 @@ import {
   PROFESSIONAL_ALLOWANCE_TABLE, 
   calculateExpectedDeductions 
 } from './salaryTable';
+import { MockTradingPage } from './components/MockTradingPage';
 
 import { auth, db } from './firebase';
 import { 
@@ -113,7 +114,8 @@ import {
   updateDoc,
   deleteField,
   getDocFromServer,
-  getDocs
+  getDocs,
+  writeBatch
 } from 'firebase/firestore';
 
 // --- Error Handling ---
@@ -3734,7 +3736,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
   const [isRefreshingDividends, setIsRefreshingDividends] = useState(false);
   const [refreshStatus, setRefreshStatus] = useState<string | null>(null);
-  const [subTab, setSubTab] = useState<'list' | 'reports'>('list');
+  const [subTab, setSubTab] = useState<'list' | 'reports' | 'mock-trading'>('list');
 
   // Portfolio Deep Analysis
   const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
@@ -4247,6 +4249,13 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
             className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${subTab === 'reports' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             分析報告歷史
+          </button>
+          <button 
+            onClick={() => setSubTab('mock-trading')}
+            className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1 ${subTab === 'mock-trading' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <TrendingUp size={16} />
+            模擬股市交易
           </button>
         </div>
       </div>
@@ -4812,8 +4821,10 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
         data={portfolioAnalysisData} 
       />
         </>
-      ) : (
+      ) : subTab === 'reports' ? (
         <PortfolioAnalysisView user={user} setDeleteTarget={setDeleteTarget} />
+      ) : (
+        <MockTradingPage user={user} />
       )}
     </div>
   );
@@ -10171,7 +10182,7 @@ export default function App() {
                   onDragEnd={(_, info) => {
                     const threshold = 100;
                     const tabsList = TABS.map(t => t.id);
-                    const currentIndex = tabsList.indexOf(activeTab);
+                    const currentIndex = tabsList.indexOf(activeTab as any);
                     
                     if (info.offset.x > threshold && currentIndex > 0) {
                       // Swipe Right -> Prev Tab

@@ -260,3 +260,51 @@ ${JSON.stringify(portfolioData)}
     throw error;
   }
 }
+
+export async function analyzeMockTrade(
+  stockSymbol: string, 
+  balance: number, 
+  tradeAmount: number, 
+  isBuy: boolean, 
+  portfolio: any[], 
+  note: string
+) {
+  try {
+    const ai = getAi();
+    if (!ai) throw new Error("API Key not found");
+
+    const prompt = `你是一位專業的量化交易與資產管理教練。
+使用者的虛擬帳戶狀況：
+- 可用餘額: ${balance}
+- 即將 ${isBuy ? '買入' : '賣出'} 股票代碼: ${stockSymbol}
+- 交易金額: ${tradeAmount}
+- 目前持股: ${JSON.stringify(portfolio)}
+- 使用者的交易筆記(理由): "${note}"
+
+請使用 Google 搜尋去查詢 "${stockSymbol} 走勢 均線 RSI MACD Yahoo Finance" 的最新財經資訊與技術線型分析。
+
+根據最新資訊，請回覆以下 JSON 格式：
+{
+  "trend": "多頭 | 空頭 | 盤整 | 尚未明朗",
+  "technicalDetails": "根據近期市場數據(如均線、KD等)，目前的技術面簡要分析",
+  "riskWarning": "資產配置與風險控管提醒（這筆交易是否佔總資金過高？產業是否太集中？）",
+  "coachComment": "對這筆交易點評(50字以內)",
+  "reasonScore": 針對使用者的「交易筆記」給予 0-100 的邏輯合理度評分 (數字)
+}
+請只回傳符合格式的 JSON。`;
+
+    const response = await withRetry(() => ai.models.generateContent({
+      model: "gemini-flash-latest",
+      contents: [{ parts: [{ text: prompt }] }],
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json"
+      }
+    }));
+
+    return tryExtractJson(response.text || "{}");
+  } catch (error) {
+    console.error("Mock Trade Analysis Error:", error);
+    throw error;
+  }
+}

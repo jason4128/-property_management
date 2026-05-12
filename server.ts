@@ -49,6 +49,18 @@ async function startServer() {
     }
   });
 
+  // Search endpoint
+  app.get("/api/stock/search/:query", async (req, res) => {
+    try {
+      let { query } = req.params;
+      const results = await yf.search(query);
+      res.json(results);
+    } catch (e) {
+      console.error(`Failed to search ${req.params.query}:`, e);
+      res.status(500).json({ error: "Search failed" });
+    }
+  });
+
   // API routes
   app.get("/api/stocks/quotes", async (req, res) => {
     try {
