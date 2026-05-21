@@ -93,6 +93,7 @@ import {
   calculateExpectedDeductions 
 } from './salaryTable';
 import { MockTradingPage } from './components/MockTradingPage';
+import { ChildcarePlanner } from './components/ChildcarePlanner';
 
 import { auth, db } from './firebase';
 import { 
@@ -7944,6 +7945,7 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
   const [salaries, setSalaries] = useState<SalaryRecord[]>([]);
   const [childRecords, setChildRecords] = useState<ChildRecord[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<'general' | 'child'>('general');
+  const [childSubTab, setChildSubTab] = useState<'planner' | 'tracker'>('planner');
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingChild, setIsAddingChild] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -8496,8 +8498,31 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
       </>
       ) : (
         <div className="space-y-8">
-          {/* 育兒核心數據概況 */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
+            <button
+              onClick={() => setChildSubTab('planner')}
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${childSubTab === 'planner' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              育兒現金流規劃
+            </button>
+            <button
+              onClick={() => setChildSubTab('tracker')}
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${childSubTab === 'tracker' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              年度記帳與預算
+            </button>
+          </div>
+
+          {childSubTab === 'planner' ? (
+            <ChildcarePlanner 
+              userHouseholdMonthlyIncome={stats.avgMonthlyIncome || 120000} 
+              wifeNormalIncome={45800} 
+              wifeBaselineExpenses={25000} 
+            />
+          ) : (
+            <div className="space-y-8">
+              {/* 育兒核心數據概況 */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm min-w-0">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">年度計劃儲存 (預計盈餘)</p>
               <p className="text-2xl font-black text-indigo-600 truncate" title={`$${(childRecords.filter(r => r.type === 'income' && r.year === selectedYear).reduce((sum, r) => sum + getYearlyEquivalent(r.budgetAmount || 0, r.frequency), 0) - childRecords.filter(r => r.type === 'expense' && r.year === selectedYear).reduce((sum, r) => sum + getYearlyEquivalent(r.budgetAmount || 0, r.frequency), 0)).toLocaleString()}`}>
@@ -8831,9 +8856,10 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                 </table>
               </div>
             </div>
-
           </div>
         </div>
+      )}
+      </div>
       )}
 
       {/* AI Chat Sidebar */}

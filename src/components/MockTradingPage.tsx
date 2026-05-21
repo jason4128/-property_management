@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, addDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, doc, getDoc, setDoc, updateDoc, writeBatch, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { analyzeMockTrade } from '../services/aiService';
 import { User } from '../types';
@@ -52,7 +52,7 @@ export const MockTradingPage = ({ user }: { user: User }) => {
 
     const qPositions = query(collection(db, 'mockPositions'), where('uid', '==', user.uid));
     const unsubscribePositions = onSnapshot(qPositions, (snapshot) => {
-      const posData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const posData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as any);
       setPositions(posData);
       
       // Initialize live prices if they exist in DB
