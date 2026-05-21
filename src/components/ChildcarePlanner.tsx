@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Baby, Calendar, Minus, Plus, Settings2, TrendingDown, TrendingUp, AlertCircle, Coins, HeartPulse, GraduationCap, School } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Baby, Calendar, Minus, Plus, Settings2, TrendingDown, TrendingUp, AlertCircle, Coins, HeartPulse, GraduationCap, School, ChevronDown, ChevronUp } from 'lucide-react';
+import { onSnapshot, collection, query, where } from 'firebase/firestore';
+import { db } from '../firebase';
+import { User, SalaryRecord, Stock } from '../types';
 
 interface StageConfig {
   id: string;
@@ -28,21 +31,64 @@ const DEFAULT_STAGES: StageConfig[] = [
   { id: '3', name: '幼兒園小班~大班', durationMonths: 48, wifeIncomeRatio: 1.0, careType: 'quasi_preschool', extraMonthlyCost: 5000 },
 ];
 
-export const ChildcarePlanner = ({ userHouseholdMonthlyIncome, wifeNormalIncome, wifeBaselineExpenses }: { userHouseholdMonthlyIncome: number, wifeNormalIncome: number, wifeBaselineExpenses: number }) => {
+export const ChildcarePlanner = ({ 
+  user, 
+  userAvgMonthlyIncome, 
+  userMonthlyExpense 
+}: { 
+  user: User, 
+  userAvgMonthlyIncome: number,
+  userMonthlyExpense: number
+}) => {
   const [stages, setStages] = useState<StageConfig[]>(DEFAULT_STAGES);
 
-  // Settings
-  const [baseIncome] = useState(userHouseholdMonthlyIncome || 120000); // Default fallback
-  const [wifeIncome] = useState(wifeNormalIncome || 45800); // Used for 80% calc
-  const [baseExpenses] = useState(wifeBaselineExpenses || 25000); 
-  const husbandIncome = baseIncome - wifeIncome;
+  // Dynamic values
+  const [wifeIncome, setWifeIncome] = useState(45800);
+  const [monthlyDividend, setMonthlyDividend] = useState(0);
+  const [wifeBaseExpenses, setWifeBaseExpenses] = useState(25000); // Editable now
+  const [isStructureOpen, setIsStructureOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user || user.email === 'guest@example.com') return;
+
+    // Fetch wife salary
+    const qWife = query(collection(db, 'wifeSalaries'), where('uid', '==', user.uid));
+    const unsubWife = onSnapshot(qWife, (snapshot) => {
+      const records = snapshot.docs.map(doc => doc.data() as SalaryRecord);
+      if (records.length > 0) {
+        const latest = records.sort((a,b) => b.date.localeCompare(a.date))[0];
+        const income = (latest.basicPay || 0) + (latest.professionalAllowance || 0) + (latest.medicalIncentive || 0) + (latest.overtimePay || 0) + (latest.yearEndBonus || 0) + (latest.performanceBonus || 0) + (latest.otherIncome || 0);
+        const deduction = (latest.civilServiceInsurance || 0) + (latest.healthInsurance || 0) + (latest.pensionFund || 0) + (latest.otherDeduction || 0) + (latest.withholdingTax || 0);
+        setWifeIncome(income - deduction);
+      }
+    });
+
+    // Fetch stocks (and possibly funds if they have expected dividend, but rely on stocks for now)
+    const qStocks = query(collection(db, 'stocks'), where('uid', '==', user.uid));
+    const unsubStocks = onSnapshot(qStocks, (snapshot) => {
+      const stocks = snapshot.docs.map(doc => doc.data() as Stock);
+      const totalDiv = stocks.reduce((sum, s) => {
+         const expected = s.expectedDividendPerShare || 0;
+         return sum + (s.shares * expected);
+      }, 0);
+      setMonthlyDividend(Math.floor(totalDiv / 12));
+    });
+
+    return () => {
+      unsubWife();
+      unsubStocks();
+    };
+  }, [user]);
+
+  const baseHouseholdIncome = userAvgMonthlyIncome + wifeIncome + monthlyDividend;
+  const totalBaseExpenses = userMonthlyExpense + wifeBaseExpenses;
 
   const getSubsidyAndCost = (careType: string) => {
     switch (careType) {
       case 'self': return { cost: 0, subsidy: 5000, label: '育兒津貼' };
-      case 'public_daycare': return { cost: 12000, subsidy: 7000, label: '公托補助' }; // approx cost 12k - 7k = 5k
-      case 'quasi_nanny': return { cost: 19000, subsidy: 13000, label: '準公共托育補助' }; // approx cost 19k - 13k = 6k
-      case 'private_nanny': return { cost: 22000, subsidy: 5000, label: '育兒津貼(無加碼)' }; //
+      case 'public_daycare': return { cost: 12000, subsidy: 7000, label: '公托補助' };
+      case 'quasi_nanny': return { cost: 19000, subsidy: 13000, label: '準公共托育補助' };
+      case 'private_nanny': return { cost: 22000, subsidy: 5000, label: '育兒津貼(無加碼)' };
       case 'public_preschool': return { cost: 1000, subsidy: 0, label: '就學繳費上限' };
       case 'non_profit_preschool': return { cost: 2000, subsidy: 0, label: '就學繳費上限' };
       case 'quasi_preschool': return { cost: 3000, subsidy: 0, label: '就學繳費上限' };
@@ -70,6 +116,13 @@ export const ChildcarePlanner = ({ userHouseholdMonthlyIncome, wifeNormalIncome,
     setStages(stages.map(s => s.id === id ? { ...s, [field]: value } : s));
   };
 
+  const formatAgeMonths = (totalMonths: number) => {
+    const years = Math.floor(totalMonths / 12);
+    const months = totalMonths % 12;
+    if (years === 0) return `${months}個月`;
+    return `${years}歲${months}個月`;
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-indigo-600 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
@@ -78,7 +131,7 @@ export const ChildcarePlanner = ({ userHouseholdMonthlyIncome, wifeNormalIncome,
         </div>
         <div className="relative z-10">
           <h2 className="text-3xl font-black mb-2">育兒長征：從出生到上學</h2>
-          <p className="text-indigo-100 max-w-xl">
+          <p className="text-indigo-100 max-w-xl mb-4">
             這裡為您規劃人生最重要的甜蜜負擔。模擬不同階段的托育選擇、老婆留職停薪對家庭現金流的影響，並自動計算最新的政府補助金。
           </p>
         </div>
@@ -89,27 +142,71 @@ export const ChildcarePlanner = ({ userHouseholdMonthlyIncome, wifeNormalIncome,
         <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4">
           <Settings2 size={18} className="text-indigo-600" /> 基礎財務設定 (每月)
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <label className="text-xs font-bold text-slate-400">目前家庭總月收</label>
-            <p className="text-xl font-bold font-mono">${baseIncome.toLocaleString()}</p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="md:col-span-2">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-bold text-slate-400">目前家庭總月收</label>
+            </div>
+            
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 cursor-pointer select-none group" onClick={() => setIsStructureOpen(!isStructureOpen)}>
+              <div className="flex items-center justify-between">
+                <p className="text-xl font-bold font-mono text-indigo-700">${baseHouseholdIncome.toLocaleString()}</p>
+                {isStructureOpen ? <ChevronUp size={18} className="text-slate-400 group-hover:text-indigo-600 transition-colors" /> : <ChevronDown size={18} className="text-slate-400 group-hover:text-indigo-600 transition-colors" />}
+              </div>
+              
+              <AnimatePresence>
+                {isStructureOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="pt-3 mt-3 border-t border-slate-200 space-y-2 text-sm font-mono text-slate-600">
+                      <div className="flex justify-between items-center">
+                        <span className="font-sans text-xs">我的月薪 (來自最新薪資)</span>
+                        <span>${Math.round(userAvgMonthlyIncome).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="font-sans text-xs">老婆月薪 (來自最新薪資)</span>
+                        <span>${Math.round(wifeIncome).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-emerald-600">
+                        <span className="font-sans text-xs">平均月配息 (來自股票預估)</span>
+                        <span>+${Math.round(monthlyDividend).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
+          
           <div>
-            <label className="text-xs font-bold text-slate-400">老婆原月薪 (影響留停津貼)</label>
-            <p className="text-xl font-bold font-mono">${wifeIncome.toLocaleString()}</p>
+            <label className="text-xs font-bold text-slate-400">我的基本開銷 (來自年度預算)</label>
+            <p className="text-xl font-bold font-mono mt-2">${Math.round(userMonthlyExpense).toLocaleString()}</p>
           </div>
           <div>
             <label className="text-xs font-bold text-slate-400">老婆基本開銷 (含個人)</label>
-            <p className="text-xl font-bold font-mono">${baseExpenses.toLocaleString()}</p>
-            <p className="text-[10px] text-slate-400">不論是否有上班的固定開銷</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-slate-400">$</span>
+              <input 
+                type="number"
+                value={wifeBaseExpenses}
+                onChange={e => setWifeBaseExpenses(Number(e.target.value))}
+                className="w-full text-xl font-bold font-mono bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-500 focus:outline-none placeholder-slate-300"
+              />
+            </div>
           </div>
         </div>
-        <div className="mt-4 p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex items-start gap-3">
+
+        <div className="mt-6 p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex items-start gap-3">
           <AlertCircle size={16} className="text-blue-500 mt-0.5 shrink-0" />
           <div className="text-sm text-blue-800">
              <p className="font-bold">單次生育補助概算 (未計入下方逐月現金流)</p>
              <p className="mt-1">
-               勞保生育給付 (2個月投保薪資)：約 <span className="font-bold text-blue-600">${(Math.min(wifeIncome, 45800) * 2).toLocaleString()}</span><br/>
+               勞保生育給付 (2個月投保薪資)：約 <span className="font-bold text-blue-600">${(Math.min(wifeIncome, 45800) * 2).toLocaleString()}</span>，最高級距為 45,800 元<br/>
                縣市生育津貼 (以高雄首胎為例)：<span className="font-bold text-blue-600">$30,000</span>
              </p>
           </div>
@@ -117,16 +214,22 @@ export const ChildcarePlanner = ({ userHouseholdMonthlyIncome, wifeNormalIncome,
       </div>
 
       <div className="space-y-4">
-        {stages.map((stage, index) => {
-          const { cost, subsidy, label } = getSubsidyAndCost(stage.careType);
-          const currentWifeIncome = wifeIncome * stage.wifeIncomeRatio;
-          const currentHouseholdIncome = husbandIncome + currentWifeIncome;
+        {stages.reduce((acc, stage, index) => {
+          // Calculate cumulative months BEFORE this stage
+          const previousMonths = acc.accumulatedMonths;
+          const currentMonths = previousMonths + stage.durationMonths;
           
-          const stageNetCashflow = currentHouseholdIncome - cost + subsidy - stage.extraMonthlyCost - baseExpenses;
-          const normalNetCashflow = baseIncome - baseExpenses; // Without child
+          let { cost, subsidy, label } = getSubsidyAndCost(stage.careType);
+          
+          // Calculate max allowed income for subsidy if she takes leave (capped at 45800 according to Labor Insurance rules)
+          const leaveIncome = (stage.wifeIncomeRatio < 1 && stage.wifeIncomeRatio > 0) ? Math.min(wifeIncome, 45800) * stage.wifeIncomeRatio : wifeIncome * stage.wifeIncomeRatio;
+          const currentHouseholdIncome = userAvgMonthlyIncome + leaveIncome + monthlyDividend;
+          
+          const stageNetCashflow = currentHouseholdIncome - cost + subsidy - stage.extraMonthlyCost - totalBaseExpenses;
+          const normalNetCashflow = baseHouseholdIncome - totalBaseExpenses; // Without child
           const impact = stageNetCashflow - normalNetCashflow;
 
-          return (
+          acc.elements.push(
             <motion.div 
               key={stage.id}
               initial={{ opacity: 0, y: 10 }}
@@ -135,7 +238,7 @@ export const ChildcarePlanner = ({ userHouseholdMonthlyIncome, wifeNormalIncome,
             >
               <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black">
+                  <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black shrink-0">
                     {index + 1}
                   </div>
                   <div>
@@ -143,11 +246,14 @@ export const ChildcarePlanner = ({ userHouseholdMonthlyIncome, wifeNormalIncome,
                       type="text" 
                       value={stage.name}
                       onChange={(e) => updateStage(stage.id, 'name', e.target.value)}
-                      className="font-bold text-slate-800 bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-500 focus:outline-none"
+                      className="font-bold text-slate-800 bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-500 focus:outline-none truncate max-w-[200px] md:max-w-none"
                     />
+                    <div className="text-xs text-indigo-500 font-bold mt-1">
+                      小孩歲數: {formatAgeMonths(previousMonths)} ~ {formatAgeMonths(currentMonths)}
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0 border-l border-slate-200 pl-4">
                   <select 
                     value={stage.durationMonths}
                     onChange={(e) => updateStage(stage.id, 'durationMonths', Number(e.target.value))}
@@ -168,16 +274,16 @@ export const ChildcarePlanner = ({ userHouseholdMonthlyIncome, wifeNormalIncome,
                   <div>
                     <label className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
                       <HeartPulse size={14} className="text-rose-500" />
-                      老婆工作狀態 (收入比率)
+                      老婆工作狀態 (收入金額)
                     </label>
                     <select 
                       value={stage.wifeIncomeRatio}
                       onChange={e => updateStage(stage.id, 'wifeIncomeRatio', Number(e.target.value))}
                       className="mt-1 w-full p-2 border border-slate-200 rounded-lg bg-slate-50 font-medium"
                     >
-                      <option value={1}>全職上班 (100% 薪資)</option>
-                      <option value={0.8}>育嬰留職停薪 (領8成薪津貼)</option>
-                      <option value={0}>無收入 (全職媽媽/津貼結束)</option>
+                      <option value={1}>全職上班 (100% 薪資: ${Math.round(wifeIncome).toLocaleString()})</option>
+                      <option value={0.8}>育嬰留職停薪 (領8成津貼最高級距: ${Math.round(Math.min(wifeIncome, 45800) * 0.8).toLocaleString()})</option>
+                      <option value={0}>無收入 (全職媽媽/津貼已結束: $0)</option>
                     </select>
                   </div>
                   
@@ -213,17 +319,17 @@ export const ChildcarePlanner = ({ userHouseholdMonthlyIncome, wifeNormalIncome,
 
                 {/* Cashflow Display */}
                 <div className="md:col-span-7 bg-slate-50 rounded-xl p-5 border border-slate-100 flex flex-col justify-center">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-200 pb-2">本階段每月現金流變化</h4>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-200 pb-2">本階段每月家庭現金流變化</h4>
                   
                   <div className="space-y-3 font-mono text-sm">
                     <div className="flex justify-between items-center text-slate-600">
-                      <span>家庭月收 (含津貼)</span>
-                      <span className="font-bold">${currentHouseholdIncome.toLocaleString()}</span>
+                      <span>家庭總月收 (含配息+老婆津貼/薪資)</span>
+                      <span className="font-bold">${Math.round(currentHouseholdIncome).toLocaleString()}</span>
                     </div>
                     
                     <div className="flex justify-between items-center text-slate-600 group relative">
                       <span className="flex items-center gap-1">
-                        托育花費 <span className="text-[10px] bg-slate-200 px-1 py-0.5 rounded ml-1">自填估計</span>
+                        托育花費 <span className="text-[10px] bg-slate-200 px-1 py-0.5 rounded ml-1 font-sans">自填估計</span>
                       </span>
                       <span className="text-rose-500">-${cost.toLocaleString()}</span>
                     </div>
@@ -231,15 +337,15 @@ export const ChildcarePlanner = ({ userHouseholdMonthlyIncome, wifeNormalIncome,
                     {subsidy > 0 && (
                       <div className="flex justify-between items-center text-emerald-600 bg-emerald-50 p-1 -mx-1 rounded">
                         <span className="flex items-center gap-1">
-                           政府補助 <span className="text-[10px] bg-emerald-100 px-1 py-0.5 rounded ml-1">{label}</span>
+                           政府津貼/補助 <span className="text-[10px] bg-emerald-100 px-1 py-0.5 rounded ml-1 font-sans">{label}</span>
                         </span>
                         <span>+${subsidy.toLocaleString()}</span>
                       </div>
                     )}
 
                     <div className="flex justify-between items-center text-slate-600">
-                      <span>嬰兒雜支與老婆生活費</span>
-                      <span className="text-rose-500">-${(stage.extraMonthlyCost + baseExpenses).toLocaleString()}</span>
+                      <span>嬰兒雜支與兩人基本生活費</span>
+                      <span className="text-rose-500">-${Math.round(stage.extraMonthlyCost + totalBaseExpenses).toLocaleString()}</span>
                     </div>
 
                     <div className="h-px bg-slate-200 my-2" />
@@ -250,11 +356,11 @@ export const ChildcarePlanner = ({ userHouseholdMonthlyIncome, wifeNormalIncome,
                       </div>
                       <div className="text-right">
                         <p className={`text-2xl font-black ${stageNetCashflow >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
-                          ${stageNetCashflow.toLocaleString()}
+                          ${Math.round(stageNetCashflow).toLocaleString()}
                         </p>
                         <p className="text-xs text-slate-400 font-sans mt-0.5">
                           比起生小孩前: <span className={impact > 0 ? 'text-emerald-500' : 'text-rose-500'}>
-                            {impact > 0 ? '+' : ''}{impact.toLocaleString()}
+                            {impact > 0 ? '+' : ''}{Math.round(impact).toLocaleString()}
                           </span>
                         </p>
                       </div>
@@ -265,7 +371,10 @@ export const ChildcarePlanner = ({ userHouseholdMonthlyIncome, wifeNormalIncome,
               </div>
             </motion.div>
           );
-        })}
+          
+          acc.accumulatedMonths = currentMonths;
+          return acc;
+        }, { elements: [] as React.ReactNode[], accumulatedMonths: 0 }).elements}
       </div>
 
       <button onClick={addStage} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-2xl text-slate-500 font-bold hover:bg-slate-50 hover:border-indigo-300 hover:text-indigo-600 transition-all flex items-center justify-center gap-2">
@@ -275,3 +384,4 @@ export const ChildcarePlanner = ({ userHouseholdMonthlyIncome, wifeNormalIncome,
     </div>
   );
 };
+

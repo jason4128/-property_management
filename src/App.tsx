@@ -8515,9 +8515,9 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
 
           {childSubTab === 'planner' ? (
             <ChildcarePlanner 
-              userHouseholdMonthlyIncome={stats.avgMonthlyIncome || 120000} 
-              wifeNormalIncome={45800} 
-              wifeBaselineExpenses={25000} 
+              user={user}
+              userAvgMonthlyIncome={stats.avgMonthlyIncome || 0}
+              userMonthlyExpense={stats.monthlyExpense || 0}
             />
           ) : (
             <div className="space-y-8">
