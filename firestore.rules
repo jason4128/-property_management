@@ -115,6 +115,11 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    match /userConfigs/{id} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // For the connection test
     match /test/{id} {
       allow read: if true;

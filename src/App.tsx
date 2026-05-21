@@ -671,15 +671,8 @@ const calculateWifeRetirementLogic = (config: any) => {
   };
 };
 
-const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
-  const [activeTab, setActiveTab] = useState<'salary' | 'retirement'>('salary');
-  const [salaries, setSalaries] = useState<any[]>([]);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [copyStatus, setCopyStatus] = useState(false);
-
-  // 退休金參數狀態提升
-  const [retireConfig, setRetireConfig] = useState({
+const useWifeRetireConfig = (user: User) => {
+  const [retireConfig, setRetireConfigState] = useState({
     birthDate: '1989-01-07',
     retirementAge: 65,
     accumulatedYears: 10.5, 
@@ -688,6 +681,41 @@ const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget
     currentSalary: 45800, 
     expectedReturn: 6.36, 
   });
+
+  useEffect(() => {
+    if (!user || user.email === 'guest@example.com') return;
+    const unsub = onSnapshot(doc(db, 'userConfigs', user.uid), (docSnap) => {
+      if (docSnap.exists() && docSnap.data().wifeRetireConfig) {
+        setRetireConfigState(prev => ({ ...prev, ...docSnap.data().wifeRetireConfig }));
+      }
+    });
+    return () => unsub();
+  }, [user]);
+
+  const setRetireConfig = (newConfigOrUpdater: any) => {
+    setRetireConfigState(prev => {
+      const updatedConfig = typeof newConfigOrUpdater === 'function' ? newConfigOrUpdater(prev) : newConfigOrUpdater;
+      
+      if (user && user.email !== 'guest@example.com') {
+        setDoc(doc(db, 'userConfigs', user.uid), { wifeRetireConfig: updatedConfig }, { merge: true })
+        .catch(err => console.error("Error updating retire config:", err));
+      }
+      return updatedConfig;
+    });
+  };
+
+  return [retireConfig, setRetireConfig] as const;
+};
+
+const WifeSalaryPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
+  const [activeTab, setActiveTab] = useState<'salary' | 'retirement'>('salary');
+  const [salaries, setSalaries] = useState<any[]>([]);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState(false);
+
+  // 退休金參數狀態提升
+  const [retireConfig, setRetireConfig] = useWifeRetireConfig(user);
 
   const calculatedRetirement = calculateWifeRetirementLogic(retireConfig);
   const { totalMonthlyRetirement } = calculatedRetirement;
@@ -9295,15 +9323,7 @@ const WifeRetirementTab = ({
   calculatedRetirement?: any
 }) => {
   // 內部狀態作為回退（針對從 RetirementPage 獨立進入的情況）
-  const [internalConfig, setInternalConfig] = useState({
-    birthDate: '1989-01-07',
-    retirementAge: 65,
-    accumulatedYears: 10.5, 
-    avgSalary60: 45800, 
-    laborPensionBalance: 300000, 
-    currentSalary: 45800, 
-    expectedReturn: 6.36, 
-  });
+  const [internalConfig, setInternalConfig] = useWifeRetireConfig(user);
 
   const retireConfig = propConfig || internalConfig;
   const setRetireConfig = propSetRetireConfig || setInternalConfig;
