@@ -115,7 +115,8 @@ import {
   deleteField,
   getDocFromServer,
   getDocs,
-  writeBatch
+  writeBatch,
+  setDoc
 } from 'firebase/firestore';
 
 // --- Error Handling ---
