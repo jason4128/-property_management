@@ -4124,76 +4124,105 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       setHistoryData([]);
       setDividendData([]);
 
-      try {
-        const sym = selectedStock.symbol.trim();
-        let finalChartRes: { meta?: any, quotes?: any[] } | null = null;
-        let finalDivRes: any = null;
+      const sym = selectedStock.symbol.trim();
+      let quotes: any[] = [];
+      let meta: any = {};
+      let finalDivRes: any = null;
 
+      // 1. Fetch stock history (parallel)
+      const fetchHistoryPromise = (async () => {
         try {
-          const cRes = await fetch(`/api/stock/history/${encodeURIComponent(sym)}`);
-          if (cRes.ok) {
-            const quotes = await cRes.json();
-            finalChartRes = { quotes };
-             
-            const qRes = await fetch(`/api/stock/${encodeURIComponent(sym)}`);
-            if (qRes.ok) finalChartRes.meta = await qRes.json();
-
-            const dRes = await fetch(`/api/stock/dividends/${encodeURIComponent(sym)}`);
-            if (dRes.ok) {
-              const { events, meta } = await dRes.json();
-              if (finalChartRes.meta) finalChartRes.meta = { ...finalChartRes.meta, ...meta };
-              else finalChartRes.meta = meta;
-              if (events && events.dividends) finalDivRes = events.dividends;
+          const res = await fetch(`/api/stock/history/${encodeURIComponent(sym)}`);
+          if (res.ok) {
+            const data = await res.ok ? await res.json() : [];
+            if (Array.isArray(data)) {
+              quotes = data;
+              const hist = data.map((q: any) => ({
+                date: new Date(q.date).getTime(),
+                close: q.close
+              })).filter((h: any) => h.close !== null && h.close !== undefined).sort((a: any, b: any) => a.date - b.date);
+              setHistoryData(hist);
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error("Stock history fetch failed:", e);
+        }
+      })();
 
-        if (finalChartRes && finalChartRes.quotes && finalChartRes.quotes.length > 0) {
-          const meta = finalChartRes.meta || {};
-          const quotes = finalChartRes.quotes;
-          
-          let lastValidClose = quotes[quotes.length - 1]?.close ?? meta.regularMarketPrice;
-          let changePercent = 0;
-          let openPrice = quotes[quotes.length - 1]?.open ?? null;
-
-          if (quotes.length >= 2) {
-             const prevClose = quotes[quotes.length - 2]?.close;
-             if (prevClose && prevClose > 0) {
-               changePercent = ((lastValidClose - prevClose) / prevClose) * 100;
-             }
+      // 2. Fetch stock current quote (parallel)
+      const fetchQuotePromise = (async () => {
+        try {
+          const res = await fetch(`/api/stock/${encodeURIComponent(sym)}`);
+          if (res.ok) {
+            meta = await res.json();
           }
+        } catch (e) {
+          console.error("Stock quote fetch failed:", e);
+        }
+      })();
 
-          setStockData({
-            regularMarketPrice: lastValidClose,
-            currency: meta.currency || 'TWD',
-            regularMarketChangePercent: changePercent,
-            regularMarketOpen: openPrice,
-            regularMarketDayHigh: quotes[quotes.length - 1]?.high || null,
-            regularMarketDayLow: quotes[quotes.length - 1]?.low || null,
-          });
+      // 3. Fetch stock dividends (parallel)
+      const fetchDividendsPromise = (async () => {
+        try {
+          const res = await fetch(`/api/stock/dividends/${encodeURIComponent(sym)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.meta) {
+              meta = { ...meta, ...data.meta };
+            }
+            if (data && data.events && data.events.dividends) {
+              finalDivRes = data.events.dividends;
+            }
+          }
+        } catch (e) {
+          console.error("Stock dividends fetch failed:", e);
+        }
+      })();
 
-          const hist = quotes.map((q: any) => ({
-            date: new Date(q.date).getTime(),
-            close: q.close
-          })).filter((h: any) => h.close !== null && h.close !== undefined).sort((a: any, b: any) => a.date - b.date);
-          setHistoryData(hist);
+      // Wait for all fetches to resolve (even if any of them fails, we catch inside)
+      try {
+        await Promise.all([fetchHistoryPromise, fetchQuotePromise, fetchDividendsPromise]);
+        
+        // Calculate price and metrics based on what is available
+        const lastValidClose = quotes.length > 0 
+          ? (quotes[quotes.length - 1]?.close ?? (meta.regularMarketPrice ?? selectedStock.currentPrice ?? 0))
+          : (meta.regularMarketPrice ?? selectedStock.currentPrice ?? 0);
 
-          if (finalDivRes && typeof finalDivRes === 'object') {
-            const divArray = Object.values(finalDivRes)
-              .filter((d: any) => d && typeof d === 'object' && d.date && d.amount !== undefined)
-              .map((d: any) => {
-                let parsedDate = typeof d.date === 'string' ? new Date(d.date).getTime() : (d.date > 1e11 ? d.date : d.date * 1000);
-                return {
-                  date: parsedDate,
-                  amount: d.amount
-                };
-              })
-              .sort((a, b) => b.date - a.date);
-            setDividendData(divArray);
+        let changePercent = meta.regularMarketChangePercent ?? 0;
+        let openPrice = quotes.length > 0 ? (quotes[quotes.length - 1]?.open ?? meta.regularMarketOpen ?? null) : (meta.regularMarketOpen ?? null);
+
+        if (quotes.length >= 2) {
+          const prevClose = quotes[quotes.length - 2]?.close;
+          if (prevClose && prevClose > 0) {
+            changePercent = ((lastValidClose - prevClose) / prevClose) * 100;
           }
         }
+
+        setStockData({
+          regularMarketPrice: lastValidClose,
+          currency: meta.currency || 'TWD',
+          regularMarketChangePercent: changePercent,
+          regularMarketOpen: openPrice,
+          regularMarketDayHigh: quotes.length > 0 ? (quotes[quotes.length - 1]?.high ?? meta.regularMarketDayHigh ?? null) : (meta.regularMarketDayHigh ?? null),
+          regularMarketDayLow: quotes.length > 0 ? (quotes[quotes.length - 1]?.low ?? meta.regularMarketDayLow ?? null) : (meta.regularMarketDayLow ?? null),
+        });
+
+        // Parse dividends
+        if (finalDivRes && typeof finalDivRes === 'object') {
+          const divArray = Object.values(finalDivRes)
+            .filter((d: any) => d && typeof d === 'object' && d.date && d.amount !== undefined)
+            .map((d: any) => {
+              let parsedDate = typeof d.date === 'string' ? new Date(d.date).getTime() : (d.date > 1e11 ? d.date : d.date * 1000);
+              return {
+                date: parsedDate,
+                amount: d.amount
+              };
+            })
+            .sort((a, b) => b.date - a.date);
+          setDividendData(divArray);
+        }
       } catch (err) {
-        console.error('Stock detail fetch error:', err);
+        console.error('Stock detail calculations failed:', err);
       } finally {
         setIsFetchingData(false);
       }

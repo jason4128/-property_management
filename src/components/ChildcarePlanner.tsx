@@ -49,12 +49,25 @@ export const ChildcarePlanner = ({
   const [isStructureOpen, setIsStructureOpen] = useState(false);
 
   useEffect(() => {
-    if (!user || user.email === 'guest@example.com') return;
+    if (!user) return;
+
+    const getAppTargetUidsLocal = (u: any) => {
+      return [
+        'default-user', 
+        'local_default_user', 
+        'guest-user', 
+        'guest', 
+        u?.uid
+      ].filter(Boolean);
+    };
+
+    const targetUids = getAppTargetUidsLocal(user);
 
     // Fetch wife salary
-    const qWife = query(collection(db, 'wifeSalaries'), where('uid', '==', user.uid));
+    const qWife = query(collection(db, 'wifeSalaries'));
     const unsubWife = onSnapshot(qWife, (snapshot) => {
-      const records = snapshot.docs.map(doc => doc.data() as any);
+      const allWife = snapshot.docs.map(doc => doc.data() as any);
+      const records = allWife.filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       if (records.length > 0) {
         const latest = records.sort((a,b) => b.date.localeCompare(a.date))[0];
         // For wife, the fields are actualSalary, bonus, otherDeductions, healthIns, laborIns, laborPension
@@ -65,9 +78,10 @@ export const ChildcarePlanner = ({
     });
 
     // Fetch stocks (and possibly funds if they have expected dividend, but rely on stocks for now)
-    const qStocks = query(collection(db, 'stocks'), where('uid', '==', user.uid));
+    const qStocks = query(collection(db, 'stocks'));
     const unsubStocks = onSnapshot(qStocks, (snapshot) => {
-      const stocks = snapshot.docs.map(doc => doc.data() as Stock);
+      const allStocks = snapshot.docs.map(doc => doc.data() as Stock);
+      const stocks = allStocks.filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
       const totalDiv = stocks.reduce((sum, s) => {
          const isUsd = s.source === 'Firstrade';
          const expected = s.expectedDividendPerShare || 0;
