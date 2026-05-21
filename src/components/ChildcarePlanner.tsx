@@ -54,11 +54,12 @@ export const ChildcarePlanner = ({
     // Fetch wife salary
     const qWife = query(collection(db, 'wifeSalaries'), where('uid', '==', user.uid));
     const unsubWife = onSnapshot(qWife, (snapshot) => {
-      const records = snapshot.docs.map(doc => doc.data() as SalaryRecord);
+      const records = snapshot.docs.map(doc => doc.data() as any);
       if (records.length > 0) {
         const latest = records.sort((a,b) => b.date.localeCompare(a.date))[0];
-        const income = (latest.basicPay || 0) + (latest.professionalAllowance || 0) + (latest.medicalIncentive || 0) + (latest.overtimePay || 0) + (latest.yearEndBonus || 0) + (latest.performanceBonus || 0) + (latest.otherIncome || 0);
-        const deduction = (latest.civilServiceInsurance || 0) + (latest.healthInsurance || 0) + (latest.pensionFund || 0) + (latest.otherDeduction || 0) + (latest.withholdingTax || 0);
+        // For wife, the fields are actualSalary, bonus, otherDeductions, healthIns, laborIns, laborPension
+        const income = Number(latest.actualSalary || latest.baseSalary || 0) + Number(latest.bonus || 0);
+        const deduction = Number(latest.laborIns || 0) + Number(latest.healthIns || 0) + Number(latest.laborPension || 0) + Number(latest.otherDeductions || 0);
         setWifeIncome(income - deduction);
       }
     });
@@ -68,8 +69,11 @@ export const ChildcarePlanner = ({
     const unsubStocks = onSnapshot(qStocks, (snapshot) => {
       const stocks = snapshot.docs.map(doc => doc.data() as Stock);
       const totalDiv = stocks.reduce((sum, s) => {
+         const isUsd = s.source === 'Firstrade';
          const expected = s.expectedDividendPerShare || 0;
-         return sum + (s.shares * expected);
+         const dividend = s.shares * expected;
+         const dividendTWD = isUsd ? dividend * 32 : dividend; // assuming usdRate = 32
+         return sum + dividendTWD;
       }, 0);
       setMonthlyDividend(Math.floor(totalDiv / 12));
     });
