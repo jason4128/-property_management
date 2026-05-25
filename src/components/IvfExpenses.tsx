@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, addDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
+import { collection, query, addDoc, deleteDoc, doc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Plus, Trash2, Scan, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Plus, Trash2, Scan, Loader2, Image as ImageIcon, ChevronDown, ChevronUp } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
 
 interface IvfRecord {
@@ -10,6 +10,7 @@ interface IvfRecord {
   date: string;
   item: string;
   amount: number;
+  details?: { name: string, amount: number }[];
 }
 
 const getAppTargetUidsLocal = (user: any) => {
@@ -28,10 +29,12 @@ const getAppTargetUidsLocal = (user: any) => {
 export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setDeleteTarget?: (t: any) => void }) {
   const [records, setRecords] = useState<IvfRecord[]>([]);
   const [isScanning, setIsScanning] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [item, setItem] = useState('');
   const [amount, setAmount] = useState<number | ''>('');
+  const [details, setDetails] = useState<{name: string, amount: number}[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -56,10 +59,12 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
         uid: user.uid,
         date,
         item,
-        amount: Number(amount)
+        amount: Number(amount),
+        details
       });
       setItem('');
       setAmount('');
+      setDetails([]);
     } catch (error) {
       console.error('Error adding record:', error);
       alert('新增失敗');
@@ -94,11 +99,15 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
       const base64Data = await base64Promise;
 
       const ai = new GoogleGenAI({ apiKey });
-      const prompt = `這是一張醫療費用收據（可能是試管嬰兒、醫美等，也可能是 PDF 文件）。請分析內容並萃取：
-1. 日期 (date, YYYY-MM-DD 格式，如果是民國年請換算回西元年，格式必為 YYYY-MM-DD，若找不到用今天的日期)
-2. 項目 (item, 如自費藥品費、掛號費、處置費等，如果是多項請用逗號分隔合併為一行，或直接列出主要項目，如果是安田婦產科診所之類的收據，請簡單總結)
-3. 總金額 (amount, 數字，請找合計金額)
-找不到的項目請合理推斷或填空。`;
+      const prompt = `這是一份醫療費用收據文件（可能是單張圖片，也可能是多頁 PDF）。
+請分析內容，如果有多張不同日期的收據，請分別萃取每一張；如果是同一張但有多頁，請合併。
+請回傳一個陣列 (Array)，每個元素代表一張獨立收據，包含：
+1. 日期 (date, YYYY-MM-DD 格式，民國年請換算西元年)
+2. 項目 (item, 收據主要內容摘要，如：安田婦產科、自費藥品、取卵手術)
+3. 總金額 (amount, 該收據合計數字)
+4. 明細 (details, 陣列，包含 name (項目名稱) 與 amount (項目金額))
+
+注意：如果有多頁，每一頁如果是獨立的收據，請分成不同的項目；如果是一張收據有多張圖片請合併成一個項目。`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -114,23 +123,57 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
         config: {
           responseMimeType: "application/json",
           responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              date: { type: Type.STRING },
-              item: { type: Type.STRING },
-              amount: { type: Type.NUMBER }
-            },
-            required: ['date', 'item', 'amount']
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                date: { type: Type.STRING },
+                item: { type: Type.STRING },
+                amount: { type: Type.NUMBER },
+                details: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      name: { type: Type.STRING },
+                      amount: { type: Type.NUMBER }
+                    }
+                  }
+                }
+              },
+              required: ['date', 'item', 'amount']
+            }
           }
         }
       });
 
       const textRes = response.text;
       if (textRes) {
-        const result = JSON.parse(textRes);
-        if (result.date) setDate(result.date);
-        if (result.item) setItem(result.item);
-        if (result.amount !== undefined) setAmount(result.amount);
+        const textToParse = textRes.replace(/```json/g, '').replace(/```/g, '').trim();
+        const results = JSON.parse(textToParse);
+        const parsedArray = Array.isArray(results) ? results : [results];
+
+        if (parsedArray.length === 1) {
+          const res = parsedArray[0];
+          if (res.date) setDate(res.date);
+          if (res.item) setItem(res.item);
+          if (res.amount !== undefined) setAmount(res.amount);
+          if (res.details) setDetails(res.details);
+        } else if (parsedArray.length > 1) {
+          const batch = writeBatch(db);
+          for (const res of parsedArray) {
+            const docRef = doc(collection(db, 'ivfExpenses'));
+            batch.set(docRef, {
+              uid: user.uid,
+              date: res.date || new Date().toISOString().split('T')[0],
+              item: res.item || '掃描收據',
+              amount: Number(res.amount) || 0,
+              details: res.details || []
+            });
+          }
+          await batch.commit();
+          alert(`已自動成功新增 ${parsedArray.length} 筆收據紀錄！`);
+        }
       }
     } catch (error) {
       console.error("AI scanning error:", error);
@@ -189,22 +232,41 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
               </div>
             ) : (
               records.map(record => (
-                <div key={record.id} className="group flex justify-between items-center p-4 bg-white rounded-xl shadow-sm border border-slate-100/50 hover:shadow-md transition-shadow">
-                  <div className="flex-1 min-w-0 pr-4">
-                    <div className="flex items-baseline gap-2 mb-1">
-                      <span className="font-bold text-slate-700 truncate">{record.item}</span>
+                <div key={record.id} className="group flex flex-col p-4 bg-white rounded-xl shadow-sm border border-slate-100/50 hover:shadow-md transition-shadow">
+                  <div 
+                    className={`flex justify-between items-center ${record.details && record.details.length > 0 ? 'cursor-pointer' : ''}`}
+                    onClick={() => record.details && record.details.length > 0 && setExpandedId(expandedId === record.id ? null : record.id)}
+                  >
+                    <div className="flex-1 min-w-0 pr-4">
+                      <div className="flex items-baseline gap-2 mb-1">
+                        <span className="font-bold text-slate-700 truncate">{record.item}</span>
+                        {record.details && record.details.length > 0 && (
+                          expandedId === record.id ? <ChevronUp size={16} className="text-slate-400 shrink-0"/> : <ChevronDown size={16} className="text-slate-400 shrink-0"/>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500 font-mono">{record.date}</div>
                     </div>
-                    <div className="text-xs text-slate-500 font-mono">{record.date}</div>
+                    <div className="flex items-center gap-4 shrink-0">
+                      <span className="font-black text-lg text-rose-600">${record.amount.toLocaleString()}</span>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleDelete(record.id); }}
+                        className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-4 shrink-0">
-                    <span className="font-black text-lg text-rose-600">${record.amount.toLocaleString()}</span>
-                    <button 
-                      onClick={() => handleDelete(record.id)}
-                      className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+                  
+                  {expandedId === record.id && record.details && record.details.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+                       {record.details.map((detail, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-sm">
+                             <span className="text-slate-600">{detail.name}</span>
+                             <span className="text-slate-800 font-mono">${detail.amount.toLocaleString()}</span>
+                          </div>
+                       ))}
+                    </div>
+                  )}
                 </div>
               ))
             )}
@@ -235,7 +297,7 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
                 <><Scan size={20} /> 掃描上傳收據</>
               )}
             </button>
-            <p className="text-[11px] text-indigo-400 mt-2 font-medium">支援截圖後直接使用 Ctrl+V / Cmd+V 貼上圖片</p>
+            <p className="text-[11px] text-indigo-400 mt-2 font-medium">支援截圖後直接使用 Ctrl+V / Cmd+V 貼上圖片 (或上傳多頁 PDF)</p>
           </div>
 
           <div className="space-y-4">
@@ -288,3 +350,4 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
     </div>
   );
 }
+
