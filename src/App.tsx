@@ -67,7 +67,7 @@ import {
 import { GoogleGenAI, Type } from "@google/genai";
 import Markdown from 'react-markdown';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
-import { TABS, TabId } from './constants';
+import { TABS, TabId, getApiUrl } from './constants';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid, AreaChart, Area, BarChart, Bar, Cell as RechartsCell } from 'recharts';
 import { 
   SalaryRecord, 
@@ -3133,7 +3133,7 @@ const BankPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (tar
       let text = aiAnalysisText;
 
       if (aiMode === 'url') {
-        const scrapeResp = await fetch('/api/scrape-url', {
+        const scrapeResp = await fetch(getApiUrl('/api/scrape-url'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: aiAnalysisUrl })
@@ -3831,7 +3831,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
 
             let price = null;
             try {
-              const res = await fetch(`/api/stock/${encodeURIComponent(sym)}`);
+              const res = await fetch(getApiUrl(`/api/stock/${encodeURIComponent(sym)}`));
               if (res.ok) {
                 const data = await res.json();
                 if (data && data.regularMarketPrice) {
@@ -3878,9 +3878,9 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
         let quote = null;
 
         try {
-          const qRes = await fetch(`/api/stock/${encodeURIComponent(sym)}`);
+          const qRes = await fetch(getApiUrl(`/api/stock/${encodeURIComponent(sym)}`));
           if (qRes.ok) quote = await qRes.json();
-          const cRes = await fetch(`/api/stock/dividends/${encodeURIComponent(sym)}`);
+          const cRes = await fetch(getApiUrl(`/api/stock/dividends/${encodeURIComponent(sym)}`));
           if (cRes.ok) chartData = await cRes.json();
         } catch (e) {
              console.error(`Failed fetching dividends API for ${sym}`, e);
@@ -4133,7 +4133,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       // 1. Fetch stock history (parallel)
       const fetchHistoryPromise = (async () => {
         try {
-          const res = await fetch(`/api/stock/history/${encodeURIComponent(sym)}`);
+          const res = await fetch(getApiUrl(`/api/stock/history/${encodeURIComponent(sym)}`));
           if (res.ok) {
             const data = await res.ok ? await res.json() : [];
             if (Array.isArray(data)) {
@@ -4153,7 +4153,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       // 2. Fetch stock current quote (parallel)
       const fetchQuotePromise = (async () => {
         try {
-          const res = await fetch(`/api/stock/${encodeURIComponent(sym)}`);
+          const res = await fetch(getApiUrl(`/api/stock/${encodeURIComponent(sym)}`));
           if (res.ok) {
             meta = await res.json();
           }
@@ -4165,7 +4165,7 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       // 3. Fetch stock dividends (parallel)
       const fetchDividendsPromise = (async () => {
         try {
-          const res = await fetch(`/api/stock/dividends/${encodeURIComponent(sym)}`);
+          const res = await fetch(getApiUrl(`/api/stock/dividends/${encodeURIComponent(sym)}`));
           if (res.ok) {
             const data = await res.json();
             if (data && data.meta) {
@@ -8124,7 +8124,7 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
     const urlMatch = inspectorText.match(/https?:\/\/[^\s]+/);
     if (urlMatch) {
       try {
-        const res = await fetch('/api/scrape-url', {
+        const res = await fetch(getApiUrl('/api/scrape-url'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: urlMatch[0] })

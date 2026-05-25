@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot, addDoc, doc, getDoc, setDoc, upda
 import { db } from '../firebase';
 import { analyzeMockTrade } from '../services/aiService';
 import { User } from '../types';
+import { getApiUrl } from '../constants';
 import { Brain, TrendingUp, AlertCircle, TrendingDown, Clock, Search, BookOpen, Calculator, RefreshCw, Star, Info, X, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
@@ -95,8 +96,8 @@ export const MockTradingPage = ({ user }: { user: User }) => {
       setIsLoadingInfo(true);
       try {
         const [infoRes, histRes] = await Promise.all([
-          fetch(`/api/stock/${encodeURIComponent(symbol)}`),
-          fetch(`/api/stock/history/${encodeURIComponent(symbol)}`)
+          fetch(getApiUrl(`/api/stock/${encodeURIComponent(symbol)}`)),
+          fetch(getApiUrl(`/api/stock/history/${encodeURIComponent(symbol)}`))
         ]);
         
         let infoData = null;
@@ -142,7 +143,7 @@ export const MockTradingPage = ({ user }: { user: User }) => {
       }
       setIsSearching(true);
       try {
-        const res = await fetch(`/api/stock/search/${encodeURIComponent(newWatchlistSymbol)}`);
+        const res = await fetch(getApiUrl(`/api/stock/search/${encodeURIComponent(newWatchlistSymbol)}`));
         if (res.ok) {
           const data = await res.json();
           if (active && data.quotes) {
@@ -168,7 +169,7 @@ export const MockTradingPage = ({ user }: { user: User }) => {
       
       for (const pos of positions) {
          try {
-            const res = await fetch(`/api/stock/${encodeURIComponent(pos.symbol)}`);
+            const res = await fetch(getApiUrl(`/api/stock/${encodeURIComponent(pos.symbol)}`));
             if (res.ok) {
                const data = await res.json();
                if (data.regularMarketPrice) {
