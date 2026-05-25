@@ -10018,7 +10018,7 @@ export default function App() {
               </div>
             </div>
           
-          <nav className="flex flex-col gap-1 overflow-y-auto">
+          <nav className="flex-1 min-h-0 flex flex-col gap-1 overflow-y-auto pr-2 pb-2">
             {TABS.map((tab) => {
               const Icon = {
                 LayoutDashboard,
@@ -10057,7 +10057,7 @@ export default function App() {
             })}
           </nav>
 
-          <div className="mt-auto space-y-2 min-w-[200px]">
+          <div className="mt-auto space-y-2 min-w-[200px] shrink-0 pt-2">
             <div className={`p-4 ${activeTheme === 'midnight' ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'} rounded-xl border`}>
               <p className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-1">目前身份</p>
               <div className="flex items-center justify-between gap-2 overflow-hidden">

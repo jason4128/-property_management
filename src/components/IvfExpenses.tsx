@@ -77,7 +77,7 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
   };
 
   const processFile = async (file: File) => {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const apiKey = localStorage.getItem('GEMINI_API_KEY');
     if (!apiKey) {
       alert("請在設定中設定 Gemini API Key");
       return;
