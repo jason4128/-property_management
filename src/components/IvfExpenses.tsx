@@ -94,7 +94,7 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
       const base64Data = await base64Promise;
 
       const ai = new GoogleGenAI({ apiKey });
-      const prompt = `這是一張醫療費用收據（可能是試管嬰兒、醫美等）。請分析內容並萃取：
+      const prompt = `這是一張醫療費用收據（可能是試管嬰兒、醫美等，也可能是 PDF 文件）。請分析內容並萃取：
 1. 日期 (date, YYYY-MM-DD 格式，如果是民國年請換算回西元年，格式必為 YYYY-MM-DD，若找不到用今天的日期)
 2. 項目 (item, 如自費藥品費、掛號費、處置費等，如果是多項請用逗號分隔合併為一行，或直接列出主要項目，如果是安田婦產科診所之類的收據，請簡單總結)
 3. 總金額 (amount, 數字，請找合計金額)
@@ -107,7 +107,7 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
             role: 'user',
             parts: [
               { text: prompt },
-              { inlineData: { mimeType: file.type || 'image/jpeg', data: base64Data } }
+              { inlineData: { mimeType: file.type || 'application/pdf', data: base64Data } }
             ]
           }
         ],
@@ -125,9 +125,9 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
         }
       });
 
-      const text = response.text();
-      if (text) {
-        const result = JSON.parse(text);
+      const textRes = response.text;
+      if (textRes) {
+        const result = JSON.parse(textRes);
         if (result.date) setDate(result.date);
         if (result.item) setItem(result.item);
         if (result.amount !== undefined) setAmount(result.amount);
@@ -214,16 +214,16 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
         {/* 右側：新增表單與掃描 */}
         <div className="bg-white border text-slate-700 border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col gap-6">
           <div className="bg-indigo-50/50 rounded-xl p-5 border border-indigo-100 border-dashed text-center">
-            <h4 className="font-bold text-indigo-900 mb-2">AI 收據掃描器</h4>
-            <p className="text-sm text-indigo-700/70 mb-4">上傳醫療費用收據，自動帶入日期、項目及金額</p>
-            
-            <input 
-              type="file" 
-              accept="image/*" 
-              className="hidden" 
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-            />
+      <h4 className="font-bold text-indigo-900 mb-2">AI 收據掃描器</h4>
+      <p className="text-sm text-indigo-700/70 mb-4">上傳醫療費用收據，自動帶入日期、項目及金額</p>
+      
+      <input 
+        type="file" 
+        accept="image/*,application/pdf" 
+        className="hidden" 
+        ref={fileInputRef}
+        onChange={handleFileUpload}
+      />
             <button 
               onClick={() => fileInputRef.current?.click()}
               disabled={isScanning}

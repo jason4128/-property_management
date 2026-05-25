@@ -9981,9 +9981,9 @@ export default function App() {
             opacity: isSidebarOpen || windowWidth < 768 ? 1 : 0
           }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className={`${currentTheme.sidebar} flex flex-col gap-8 flex-shrink-0 overflow-hidden z-[60] fixed inset-y-0 left-0 md:relative md:inset-auto transition-colors duration-500`}
+          className={`${currentTheme.sidebar} flex flex-col gap-4 flex-shrink-0 overflow-hidden z-[60] fixed inset-y-0 left-0 md:relative md:inset-auto transition-colors duration-500`}
         >
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 pt-2">
             <div className="flex items-center gap-3 overflow-hidden">
               <div className={`w-10 h-10 ${activeTheme === 'midnight' ? 'bg-violet-600' : 'bg-indigo-600'} rounded-xl flex items-center justify-center text-white shadow-lg flex-shrink-0 transition-colors`}>
                 <Calculator size={24} />
@@ -10194,12 +10194,20 @@ export default function App() {
                 </div>
                 <span className={`font-bold ${currentTheme.text}`}>財務規劃系統</span>
               </div>
-              <button 
-                onClick={() => setIsSidebarOpen(true)}
-                className="p-2 text-indigo-600 bg-indigo-50 rounded-lg mt-2"
-              >
-                <PanelLeftOpen size={20} />
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setIsApiKeyModalOpen(true)}
+                  className="p-2 text-indigo-600 bg-indigo-50 rounded-lg mt-2"
+                >
+                  <Settings size={20} />
+                </button>
+                <button 
+                  onClick={() => setIsSidebarOpen(true)}
+                  className="p-2 text-indigo-600 bg-indigo-50 rounded-lg mt-2"
+                >
+                  <PanelLeftOpen size={20} />
+                </button>
+              </div>
             </header>
           )}
 
@@ -10222,6 +10230,13 @@ export default function App() {
               </div>
               
               <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setIsApiKeyModalOpen(true)}
+                  className={`p-2 ${activeTheme === 'midnight' ? 'text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20' : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'} rounded-lg transition-colors`}
+                  title="設定 API Key"
+                >
+                  <Settings size={20} />
+                </button>
                 <div className={`flex p-1 rounded-2xl border ${activeTheme === 'midnight' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} shadow-sm`}>
                   {(['neo', 'midnight', 'minimalist'] as const).map(t => (
                     <button
