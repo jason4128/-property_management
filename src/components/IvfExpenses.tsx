@@ -76,10 +76,7 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processFile = async (file: File) => {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
     if (!apiKey) {
       alert("請在設定中設定 Gemini API Key");
@@ -104,7 +101,7 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
 找不到的項目請合理推斷或填空。`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3-flash-preview',
         contents: [
           {
             role: 'user',
@@ -143,6 +140,31 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await processFile(file);
+  };
+
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            processFile(file);
+          }
+          break;
+        }
+      }
+    };
+    
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, []);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -213,6 +235,7 @@ export default function IvfExpenses({ user, setDeleteTarget }: { user: any, setD
                 <><Scan size={20} /> 掃描上傳收據</>
               )}
             </button>
+            <p className="text-[11px] text-indigo-400 mt-2 font-medium">支援截圖後直接使用 Ctrl+V / Cmd+V 貼上圖片</p>
           </div>
 
           <div className="space-y-4">
