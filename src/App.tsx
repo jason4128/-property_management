@@ -94,6 +94,7 @@ import {
 } from './salaryTable';
 import { MockTradingPage } from './components/MockTradingPage';
 import { ChildcarePlanner } from './components/ChildcarePlanner';
+import IvfExpenses from './components/IvfExpenses';
 
 import { auth, db } from './firebase';
 import { 
@@ -7974,7 +7975,7 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
   const [salaries, setSalaries] = useState<SalaryRecord[]>([]);
   const [childRecords, setChildRecords] = useState<ChildRecord[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<'general' | 'child'>('general');
-  const [childSubTab, setChildSubTab] = useState<'planner' | 'tracker'>('planner');
+  const [childSubTab, setChildSubTab] = useState<'planner' | 'tracker' | 'ivf'>('planner');
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingChild, setIsAddingChild] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -8540,6 +8541,12 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
             >
               年度記帳與預算
             </button>
+            <button
+              onClick={() => setChildSubTab('ivf')}
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${childSubTab === 'ivf' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              試管嬰兒支出費用
+            </button>
           </div>
 
           {childSubTab === 'planner' ? (
@@ -8548,6 +8555,8 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
               userAvgMonthlyIncome={stats.avgMonthlyIncome || 0}
               userMonthlyExpense={stats.monthlyExpense || 0}
             />
+          ) : childSubTab === 'ivf' ? (
+            <IvfExpenses user={user} setDeleteTarget={setDeleteTarget} />
           ) : (
             <div className="space-y-8">
               {/* 育兒核心數據概況 */}
