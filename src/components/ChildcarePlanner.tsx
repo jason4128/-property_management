@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Baby, Calendar, Minus, Plus, Settings2, TrendingDown, TrendingUp, AlertCircle, Coins, HeartPulse, GraduationCap, School, ChevronDown, ChevronUp } from 'lucide-react';
-import { onSnapshot, collection, query, where } from 'firebase/firestore';
+import { Baby, Calendar, Minus, Plus, Settings2, TrendingDown, TrendingUp, AlertCircle, Coins, HeartPulse, GraduationCap, School, ChevronDown, ChevronUp, Save, Check } from 'lucide-react';
+import { onSnapshot, collection, query, where, doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { User, SalaryRecord, Stock } from '../types';
 
@@ -47,6 +47,25 @@ export const ChildcarePlanner = ({
   const [monthlyDividend, setMonthlyDividend] = useState(0);
   const [wifeBaseExpenses, setWifeBaseExpenses] = useState(25000); // Editable now
   const [isStructureOpen, setIsStructureOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const handleSaveExpenses = async () => {
+    setIsSaving(true);
+    setSaveSuccess(false);
+    try {
+      localStorage.setItem('wifeBaseExpenses', String(wifeBaseExpenses));
+      const configDocId = user?.uid || 'default-user';
+      await setDoc(doc(db, 'userConfigs', configDocId), { wifeBaseExpenses: Number(wifeBaseExpenses) }, { merge: true });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (err) {
+      console.error("Error saving wife base expenses:", err);
+      alert("儲存失敗");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -92,9 +111,21 @@ export const ChildcarePlanner = ({
       setMonthlyDividend(Math.floor(totalDiv / 12));
     });
 
+    // Fetch wife base expenses from userConfigs
+    const configDocId = user?.uid || 'default-user';
+    const unsubConfigs = onSnapshot(doc(db, 'userConfigs', configDocId), (docSnap) => {
+      if (docSnap.exists() && docSnap.data().wifeBaseExpenses !== undefined) {
+        setWifeBaseExpenses(Number(docSnap.data().wifeBaseExpenses));
+      } else {
+        const saved = localStorage.getItem('wifeBaseExpenses');
+        if (saved) setWifeBaseExpenses(Number(saved));
+      }
+    });
+
     return () => {
       unsubWife();
       unsubStocks();
+      unsubConfigs();
     };
   }, [user]);
 
@@ -207,15 +238,35 @@ export const ChildcarePlanner = ({
           </div>
           <div>
             <label className="text-xs font-bold text-slate-400">老婆基本開銷 (含個人)</label>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 mt-1 relative">
               <span className="text-slate-400">$</span>
               <input 
                 type="number"
                 value={wifeBaseExpenses}
                 onChange={e => setWifeBaseExpenses(Number(e.target.value))}
-                className="w-full text-xl font-bold font-mono bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-500 focus:outline-none placeholder-slate-300"
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    handleSaveExpenses();
+                  }
+                }}
+                className="w-full text-xl font-bold font-mono bg-transparent border-b border-dashed border-slate-300 focus:border-indigo-500 focus:outline-none placeholder-slate-300 pr-10"
               />
+              <button
+                onClick={handleSaveExpenses}
+                disabled={isSaving}
+                className={`absolute right-0 bottom-1 p-1.5 rounded-lg transition-all ${
+                  saveSuccess 
+                    ? 'bg-emerald-500 text-white' 
+                    : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                }`}
+                title={saveSuccess ? "已儲存" : "儲存開銷設定"}
+              >
+                {saveSuccess ? <Check size={14} /> : <Save size={14} />}
+              </button>
             </div>
+            {saveSuccess && (
+              <p className="text-[10px] text-emerald-600 mt-1 font-semibold animate-fade-in">已成功儲存至雲端！</p>
+            )}
           </div>
         </div>
 
