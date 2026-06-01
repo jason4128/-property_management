@@ -131,7 +131,9 @@ const getAppTargetUids = (user: any) => {
     'anonymous', 
     'local_user', 
     'jason2134@gmail.com', 
-    'guest@example.com'
+    'guest@example.com',
+    '7VkTK4Ty5NZ9QmbbulQzkZ5cm8N2',
+    '9fJCbAnrFGeaG8IAOsUcp3XeUcf2'
   ];
   
   const email = user?.email && !base.includes(user.email) ? user.email : null;

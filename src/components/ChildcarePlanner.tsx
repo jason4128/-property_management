@@ -76,7 +76,11 @@ export const ChildcarePlanner = ({
         'local_default_user', 
         'guest-user', 
         'guest', 
-        u?.uid
+        'jason2134@gmail.com',
+        '7VkTK4Ty5NZ9QmbbulQzkZ5cm8N2',
+        '9fJCbAnrFGeaG8IAOsUcp3XeUcf2',
+        u?.uid,
+        u?.email
       ].filter(Boolean);
     };
 

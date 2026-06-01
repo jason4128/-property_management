@@ -22,6 +22,9 @@ const getAppTargetUidsLocal = (user: any) => {
     'anonymous', 
     'local_user', 
     'jason2134@gmail.com', 
+    '7VkTK4Ty5NZ9QmbbulQzkZ5cm8N2',
+    '9fJCbAnrFGeaG8IAOsUcp3XeUcf2',
+    user?.email,
     user?.uid
   ].filter(Boolean);
 };
