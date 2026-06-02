@@ -1,7 +1,7 @@
 {
-  "name": "公教人員財產管理系統",
-  "short_name": "公教財管",
-  "description": "專為公教人員設計的薪資、稅務與資產管理工具",
+  "name": "財務規劃系統",
+  "short_name": "財務規劃",
+  "description": "職涯與個人財務管理工具，包含薪資、股票、基金、銀行及資產管理。",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f8fafc",
