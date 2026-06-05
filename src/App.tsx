@@ -4017,8 +4017,8 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       - averageCost: 平均成本或申購淨值 (數字)
       - currentPrice: 目前股價或最新淨值 (數字)
       - exchangeRate: 匯率 (數字，若無則為 1)
-      - totalCost: 總投資成本 (數字，請優先讀取畫面中台幣的「總投資成本」或「投資成本」數值，若無則根據匯率換算為台幣)
-      - totalValue: 總價值或市值 (數字，請優先讀取畫面中台幣的「約當市值」或「參考市值」數值，若無則根據匯率換算為台幣)
+      - totalCost: 總投資成本或付出成本 (數字，請優先讀取畫面中台幣的「付出成本」、「總投資成本」或「投資成本」數值，若無則根據匯率換算為台幣)
+      - totalValue: 總價值、市值或現值 (數字，請優先讀取畫面中台幣的「現值」、「約當市值」或「市值」數值，若無則根據匯率換算為台幣)
       
       請注意：鉅亨買基金等平台會有不同幣別，請務必將 totalCost 與 totalValue 設定為「台幣(TWD)」的金額。若圖表上有提供台幣市值與成本請直接讀取。
       請只回傳 JSON 陣列，不要有其他文字。`;
@@ -4250,13 +4250,15 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
     shares: f.units,
     averageCost: f.units > 0 ? f.cost / f.units : 0,
     currentPrice: f.units > 0 ? f.currentValue / f.units : 0,
+    totalCost: f.cost,
+    totalValue: f.currentValue,
     source: (f as any).source,
     expectedDividendPerShare: 0,
     dividendRatio54C: 0
   } as Stock))].reduce((acc, s) => {
     const isUsd = s.source === 'Firstrade';
-    const cost = s.shares * s.averageCost;
-    const val = s.shares * s.currentPrice;
+    const cost = s.totalCost != null ? s.totalCost : s.shares * s.averageCost;
+    const val = s.totalValue != null ? s.totalValue : s.shares * s.currentPrice;
     const profit = val - cost;
     
     const dividend = s.shares * (s.expectedDividendPerShare || 0);
@@ -4438,8 +4440,8 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
             <tbody>
               {filteredStocks.sort((a,b) => (a.source || '').localeCompare(b.source || '')).map(stock => {
                 const isUsd = stock.source === 'Firstrade';
-                const cost = stock.shares * stock.averageCost;
-                const val = stock.shares * stock.currentPrice;
+                const cost = stock.totalCost != null ? stock.totalCost : stock.shares * stock.averageCost;
+                const val = stock.totalValue != null ? stock.totalValue : stock.shares * stock.currentPrice;
                 const profit = val - cost;
                 return (
                   <tr key={stock.id} className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer">
@@ -4837,10 +4839,10 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredStocks.map(stock => {
-          const totalCost = stock.shares * stock.averageCost;
-          const currentVal = stock.shares * stock.currentPrice;
+          const totalCost = stock.totalCost != null ? stock.totalCost : stock.shares * stock.averageCost;
+          const currentVal = stock.totalValue != null ? stock.totalValue : stock.shares * stock.currentPrice;
           const profit = currentVal - totalCost;
-          const roi = (profit / totalCost) * 100;
+          const roi = totalCost !== 0 ? (profit / totalCost) * 100 : 0;
           return (
             <div key={stock.id} className={`bg-white p-6 rounded-xl shadow-sm border ${selectedStocks.has(stock.id) ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-200'} relative group`}>
               <input type="checkbox" checked={selectedStocks.has(stock.id)} onChange={() => toggleStockSelection(stock.id)} className="absolute top-4 left-4" />

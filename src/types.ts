@@ -156,6 +156,8 @@ export interface Stock {
   shares: number;
   averageCost: number;
   currentPrice: number;
+  totalCost?: number; // Added for exact excel match
+  totalValue?: number; // Added for exact excel match
   source?: 'Cathay' | 'Firstrade' | 'FundRich';
   expectedDividendPerShare?: number; // 預估每股股利 (TWD 或 USD depending on market, 但主打台股)
   dividendRatio54C?: number; // 54C 占比 (0-100)
