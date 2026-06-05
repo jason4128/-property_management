@@ -4016,7 +4016,11 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
       - shares: 持有股數或單位數 (數字)
       - averageCost: 平均成本或申購淨值 (數字)
       - currentPrice: 目前股價或最新淨值 (數字)
+      - exchangeRate: 匯率 (數字，若無則為 1)
+      - totalCost: 總投資成本 (數字，請優先讀取畫面中台幣的「總投資成本」或「投資成本」數值，若無則根據匯率換算為台幣)
+      - totalValue: 總價值或市值 (數字，請優先讀取畫面中台幣的「約當市值」或「參考市值」數值，若無則根據匯率換算為台幣)
       
+      請注意：鉅亨買基金等平台會有不同幣別，請務必將 totalCost 與 totalValue 設定為「台幣(TWD)」的金額。若圖表上有提供台幣市值與成本請直接讀取。
       請只回傳 JSON 陣列，不要有其他文字。`;
 
       const response = await withRetry(() => ai.models.generateContent({
@@ -4070,11 +4074,13 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
         await Promise.all(batchDelete);
 
         const batchAdd = aiResult.map(item => {
+          const calculatedCost = item.totalCost != null ? item.totalCost : (item.averageCost || 0) * (item.shares || 0) * (item.exchangeRate || 1);
+          const calculatedValue = item.totalValue != null ? item.totalValue : (item.currentPrice || 0) * (item.shares || 0) * (item.exchangeRate || 1);
           return addDoc(collection(db, 'funds'), {
             name: item.name || '',
             units: item.shares || 0,
-            cost: (item.averageCost || 0) * (item.shares || 0),
-            currentValue: (item.currentPrice || 0) * (item.shares || 0),
+            cost: calculatedCost,
+            currentValue: calculatedValue,
             source,
             uid: user.uid
           });
@@ -4787,9 +4793,15 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                                   <span className="font-bold text-slate-800">{item.symbol}</span>
                                   <span className="text-slate-500 ml-2">{item.name}</span>
                                 </div>
-                                <div className="text-right">
-                                  <div className="font-medium text-slate-700">{(item.shares || 0).toLocaleString()} 股</div>
-                                  <div className="text-xs text-slate-400">成本: ${item.averageCost || 0}</div>
+                                <div className="text-right flex flex-col items-end">
+                                  <div className="font-medium text-slate-700">{(item.shares || 0).toLocaleString()} <span className="text-xs font-normal">單位</span></div>
+                                  <div className="text-xs text-slate-400 font-mono">
+                                    {(item.totalCost || item.totalValue) ? (
+                                      <span>總成本: ${Math.round(item.totalCost != null ? item.totalCost : (item.averageCost || 0) * (item.shares || 0) * (item.exchangeRate || 1)).toLocaleString()} TWD</span>
+                                    ) : (
+                                      <span>均價: ${item.averageCost || 0}</span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             ))}
