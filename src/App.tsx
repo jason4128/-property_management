@@ -4788,8 +4788,8 @@ const StockPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (ta
                                   <span className="text-slate-500 ml-2">{item.name}</span>
                                 </div>
                                 <div className="text-right">
-                                  <div className="font-medium text-slate-700">{item.shares.toLocaleString()} 股</div>
-                                  <div className="text-xs text-slate-400">成本: ${item.averageCost}</div>
+                                  <div className="font-medium text-slate-700">{(item.shares || 0).toLocaleString()} 股</div>
+                                  <div className="text-xs text-slate-400">成本: ${item.averageCost || 0}</div>
                                 </div>
                               </div>
                             ))}
