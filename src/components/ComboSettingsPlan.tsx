@@ -105,11 +105,24 @@ export const ComboSettingsPlan = ({
 
                      {/* Premium & Actions */}
                      <div className="md:col-span-3 flex items-center justify-between md:justify-end gap-3 mt-2 md:mt-0">
-                        <div className="flex flex-col text-left md:text-right">
+                        <div className="flex flex-col text-left md:text-right w-full max-w-[120px]">
                           <label className="text-[10px] text-slate-400 font-bold mb-1 md:hidden">首年保費</label>
-                          <span className="font-mono font-bold text-slate-700">
-                            {ins.firstYearPremium ? `${ins.firstYearPremium.toLocaleString()} 元` : '-'}
-                          </span>
+                          <div className="relative">
+                            <input 
+                              type="number"
+                              className="w-full font-mono font-bold text-slate-700 bg-transparent hover:bg-slate-50 focus:bg-white border hover:border-slate-200 focus:border-indigo-500 border-transparent rounded-lg py-1 px-2 outline-none text-right transition-all"
+                              defaultValue={ins.firstYearPremium || ''}
+                              placeholder="金額"
+                              onBlur={(e) => {
+                                const val = parseInt(e.target.value);
+                                if (!isNaN(val)) {
+                                  // Update premium locally and clear trend so we just rely on firstYearPremium
+                                  handleUpdate(ins.id, 'firstYearPremium', val);
+                                }
+                              }}
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">元</span>
+                          </div>
                         </div>
                         <button 
                            onClick={async () => {
