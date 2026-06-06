@@ -117,19 +117,6 @@ export const ComboSettingsPlan = ({
                             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">元</span>
                           </div>
                         </div>
-                        <button 
-                           onClick={async () => {
-                             setGeneratingId(ins.id);
-                             await onGenerate(ins.id);
-                             setGeneratingId(null);
-                           }}
-                           disabled={generatingId === ins.id || !ins.planTerm || !ins.planCoverage}
-                           className="p-2 border border-slate-200 text-slate-500 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 disabled:opacity-50 transition-all flex items-center gap-1.5 shrink-0"
-                           title="重新以 AI 試算費率與額度"
-                        >
-                           <RefreshCw size={14} className={generatingId === ins.id ? 'animate-spin' : ''} />
-                           <span className="text-xs font-bold hidden xl:inline">AI 試算</span>
-                        </button>
                      </div>
                   </div>
                 ))}

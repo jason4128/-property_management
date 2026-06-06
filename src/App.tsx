@@ -6899,23 +6899,6 @@ const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGener
           <span className="text-lg font-black text-amber-600">{insurance.planCalculatedPremium}</span>
         </div>
       )}
-
-      <div className="mt-6 flex justify-end">
-        <button 
-          onClick={() => {
-            if (!isFormValid) {
-              alert('請先填寫理賠年期與保額/計畫別欄位。');
-              return;
-            }
-            onGenerate(insurance.id);
-          }}
-          disabled={isGenerating || !isFormValid}
-          className={`px-6 py-2.5 font-bold text-white text-sm rounded-xl transition-all flex items-center gap-2 shadow-lg active:scale-95 ${!isFormValid ? 'bg-slate-300 cursor-not-allowed opacity-0 h-0 w-0 p-0 overflow-hidden pointer-events-none' : 'bg-indigo-600 hover:bg-indigo-700'}`}
-        >
-          {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-          {isGenerating ? '正在由 AI 試算中...' : (insurance.planCalculatedCoverage || insurance.planCalculatedPremium) ? 'AI 重新試算(自動試算失敗時使用)' : '產生費率與理賠額度表'}
-        </button>
-      </div>
     </div>
   );
 };
@@ -7553,6 +7536,22 @@ ${ins.analysisRaw || ins.coverageSummary}
     }
   };
 
+  const handleDeleteInsurance = async (insId: string, name: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm(`確定要刪除保險「${name}」嗎？這個操作無法復原。`)) {
+      try {
+        await deleteDoc(doc(db, 'insurances', insId));
+        if (selectedInsuranceId === insId) {
+          setSelectedInsuranceId(null);
+          setViewMode('overview');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('刪除失敗');
+      }
+    }
+  };
+
   const handleClearInsuranceAnalysis = async (insId: string) => {
     // Sequential confirmation for iFrame safety
     if (confirmClearId !== insId) {
@@ -7909,24 +7908,32 @@ ${targetIns.analysisRaw}
             <h3 className="text-xs font-bold text-slate-400 px-1 uppercase tracking-widest">選擇保險產品進行分析</h3>
             <div className="space-y-3">
               {insurances.map(ins => (
-                <button 
-                  key={ins.id}
-                  onClick={() => setSelectedInsuranceId(ins.id)}
-                  className={`w-full p-6 rounded-[1.5rem] border text-left transition-all relative overflow-hidden group ${selectedInsuranceId === ins.id ? 'border-indigo-500 bg-indigo-50 shadow-lg ring-2 ring-indigo-100 scale-[1.02]' : 'border-slate-200 bg-white hover:border-indigo-200 hover:shadow-md'}`}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-[10px] font-black text-slate-400 block uppercase tracking-widest mb-1">{ins.provider}</span>
-                      <h4 className={`text-lg font-black leading-tight transition-colors ${selectedInsuranceId === ins.id ? 'text-indigo-900' : 'text-slate-800 group-hover:text-indigo-600'}`}>{ins.name}</h4>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full mt-3 inline-block transition-colors ${selectedInsuranceId === ins.id ? 'bg-indigo-200 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>{ins.type}</span>
-                    </div>
-                    {ins.coverageSummary && (
-                      <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center shadow-sm">
-                        <Check size={18} />
+                <div key={ins.id} className="relative group">
+                  <button 
+                    onClick={() => setSelectedInsuranceId(ins.id)}
+                    className={`w-full p-6 rounded-[1.5rem] border text-left transition-all relative overflow-hidden ${selectedInsuranceId === ins.id ? 'border-indigo-500 bg-indigo-50 shadow-lg ring-2 ring-indigo-100 scale-[1.02]' : 'border-slate-200 bg-white hover:border-indigo-200 hover:shadow-md'}`}
+                  >
+                    <div className="flex justify-between items-start pr-8">
+                      <div>
+                        <span className="text-[10px] font-black text-slate-400 block uppercase tracking-widest mb-1">{ins.provider}</span>
+                        <h4 className={`text-lg font-black leading-tight transition-colors ${selectedInsuranceId === ins.id ? 'text-indigo-900' : 'text-slate-800'}`}>{ins.name}</h4>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full mt-3 inline-block transition-colors ${selectedInsuranceId === ins.id ? 'bg-indigo-200 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>{ins.type}</span>
                       </div>
-                    )}
-                  </div>
-                </button>
+                      {ins.coverageSummary && (
+                        <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center shadow-sm shrink-0">
+                          <Check size={18} />
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                  <button 
+                    onClick={(e) => handleDeleteInsurance(ins.id, ins.name, e)}
+                    className="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                    title="刪除保險"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               ))}
             </div>
           </div>
