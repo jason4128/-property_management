@@ -86,6 +86,7 @@ export interface BankAccount {
   atmWithdrawalPerTxLimit?: number; // ATM 提領單筆限額
   atmWithdrawalDailyLimit?: number; // ATM 提領單日限額
   atmWithdrawalMonthlyLimit?: number; // ATM 提領單月限額
+  isTransferOnly?: boolean; // 僅限轉帳(無法提款)
 }
 
 export interface Fund {

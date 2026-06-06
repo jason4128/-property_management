@@ -3246,7 +3246,7 @@ ${text}
 
   const maxAgreedDaily = accounts.reduce((sum, a) => sum + Math.min(a.balance || 0, a.agreedTransferDailyLimit || 0), 0);
   const maxNonAgreedDaily = accounts.reduce((sum, a) => sum + Math.min(a.balance || 0, a.nonAgreedTransferDailyLimit || 0), 0);
-  const maxAtmDaily = accounts.reduce((sum, a) => sum + Math.min(a.balance || 0, a.atmWithdrawalDailyLimit || 0), 0);
+  const maxAtmDaily = accounts.filter(a => !a.isTransferOnly).reduce((sum, a) => sum + Math.min(a.balance || 0, a.atmWithdrawalDailyLimit || 0), 0);
 
   return (
     <div className="space-y-8">
@@ -3397,11 +3397,17 @@ ${text}
                     {renderNumberInput('單日', newAccount.nonAgreedTransferDailyLimit, val => setNewAccount({...newAccount, nonAgreedTransferDailyLimit: val}))}
                     {renderNumberInput('單月', newAccount.nonAgreedTransferMonthlyLimit, val => setNewAccount({...newAccount, nonAgreedTransferMonthlyLimit: val}))}
                   </div>
-                  <div className="flex flex-col gap-2 p-3 bg-white rounded border border-slate-100 shadow-sm">
+                  <div className="flex flex-col gap-2 p-3 bg-white rounded border border-slate-100 shadow-sm relative">
                     <span className="text-[10px] font-bold text-slate-400">ATM 提領</span>
-                    {renderNumberInput('單筆', newAccount.atmWithdrawalPerTxLimit, val => setNewAccount({...newAccount, atmWithdrawalPerTxLimit: val}))}
-                    {renderNumberInput('單日', newAccount.atmWithdrawalDailyLimit, val => setNewAccount({...newAccount, atmWithdrawalDailyLimit: val}))}
-                    {renderNumberInput('單月', newAccount.atmWithdrawalMonthlyLimit, val => setNewAccount({...newAccount, atmWithdrawalMonthlyLimit: val}))}
+                    <label className="absolute top-3 right-3 flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" className="rounded text-indigo-600 focus:ring-indigo-500 w-3 h-3 cursor-pointer" checked={newAccount.isTransferOnly || false} onChange={e => setNewAccount({...newAccount, isTransferOnly: e.target.checked})} />
+                      <span className="text-[9px] font-bold text-rose-500">僅限轉帳(無提款)</span>
+                    </label>
+                    <div className={`flex flex-col gap-2 ${newAccount.isTransferOnly ? 'opacity-30 pointer-events-none' : ''}`}>
+                      {renderNumberInput('單筆', newAccount.atmWithdrawalPerTxLimit, val => setNewAccount({...newAccount, atmWithdrawalPerTxLimit: val}))}
+                      {renderNumberInput('單日', newAccount.atmWithdrawalDailyLimit, val => setNewAccount({...newAccount, atmWithdrawalDailyLimit: val}))}
+                      {renderNumberInput('單月', newAccount.atmWithdrawalMonthlyLimit, val => setNewAccount({...newAccount, atmWithdrawalMonthlyLimit: val}))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3510,11 +3516,17 @@ ${text}
                                     {renderNumberInput('單日', editingAccount.nonAgreedTransferDailyLimit, val => setEditingAccount({...editingAccount, nonAgreedTransferDailyLimit: val}))}
                                     {renderNumberInput('單月', editingAccount.nonAgreedTransferMonthlyLimit, val => setEditingAccount({...editingAccount, nonAgreedTransferMonthlyLimit: val}))}
                                   </div>
-                                  <div className="flex flex-col gap-1.5 p-2 bg-slate-50/50 rounded border border-indigo-50/50">
+                                  <div className="flex flex-col gap-1.5 p-2 bg-slate-50/50 rounded border border-indigo-50/50 relative">
                                     <span className="text-[10px] font-bold text-slate-400">ATM 提領</span>
-                                    {renderNumberInput('單筆', editingAccount.atmWithdrawalPerTxLimit, val => setEditingAccount({...editingAccount, atmWithdrawalPerTxLimit: val}))}
-                                    {renderNumberInput('單日', editingAccount.atmWithdrawalDailyLimit, val => setEditingAccount({...editingAccount, atmWithdrawalDailyLimit: val}))}
-                                    {renderNumberInput('單月', editingAccount.atmWithdrawalMonthlyLimit, val => setEditingAccount({...editingAccount, atmWithdrawalMonthlyLimit: val}))}
+                                    <label className="absolute top-2 right-2 flex items-center gap-1 cursor-pointer">
+                                      <input type="checkbox" className="rounded text-indigo-600 focus:ring-indigo-500 w-3 h-3 cursor-pointer" checked={editingAccount.isTransferOnly || false} onChange={e => setEditingAccount({...editingAccount, isTransferOnly: e.target.checked})} />
+                                      <span className="text-[9px] font-bold text-rose-500">僅限轉帳</span>
+                                    </label>
+                                    <div className={`flex flex-col gap-1.5 ${editingAccount.isTransferOnly ? 'opacity-30 pointer-events-none' : ''}`}>
+                                      {renderNumberInput('單筆', editingAccount.atmWithdrawalPerTxLimit, val => setEditingAccount({...editingAccount, atmWithdrawalPerTxLimit: val}))}
+                                      {renderNumberInput('單日', editingAccount.atmWithdrawalDailyLimit, val => setEditingAccount({...editingAccount, atmWithdrawalDailyLimit: val}))}
+                                      {renderNumberInput('單月', editingAccount.atmWithdrawalMonthlyLimit, val => setEditingAccount({...editingAccount, atmWithdrawalMonthlyLimit: val}))}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -3569,17 +3581,18 @@ ${text}
                         ) : (
                           <p className="text-[10px] text-slate-300 italic font-medium">尚無備註</p>
                         )}
-                        {(acc.agreedTransferPerTxLimit || acc.agreedTransferDailyLimit || acc.agreedTransferMonthlyLimit || acc.nonAgreedTransferPerTxLimit || acc.nonAgreedTransferDailyLimit || acc.nonAgreedTransferMonthlyLimit || acc.atmWithdrawalPerTxLimit || acc.atmWithdrawalDailyLimit || acc.atmWithdrawalMonthlyLimit) ? (
+                        {(acc.agreedTransferPerTxLimit || acc.agreedTransferDailyLimit || acc.agreedTransferMonthlyLimit || acc.nonAgreedTransferPerTxLimit || acc.nonAgreedTransferDailyLimit || acc.nonAgreedTransferMonthlyLimit || acc.atmWithdrawalPerTxLimit || acc.atmWithdrawalDailyLimit || acc.atmWithdrawalMonthlyLimit || acc.isTransferOnly) ? (
                             <div className="mt-2 flex flex-wrap gap-1">
+                              {acc.isTransferOnly && <span className="px-1.5 py-0.5 bg-rose-50 text-rose-500 rounded text-[10px] font-bold border border-rose-100">僅限轉帳</span>}
                               {acc.agreedTransferPerTxLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">約筆: {((acc.agreedTransferPerTxLimit)/10000).toFixed(0)}萬</span> : null}
                               {acc.agreedTransferDailyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">約日: {((acc.agreedTransferDailyLimit)/10000).toFixed(0)}萬</span> : null}
                               {acc.agreedTransferMonthlyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">約月: {((acc.agreedTransferMonthlyLimit)/10000).toFixed(0)}萬</span> : null}
                               {acc.nonAgreedTransferPerTxLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">非約筆: {((acc.nonAgreedTransferPerTxLimit)/10000).toFixed(0)}萬</span> : null}
                               {acc.nonAgreedTransferDailyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">非約日: {((acc.nonAgreedTransferDailyLimit)/10000).toFixed(0)}萬</span> : null}
                               {acc.nonAgreedTransferMonthlyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">非約月: {((acc.nonAgreedTransferMonthlyLimit)/10000).toFixed(0)}萬</span> : null}
-                              {acc.atmWithdrawalPerTxLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">ATM筆: {((acc.atmWithdrawalPerTxLimit)/10000).toFixed(0)}萬</span> : null}
-                              {acc.atmWithdrawalDailyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">ATM日: {((acc.atmWithdrawalDailyLimit)/10000).toFixed(0)}萬</span> : null}
-                              {acc.atmWithdrawalMonthlyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">ATM月: {((acc.atmWithdrawalMonthlyLimit)/10000).toFixed(0)}萬</span> : null}
+                              {!acc.isTransferOnly && acc.atmWithdrawalPerTxLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">ATM筆: {((acc.atmWithdrawalPerTxLimit)/10000).toFixed(0)}萬</span> : null}
+                              {!acc.isTransferOnly && acc.atmWithdrawalDailyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">ATM日: {((acc.atmWithdrawalDailyLimit)/10000).toFixed(0)}萬</span> : null}
+                              {!acc.isTransferOnly && acc.atmWithdrawalMonthlyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">ATM月: {((acc.atmWithdrawalMonthlyLimit)/10000).toFixed(0)}萬</span> : null}
                             </div>
                         ) : null}
                       </td>
