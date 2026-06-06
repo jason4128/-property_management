@@ -3244,6 +3244,10 @@ ${text}
     return sum;
   }, 0);
 
+  const maxAgreedDaily = accounts.reduce((sum, a) => sum + Math.min(a.balance || 0, a.agreedTransferDailyLimit || 0), 0);
+  const maxNonAgreedDaily = accounts.reduce((sum, a) => sum + Math.min(a.balance || 0, a.nonAgreedTransferDailyLimit || 0), 0);
+  const maxAtmDaily = accounts.reduce((sum, a) => sum + Math.min(a.balance || 0, a.atmWithdrawalDailyLimit || 0), 0);
+
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
@@ -3291,11 +3295,36 @@ ${text}
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl border border-indigo-200 flex justify-between items-center bg-indigo-50/20 shadow-sm">
-        <span className="font-bold text-secondary text-slate-600">資產淨值 (存款 - 貸款)</span>
-        <span className={`text-2xl font-black ${totalBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-          ${totalBalance.toLocaleString()}
-        </span>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <div className="lg:col-span-1 bg-white p-4 rounded-2xl border border-indigo-200 flex flex-col justify-center bg-indigo-50/20 shadow-sm">
+          <span className="font-bold text-slate-600 mb-1">資產淨值 (存款 - 貸款)</span>
+          <span className={`text-2xl font-black ${totalBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+            ${totalBalance.toLocaleString()}
+          </span>
+        </div>
+        <div className="lg:col-span-3 bg-white p-4 rounded-2xl border border-slate-200 flex flex-wrap gap-4 items-center shadow-sm">
+          <div className="flex items-center gap-3 pr-4 border-r border-slate-100">
+            <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500">
+              <LogOut size={18} className="-translate-y-px -translate-x-px" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">單日約定轉出上限</p>
+              <p className="text-lg font-black text-slate-700">${maxAgreedDaily.toLocaleString()}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 pr-4 border-r border-slate-100">
+             <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">單日非約定轉出</p>
+              <p className="text-lg font-black text-slate-700">${maxNonAgreedDaily.toLocaleString()}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+             <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">單日 ATM 提領</p>
+              <p className="text-lg font-black text-slate-700">${maxAtmDaily.toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {isAdding && (
@@ -3352,6 +3381,19 @@ ${text}
                 {renderNumberInput('每期還款金額', newAccount.monthlyPayment, val => setNewAccount({...newAccount, monthlyPayment: val}))}
               </div>
             )}
+            {newAccount.type !== 'loan' && (
+              <div className="md:col-span-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-3">額度設定 (轉帳/提領)</span>
+                <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+                  {renderNumberInput('約單日額度', newAccount.agreedTransferDailyLimit, val => setNewAccount({...newAccount, agreedTransferDailyLimit: val}))}
+                  {renderNumberInput('約單月額度', newAccount.agreedTransferMonthlyLimit, val => setNewAccount({...newAccount, agreedTransferMonthlyLimit: val}))}
+                  {renderNumberInput('非約單日額度', newAccount.nonAgreedTransferDailyLimit, val => setNewAccount({...newAccount, nonAgreedTransferDailyLimit: val}))}
+                  {renderNumberInput('非約單月額度', newAccount.nonAgreedTransferMonthlyLimit, val => setNewAccount({...newAccount, nonAgreedTransferMonthlyLimit: val}))}
+                  {renderNumberInput('ATM單日額度', newAccount.atmWithdrawalDailyLimit, val => setNewAccount({...newAccount, atmWithdrawalDailyLimit: val}))}
+                  {renderNumberInput('ATM單月額度', newAccount.atmWithdrawalMonthlyLimit, val => setNewAccount({...newAccount, atmWithdrawalMonthlyLimit: val}))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-500 font-medium hover:text-slate-700">取消</button>
@@ -3394,49 +3436,68 @@ ${text}
 
                   if (isEditing) {
                     return (
-                      <tr key={acc.id} className="bg-indigo-50/30">
-                        <td className="p-4">
-                          <input className="w-full p-2 border rounded-md mb-1 focus:ring-2 focus:ring-indigo-500 outline-none" type="text" value={editingAccount.name || ''} onChange={e => setEditingAccount({...editingAccount, name: e.target.value})} />
-                          <input className="w-full p-1 text-xs border rounded-md mb-1 focus:ring-2 focus:ring-indigo-500 outline-none" type="text" value={editingAccount.bankName || ''} onChange={e => setEditingAccount({...editingAccount, bankName: e.target.value})} />
-                          <select className="w-full p-1 text-[10px] border rounded-md focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-500 bg-slate-50" value={editingAccount.type || 'savings'} onChange={e => setEditingAccount({...editingAccount, type: e.target.value as any})}>
-                            <option value="savings">一般活存</option>
-                            <option value="high-yield">✨ 高利活存</option>
-                            <option value="checking">支票帳戶</option>
-                            <option value="fixed">定期存款</option>
-                            <option value="loan">貸款 / 借貸</option>
-                          </select>
-                        </td>
-                        <td className="p-4 text-right">
-                          <input className="p-2 border rounded-md w-full text-right font-black focus:ring-2 focus:ring-indigo-500 outline-none" type="number" value={editingAccount.balance ?? 0} onChange={e => setEditingAccount({...editingAccount, balance: Number(e.target.value)})} />
-                          {isHighYield && (
-                            <div className="mt-2 text-right">
-                              <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">存款上限</label>
-                              <input className="p-1 text-[10px] border rounded w-full text-right focus:ring-2 focus:ring-indigo-500 outline-none" type="number" value={editingAccount.balanceLimit ?? 0} onChange={e => setEditingAccount({...editingAccount, balanceLimit: Number(e.target.value)})} />
+                      <React.Fragment key={acc.id}>
+                        <tr className="bg-indigo-50/30">
+                          <td className="p-4">
+                            <input className="w-full p-2 border rounded-md mb-1 focus:ring-2 focus:ring-indigo-500 outline-none" type="text" value={editingAccount.name || ''} onChange={e => setEditingAccount({...editingAccount, name: e.target.value})} />
+                            <input className="w-full p-1 text-xs border rounded-md mb-1 focus:ring-2 focus:ring-indigo-500 outline-none" type="text" value={editingAccount.bankName || ''} onChange={e => setEditingAccount({...editingAccount, bankName: e.target.value})} />
+                            <select className="w-full p-1 text-[10px] border rounded-md focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-500 bg-slate-50" value={editingAccount.type || 'savings'} onChange={e => setEditingAccount({...editingAccount, type: e.target.value as any})}>
+                              <option value="savings">一般活存</option>
+                              <option value="high-yield">✨ 高利活存</option>
+                              <option value="checking">支票帳戶</option>
+                              <option value="fixed">定期存款</option>
+                              <option value="loan">貸款 / 借貸</option>
+                            </select>
+                          </td>
+                          <td className="p-4 text-right">
+                            <input className="p-2 border rounded-md w-full text-right font-black focus:ring-2 focus:ring-indigo-500 outline-none" type="number" value={editingAccount.balance ?? 0} onChange={e => setEditingAccount({...editingAccount, balance: Number(e.target.value)})} />
+                            {isHighYield && (
+                              <div className="mt-2 text-right">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">存款上限</label>
+                                <input className="p-1 text-[10px] border rounded w-full text-right focus:ring-2 focus:ring-indigo-500 outline-none" type="number" value={editingAccount.balanceLimit ?? 0} onChange={e => setEditingAccount({...editingAccount, balanceLimit: Number(e.target.value)})} />
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-4 text-right">
+                            <div className="flex items-center justify-end gap-2 mb-2">
+                              <input className="p-1 border rounded w-16 text-right font-bold text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none" type="number" step="0.001" value={editingAccount.interestRate ?? 0} onChange={e => setEditingAccount({...editingAccount, interestRate: Number(e.target.value)})} /> %
                             </div>
-                          )}
-                        </td>
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2 mb-2">
-                            <input className="p-1 border rounded w-16 text-right font-bold text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none" type="number" step="0.001" value={editingAccount.interestRate ?? 0} onChange={e => setEditingAccount({...editingAccount, interestRate: Number(e.target.value)})} /> %
-                          </div>
-                          {isHighYield && (
-                            <button onClick={() => { setTargetForAi('edit'); setShowAiModal(true); }} className="text-[10px] text-indigo-600 font-bold flex items-center gap-1 justify-end ml-auto hover:underline">
-                              <Sparkles size={10} /> AI 重新辨識
+                            {isHighYield && (
+                              <button onClick={() => { setTargetForAi('edit'); setShowAiModal(true); }} className="text-[10px] text-indigo-600 font-bold flex items-center gap-1 justify-end ml-auto hover:underline">
+                                <Sparkles size={10} /> AI 重新辨識
+                              </button>
+                            )}
+                          </td>
+                          <td className="p-4">
+                            <textarea className="w-full p-2 border rounded-md text-xs h-20 bg-white focus:ring-2 focus:ring-indigo-500 outline-none" value={editingAccount.remark || ''} onChange={e => setEditingAccount({...editingAccount, remark: e.target.value})} placeholder="加碼條件或備註" />
+                          </td>
+                          <td className="p-4 text-center space-y-2 align-top">
+                            <button onClick={handleUpdate} className="p-2 bg-indigo-600 text-white rounded-lg block mx-auto hover:bg-indigo-700 shadow-md">
+                              <Save size={16} />
                             </button>
-                          )}
-                        </td>
-                        <td className="p-4">
-                          <textarea className="w-full p-2 border rounded-md text-xs h-20 bg-white focus:ring-2 focus:ring-indigo-500 outline-none" value={editingAccount.remark || ''} onChange={e => setEditingAccount({...editingAccount, remark: e.target.value})} placeholder="加碼條件或備註" />
-                        </td>
-                        <td className="p-4 text-center space-y-2">
-                          <button onClick={handleUpdate} className="p-2 bg-indigo-600 text-white rounded-lg block mx-auto hover:bg-indigo-700 shadow-md">
-                            <Save size={16} />
-                          </button>
-                          <button onClick={() => setEditingId(null)} className="p-2 text-slate-400 block mx-auto hover:text-slate-600">
-                            <X size={16} />
-                          </button>
-                        </td>
-                      </tr>
+                            <button onClick={() => setEditingId(null)} className="p-2 text-slate-400 block mx-auto hover:text-slate-600">
+                              <X size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                        {editingAccount.type !== 'loan' && (
+                          <tr className="bg-indigo-50/10">
+                            <td colSpan={5} className="p-4 pt-1 border-b border-indigo-100">
+                              <div className="bg-white p-3 border border-indigo-100 rounded-lg">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">額度設定 (轉帳/提領)</span>
+                                <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                                  {renderNumberInput('約單日額度', editingAccount.agreedTransferDailyLimit, val => setEditingAccount({...editingAccount, agreedTransferDailyLimit: val}))}
+                                  {renderNumberInput('約單月額度', editingAccount.agreedTransferMonthlyLimit, val => setEditingAccount({...editingAccount, agreedTransferMonthlyLimit: val}))}
+                                  {renderNumberInput('非約單日額度', editingAccount.nonAgreedTransferDailyLimit, val => setEditingAccount({...editingAccount, nonAgreedTransferDailyLimit: val}))}
+                                  {renderNumberInput('非約單月額度', editingAccount.nonAgreedTransferMonthlyLimit, val => setEditingAccount({...editingAccount, nonAgreedTransferMonthlyLimit: val}))}
+                                  {renderNumberInput('ATM單日額度', editingAccount.atmWithdrawalDailyLimit, val => setEditingAccount({...editingAccount, atmWithdrawalDailyLimit: val}))}
+                                  {renderNumberInput('ATM單月額度', editingAccount.atmWithdrawalMonthlyLimit, val => setEditingAccount({...editingAccount, atmWithdrawalMonthlyLimit: val}))}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   }
 
@@ -3484,6 +3545,13 @@ ${text}
                         ) : (
                           <p className="text-[10px] text-slate-300 italic font-medium">尚無備註</p>
                         )}
+                        {(acc.agreedTransferDailyLimit || acc.nonAgreedTransferDailyLimit || acc.atmWithdrawalDailyLimit) ? (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {acc.agreedTransferDailyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">約日: {((acc.agreedTransferDailyLimit)/10000).toFixed(0)}萬</span> : null}
+                              {acc.nonAgreedTransferDailyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">非約日: {((acc.nonAgreedTransferDailyLimit)/10000).toFixed(0)}萬</span> : null}
+                              {acc.atmWithdrawalDailyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">ATM日: {((acc.atmWithdrawalDailyLimit)/10000).toFixed(0)}萬</span> : null}
+                            </div>
+                        ) : null}
                       </td>
                       <td className="p-4">
                         <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

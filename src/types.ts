@@ -77,6 +77,12 @@ export interface BankAccount {
   monthlyPayment?: number; // 每期還款金額
   balanceLimit?: number; // 活存上限
   remark?: string; // 備註 (優惠條件)
+  agreedTransferDailyLimit?: number; // 約定轉帳單日限額
+  agreedTransferMonthlyLimit?: number; // 約定轉帳單月限額
+  nonAgreedTransferDailyLimit?: number; // 非約定轉帳單日限額
+  nonAgreedTransferMonthlyLimit?: number; // 非約定轉帳單月限額
+  atmWithdrawalDailyLimit?: number; // ATM 提領單日限額
+  atmWithdrawalMonthlyLimit?: number; // ATM 提領單月限額
 }
 
 export interface Fund {
