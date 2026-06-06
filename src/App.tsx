@@ -6825,14 +6825,14 @@ const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGener
       </h5>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div>
-          <label className="text-xs font-bold text-slate-400 block mb-1">投保年齡</label>
+          <label className="text-xs font-bold text-slate-400 block mb-1">起保年齡</label>
           <input 
             type="number" 
             value={localAge} 
             onChange={(e) => setLocalAge(parseInt(e.target.value) || 0)}
             onBlur={() => handleUpdateField('planAge', localAge)}
             className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
-            placeholder="例: 37"
+            placeholder="例: 32"
           />
         </div>
         <div>
@@ -7145,29 +7145,32 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
       if (!ins) throw new Error("找不到保險資料");
 
       const prompt = `你是一個專業的保險理賠試算工程師。
-使用以下 ${ins.provider} ${ins.name} 的保險條款數據：
+使用以下 ${ins.provider} ${ins.name} 的保險條款數據與費率表(若有)：
 ${ins.analysisRaw || ins.coverageSummary}
 
-使用者目前的方案條件：
-- 投保年齡：${ins.planAge || currentAge || '未知'} 歲
+使用者目前的方案設定如下：
+- 起保年齡(投保時歲數)：${ins.planAge || currentAge || '未知'} 歲
 - 性別：${ins.planGender || '未知'}
 - 年期：${ins.planTerm || '未知'}
 - 保額/單位/計畫別：${ins.planCoverage || '未知'}
 
-請嚴格根據以上資訊，試算出此特定方案的各項理賠額度，並回傳一份 JSON。
+請嚴格根據以上資訊，試算出此特定方案的首年保費、保費走勢以及各項理賠額度表，並回傳一份 JSON。
 
-請特別注意保費計算與走勢：
-1. 若數據中包含或推算得出「費率表」，請依「投保年齡」(${ins.planAge || currentAge || '未知'}歲)、「性別」(${ins.planGender || '未知'})、「年期」(${ins.planTerm || '未知'})等條件找出對應費率。
-2. 注意費率表的單位！如果是「元/每千元保險金額」，請務必將「保額」除以 1000 再乘上該費率才是真實保費（例如保額 1萬元，即 10 * 費率）。如果是「元/萬元」，則除以 10000 乘上費率。
-3. 產生保費走勢：列出「從投保年齡開始，到繳費期滿或達特定歲數」為止的保費變化（例如平準費率每年不變，或自然費率每年遞增，請依據契約條款與費率表判斷）。若無法推算，請至少填入首年保費。
+【極度重要的保費計算邏輯】：
+1. 若數據中包含費率表，請依使用者的「起保年齡」、「性別」、「年期」找到第一年的費率。
+2. 注意費率表的【單位】：
+   如果是「元 / 每千元保險金額」（代表保額每1,000元，保費是該費率）：
+   計算公式 = (保額數字 / 1000) * 費率。例如：保額1萬，就是 10 * 費率。保額20萬，就是 200 * 費率。
+   如果是「元 / 萬元保險金額」：計算公式 = (保額數字 / 10000) * 費率。
+3. 請產生「保費走勢陣列 (premiumTrend)」：從「起保年齡」開始，直到該「繳費年期」結束。例如：25年期，則產生 起保年齡 到 起保年齡+24歲 這 25 年間每年的保費。如果這是一年期附約且自然費率，請根據費率表計算每年遞增的保費；如果是平準費率（固定費率），代表每年保費都一樣。如果完全無法推算走勢，至少填入首年保費。
 
 格式必須剛好是：
 {
-  "firstYearPremium": 0, // 請替換為真實試算首年保費 (數字格式)
-  "premium": "0 元", // 請替換為真實試算保費 (格式化字串)
-  "premiumTrend": [ // 保費走勢陣列，包含往後各年齡的保費數字
-    { "age": 30, "premium": 0 },
-    { "age": 31, "premium": 0 }
+  "firstYearPremium": 0, // 請替換為真實試算首年保費 (純數字格式，例如 830)
+  "premium": "0 元", // 請替換為真實試算保費 (格式化字串，例如 "830 元")
+  "premiumTrend": [ // 保費走勢陣列，包含往後各年齡的保費數字 (若25年期則應有25筆)
+    { "age": 32, "premium": 830 },
+    { "age": 33, "premium": 830 }
   ],
   "coverageTable": [
     {
@@ -7444,13 +7447,25 @@ ${ins.analysisRaw || ins.coverageSummary}
 
     try {
       const apiKey = getApiKey();
-      const prompt = `你是精通保險理賠的助手。根據以下保險契約分析結果，回答使用者的問題。
+      const prompt = `你是精通保險理賠的助手。根據以下保險契約分析結果與使用者的專屬方案設定，回答使用者的問題。
 保險產品：${targetIns.provider} ${targetIns.name}
-契約摘要：${targetIns.coverageSummary}
-詳細數據：${targetIns.analysisRaw}
+
+【此使用者的專屬方案設定】
+- 起保年齡：${targetIns.planAge || currentAge || '未知'} 歲
+- 性別：${targetIns.planGender || '未知'}
+- 年期：${targetIns.planTerm || '未知'}
+- 保額/單位/計畫別：${targetIns.planCoverage || '未知'}
+- 首年保費：${targetIns.firstYearPremium || '未知'} 元
+
+【契約摘要】：
+${targetIns.coverageSummary}
+
+【詳細數據與費率表】：
+${targetIns.analysisRaw}
 
 使用者問題：${chatMessage}
 請以專業、親切且易懂的方式回答，並明確指出理賠條件（如果已知）。如果資訊不足，請禮貌說明。
+若使用者問到保費，請務必先參考他的專屬方案設定與詳細費率表來回答，如果單位是「每千元」別忘了要做數學換算 (保額除以1000乘上費率)。
 【重要排版要求】：
 1. 務必使用 Markdown 格式（標題、清單、粗體）。
 2. 每段文字不要太長，請**適當分段落**，段落與段落之間要空行。
