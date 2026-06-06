@@ -7126,12 +7126,22 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                // Support flat format (age in root) or compact format (age inside rates map/array)
                let hasAgeMatch = false;
                if (r.rates && !Array.isArray(r.rates)) {
-                  hasAgeMatch = Object.keys(r.rates).some(k => Number(k) === Number(current.planAge));
+                  const keys = Object.keys(r.rates);
+                  if (keys.length > 0) {
+                     let minDiff = 999;
+                     for (const k of keys) {
+                        const diff = Math.abs(Number(k) - Number(current.planAge));
+                        if (diff < minDiff) minDiff = diff;
+                     }
+                     hasAgeMatch = minDiff <= 10; // Allow finding closest within 10 years if AI skipped
+                  }
                } else if (r.rates && Array.isArray(r.rates)) {
-                  // Sometimes AI outputs rates as an array of objects
-                  hasAgeMatch = r.rates.some((rt:any) => Number(rt.age) === Number(current.planAge));
+                  if (r.rates.length > 0) {
+                     const minDiff = Math.min(...r.rates.map((rt:any) => Math.abs(Number(rt.age) - Number(current.planAge))));
+                     hasAgeMatch = minDiff <= 10;
+                  }
                } else {
-                  hasAgeMatch = Number(r.age) === Number(current.planAge);
+                  hasAgeMatch = Math.abs(Number(r.age) - Number(current.planAge)) <= 10;
                }
                
                return isGenderMatch && isTermMatch && hasAgeMatch;
@@ -7143,11 +7153,16 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
               // Extract rate from either compact 'rates' map or flat fields
               let rawRate: string | number = 0;
               if (rateEntry.rates && !Array.isArray(rateEntry.rates)) {
-                const ageKey = Object.keys(rateEntry.rates).find(k => Number(k) === Number(current.planAge));
-                if (ageKey) rawRate = rateEntry.rates[ageKey];
+                const keys = Object.keys(rateEntry.rates);
+                if (keys.length > 0) {
+                  let closestKey = keys.reduce((a, b) => Math.abs(Number(b) - Number(current.planAge)) < Math.abs(Number(a) - Number(current.planAge)) ? b : a);
+                  if (closestKey) rawRate = rateEntry.rates[closestKey];
+                }
               } else if (rateEntry.rates && Array.isArray(rateEntry.rates)) {
-                const ageObj = rateEntry.rates.find((rt:any) => Number(rt.age) === Number(current.planAge));
-                if (ageObj) rawRate = ageObj.rate || ageObj.premium || ageObj.amount || ageObj.price;
+                if (rateEntry.rates.length > 0) {
+                  const ageObj = rateEntry.rates.reduce((a:any, b:any) => Math.abs(Number(b.age) - Number(current.planAge)) < Math.abs(Number(a.age) - Number(current.planAge)) ? b : a, rateEntry.rates[0]);
+                  if (ageObj) rawRate = ageObj.rate || ageObj.premium || ageObj.amount || ageObj.price;
+                }
               } else {
                 rawRate = rateEntry.rate || rateEntry.premium || rateEntry.amount || rateEntry.price || 0;
               }
@@ -7200,7 +7215,11 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
               }
             } else {
               finalUpdates.firstYearPremium = 0;
-              finalUpdates.planCalculatedPremium = '無資料';
+              if (!current.rateTableJSON || current.rateTableJSON === "[]" || current.rateTableJSON.length <= 10) {
+                 finalUpdates.planCalculatedPremium = '欠缺費率表(請重新分析)';
+              } else {
+                 finalUpdates.planCalculatedPremium = '無對應費率(查無當年齡年期)';
+              }
               finalUpdates.premiumTrendJSON = "[]";
             }
           } catch(err) {
@@ -7352,9 +7371,9 @@ ${ins.analysisRaw || ins.coverageSummary}
 2. 請提取關鍵理賠額度，並以「最低基準單位」（例如 1萬保額 或 計畫一）為基礎，提取所有理賠項目與基準理賠金額放入 coverageTemplate 陣列 (金額必須為純數字 amount，不要帶單位字串)。若該項目會隨保額等倍數增加，請設 scalable: true；若為固定額度，則設 scalable: false。
 3. 判斷並提供 coverageBaseUnit，代表上述的 coverageTemplate 是基於多大的保額數字建構的（例如以1萬為單位請填 10000）。若是計畫型(如計畫一為基準)，請填 1。
 4. 判斷文件中是否有「計畫別」或「保障類別」（例如：["1萬", "2萬"] 或 ["計畫一", "計畫二"]），請以字串陣列回傳至 planOptions 欄位。
-5. 【重要】文件內如果包含「總保費費率表」（例如：各年齡/性別的每千元保額保費），請務必將其整理成結構化的 JSON 陣列 (rateTable)，為避免字數過長，請使用以下精簡結構，將相同性別與年期的費率合併入 rates 物件 (key=年齡, value=費率數字)：
+5. 【重要】文件內如果包含「總保費費率表」（例如：各年齡/性別的每千元保額保費），請務必將其整理成結構化的 JSON 陣列 (rateTable)。為避免字數過長，請使用以下精簡結構，將相同性別與年期的費率合併入 rates 物件 (key=年齡, value=費率數字)：
 [{"gender": "男", "term": "30年期", "rates": {"0":139, "1":141, "32":199}}]
-請盡可能完整提取所有性別、年期、年齡的費率資料。同時附上費率單位 (rateUnit，如"每千元"或"每萬元")。
+【極度重要】絕對不要省略任何一個年齡！請確實把表格中每一個年齡的數字都寫出來，如果沒寫出來後續系統將無法試算保費！如果您遇到 Token 限制也可以分段或至少將主要年齡層（例如 0, 5, 10, 15, ..., 65）完整寫出。同時附上費率單位 (rateUnit，如"每千元"或"每萬元")。
 6. 將條款細節與免責條款放入 rawAnalysis 以供查考。
 
 請回傳剛好一份 JSON 格式：
