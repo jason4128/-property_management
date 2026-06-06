@@ -96,6 +96,7 @@ import { MockTradingPage } from './components/MockTradingPage';
 import { ChildcarePlanner } from './components/ChildcarePlanner';
 import IvfExpenses from './components/IvfExpenses';
 import { PremiumTrendOverview } from './components/PremiumTrendOverview';
+import { ComboSettingsPlan } from './components/ComboSettingsPlan';
 
 import { auth, db } from './firebase';
 import { 
@@ -7108,7 +7109,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
 
   // Coverage Analysis States
   const [selectedInsuranceId, setSelectedInsuranceId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'table' | 'overview' | 'detail'>('overview');
+  const [viewMode, setViewMode] = useState<'table' | 'overview' | 'detail' | 'combo'>('overview');
   const [chatMessage, setChatMessage] = useState('');
   const [isChatting, setIsChatting] = useState(false);
   const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'assistant', content: string }[]>([]);
@@ -7653,6 +7654,12 @@ ${ins.analysisRaw || ins.coverageSummary}
               保障分析
             </button>
             <button 
+              onClick={() => setViewMode('combo')} 
+              className={`px-6 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${viewMode === 'combo' ? 'bg-white shadow-md text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              方案設定
+            </button>
+            <button 
               onClick={() => setViewMode('detail')} 
               className={`px-6 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${viewMode === 'detail' ? 'bg-white shadow-md text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
@@ -7717,6 +7724,12 @@ ${ins.analysisRaw || ins.coverageSummary}
 
       {viewMode === 'table' ? (
         <PremiumTrendOverview insurances={insurances} currentAge={currentAge} />
+      ) : viewMode === 'combo' ? (
+        <ComboSettingsPlan 
+          insurances={insurances} 
+          currentAge={currentAge} 
+          onGenerate={handleGenerateCoverageTable} 
+        />
       ) : viewMode === 'overview' ? (
         <CoverageOverview insurances={insurances} />
       ) : (
