@@ -7111,29 +7111,40 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
           try {
             const rateTable = JSON.parse(current.rateTableJSON);
             const rateEntry = rateTable.find((r: any) => 
-               r.gender === current.planGender &&
-               r.term === current.planTerm &&
-               r.age === current.planAge
+               String(r.gender || '').trim() === String(current.planGender || '').trim() &&
+               String(r.term || '').replace(/年期?|歲/g, '').trim() === String(current.planTerm || '').replace(/年期?|歲/g, '').trim() &&
+               Number(r.age) === Number(current.planAge)
             );
             
             if (rateEntry) {
-              const rate = rateEntry.rate;
+              const rate = Number(rateEntry.rate);
               let covValue = 0;
-              const covStr = String(current.planCoverage).replace(/,/g, '');
-              if (covStr.includes('萬')) {
+              const covStr = String(current.planCoverage).replace(/,/g, '').trim();
+              if (covStr.includes('計畫') || covStr.includes('計畫別')) {
+                 covValue = 1; // Basic plan logic, standard rates don't scale by default if it's plan-based
+                 // Try to see if rate scales by plan number
+                 const match = covStr.match(/([一二三四五六七八九十]|\d+)/);
+                 if (match) {
+                   const numMap: Record<string, number> = { '一':1, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9, '十':10 };
+                   covValue = numMap[match[1]] || parseInt(match[1]) || 1;
+                 }
+              } else if (covStr.includes('萬')) {
                  covValue = parseFloat(covStr) * 10000;
               } else {
-                 covValue = parseFloat(covStr);
+                 covValue = parseFloat(covStr) || 0;
               }
 
               let premium = 0;
               const unit = current.rateUnit || '每千元';
-              if (unit.includes('每千元') || unit.includes('千元')) {
+              if (covStr.includes('計畫') || covStr.includes('計畫別')) {
+                 // For plan-based policies, the rate table is usually per plan
+                 premium = Math.round(covValue * rate);
+              } else if (unit.includes('每千元') || unit.includes('千元')) {
                  premium = Math.round((covValue / 1000) * rate);
               } else if (unit.includes('每萬元') || unit.includes('萬元')) {
                  premium = Math.round((covValue / 10000) * rate);
               } else {
-                 premium = rate;
+                 premium = Math.round(covValue * rate);
               }
 
               if (!isNaN(premium) && premium > 0) {
@@ -7151,6 +7162,10 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                     finalUpdates.premiumTrendJSON = JSON.stringify(trend);
                  }
               }
+            } else {
+              finalUpdates.firstYearPremium = 0;
+              finalUpdates.planCalculatedPremium = '無資料';
+              finalUpdates.premiumTrendJSON = "[]";
             }
           } catch(err) {
             console.warn('Failed local premium calculation:', err);
@@ -7841,12 +7856,6 @@ ${targetIns.analysisRaw}
               費率對照
             </button>
           </div>
-          <button 
-            onClick={() => { setAiMode('premium'); setIsAIModalOpen(true); }} 
-            className="flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-2xl hover:bg-emerald-700 shadow-xl shadow-emerald-100 transition-all font-bold text-sm"
-          >
-            <Sparkles size={20} /> AI 辨識費率
-          </button>
           <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-2.5 rounded-2xl hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all font-bold text-sm">
             <Plus size={20} /> 新增保險
           </button>
