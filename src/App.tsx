@@ -7110,14 +7110,25 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
         if (current.rateTableJSON && current.planAge && current.planGender && current.planTerm && current.planCoverage) {
           try {
             const rateTable = JSON.parse(current.rateTableJSON);
-            const rateEntry = rateTable.find((r: any) => 
-               String(r.gender || '').trim() === String(current.planGender || '').trim() &&
-               String(r.term || '').replace(/年期?|歲/g, '').trim() === String(current.planTerm || '').replace(/年期?|歲/g, '').trim() &&
-               Number(r.age) === Number(current.planAge)
-            );
+            const rateEntry: any = rateTable.find((r: any) => {
+               const rGender = String(r.gender || '').trim().replace('性', '');
+               const currGender = String(current.planGender || '').trim().replace('性', '');
+               const isGenderMatch = !rGender || rGender === currGender || rGender.includes('不分');
+               
+               const rTerm = String(r.term || '').replace(/年期?|歲/g, '').trim();
+               const currTerm = String(current.planTerm || '').replace(/年期?|歲/g, '').trim();
+               const isTermMatch = !rTerm || rTerm === currTerm;
+               
+               // Support flat format (age in root) or compact format (age inside rates map)
+               const hasAgeMatch = (r.rates && r.rates[current.planAge]) || (Number(r.age) === Number(current.planAge));
+               
+               return isGenderMatch && isTermMatch && hasAgeMatch;
+            });
             
             if (rateEntry) {
-              const rate = Number(rateEntry.rate);
+              // Extract rate from either compact 'rates' map or flat fields
+              const rawRate = rateEntry.rates ? rateEntry.rates[current.planAge] : (rateEntry.rate || rateEntry.premium || rateEntry.amount || rateEntry.price || 0);
+              const rate = Number(rawRate);
               let covValue = 0;
               const covStr = String(current.planCoverage).replace(/,/g, '').trim();
               if (covStr.includes('計畫') || covStr.includes('計畫別')) {
@@ -7316,7 +7327,9 @@ ${ins.analysisRaw || ins.coverageSummary}
 2. 請提取關鍵理賠額度，並以「最低基準單位」（例如 1萬保額 或 計畫一）為基礎，提取所有理賠項目與基準理賠金額放入 coverageTemplate 陣列 (金額必須為純數字 amount，不要帶單位字串)。若該項目會隨保額等倍數增加，請設 scalable: true；若為固定額度，則設 scalable: false。
 3. 判斷並提供 coverageBaseUnit，代表上述的 coverageTemplate 是基於多大的保額數字建構的（例如以1萬為單位請填 10000）。若是計畫型(如計畫一為基準)，請填 1。
 4. 判斷文件中是否有「計畫別」或「保障類別」（例如：["1萬", "2萬"] 或 ["計畫一", "計畫二"]），請以字串陣列回傳至 planOptions 欄位。
-5. 【重要】文件內如果包含「總保費費率表」（例如：各年齡/性別的每千元保額保費），請務必將其整理成結構化的 JSON 陣列 (rateTable)，這對於後續即時算保費極度關鍵，元素格式必須為 {"gender": "...", "term": "...", "age": 數字, "rate": 數字}。請只抓出代表性的一般費率。同時附上費率單位 (rateUnit，如"每千元"或"每萬元")。
+5. 【重要】文件內如果包含「總保費費率表」（例如：各年齡/性別的每千元保額保費），請務必將其整理成結構化的 JSON 陣列 (rateTable)，為避免字數過長，請使用以下精簡結構，將相同性別與年期的費率合併入 rates 物件 (key=年齡, value=費率數字)：
+[{"gender": "男", "term": "30年期", "rates": {"0":139, "1":141, "32":199}}]
+請盡可能完整提取所有性別、年期、年齡的費率資料。同時附上費率單位 (rateUnit，如"每千元"或"每萬元")。
 6. 將條款細節與免責條款放入 rawAnalysis 以供查考。
 
 請回傳剛好一份 JSON 格式：
@@ -7335,7 +7348,7 @@ ${ins.analysisRaw || ins.coverageSummary}
     }
   ],
   "rateTable": [
-    { "gender": "男性", "term": "30年期", "age": 32, "rate": 139 }
+    { "gender": "男性", "term": "30年期", "rates": { "32": 139, "33": 142 } }
   ],
   "rateUnit": "每千元"
 }`;
