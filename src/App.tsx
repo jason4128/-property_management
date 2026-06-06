@@ -7113,21 +7113,46 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
             const rateEntry: any = rateTable.find((r: any) => {
                const rGender = String(r.gender || '').trim().replace('性', '');
                const currGender = String(current.planGender || '').trim().replace('性', '');
-               const isGenderMatch = !rGender || rGender === currGender || rGender.includes('不分');
+               const isGenderMatch = !rGender || rGender === currGender || rGender.includes('不分') || currGender.includes('不分');
                
-               const rTerm = String(r.term || '').replace(/年期?|歲/g, '').trim();
-               const currTerm = String(current.planTerm || '').replace(/年期?|歲/g, '').trim();
-               const isTermMatch = !rTerm || rTerm === currTerm;
+               const rTermMatch = String(r.term || '').match(/\d+/);
+               const rTerm = rTermMatch ? rTermMatch[0] : String(r.term || '').trim();
+               const currTermMatch = String(current.planTerm || '').match(/\d+/);
+               const currTerm = currTermMatch ? currTermMatch[0] : String(current.planTerm || '').trim();
                
-               // Support flat format (age in root) or compact format (age inside rates map)
-               const hasAgeMatch = (r.rates && r.rates[current.planAge]) || (Number(r.age) === Number(current.planAge));
+               let isTermMatch = !rTerm || rTerm === currTerm;
+               if (!currTerm && rTerm) isTermMatch = true; // Fallback if user hasn't selected a term
+               
+               // Support flat format (age in root) or compact format (age inside rates map/array)
+               let hasAgeMatch = false;
+               if (r.rates && !Array.isArray(r.rates)) {
+                  hasAgeMatch = Object.keys(r.rates).some(k => Number(k) === Number(current.planAge));
+               } else if (r.rates && Array.isArray(r.rates)) {
+                  // Sometimes AI outputs rates as an array of objects
+                  hasAgeMatch = r.rates.some((rt:any) => Number(rt.age) === Number(current.planAge));
+               } else {
+                  hasAgeMatch = Number(r.age) === Number(current.planAge);
+               }
                
                return isGenderMatch && isTermMatch && hasAgeMatch;
             });
+            console.log("rateTableJSON:", current.rateTableJSON);
+            console.log("Found rateEntry:", rateEntry, "for age", current.planAge);
             
             if (rateEntry) {
               // Extract rate from either compact 'rates' map or flat fields
-              const rawRate = rateEntry.rates ? rateEntry.rates[current.planAge] : (rateEntry.rate || rateEntry.premium || rateEntry.amount || rateEntry.price || 0);
+              let rawRate: string | number = 0;
+              if (rateEntry.rates && !Array.isArray(rateEntry.rates)) {
+                const ageKey = Object.keys(rateEntry.rates).find(k => Number(k) === Number(current.planAge));
+                if (ageKey) rawRate = rateEntry.rates[ageKey];
+              } else if (rateEntry.rates && Array.isArray(rateEntry.rates)) {
+                const ageObj = rateEntry.rates.find((rt:any) => Number(rt.age) === Number(current.planAge));
+                if (ageObj) rawRate = ageObj.rate || ageObj.premium || ageObj.amount || ageObj.price;
+              } else {
+                rawRate = rateEntry.rate || rateEntry.premium || rateEntry.amount || rateEntry.price || 0;
+              }
+              // Handle string with commas e.g. "1,234"
+              if (typeof rawRate === 'string') rawRate = rawRate.replace(/,/g, '').trim();
               const rate = Number(rawRate);
               let covValue = 0;
               const covStr = String(current.planCoverage).replace(/,/g, '').trim();
