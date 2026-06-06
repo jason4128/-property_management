@@ -3569,11 +3569,17 @@ ${text}
                         ) : (
                           <p className="text-[10px] text-slate-300 italic font-medium">尚無備註</p>
                         )}
-                        {(acc.agreedTransferDailyLimit || acc.nonAgreedTransferDailyLimit || acc.atmWithdrawalDailyLimit) ? (
+                        {(acc.agreedTransferPerTxLimit || acc.agreedTransferDailyLimit || acc.agreedTransferMonthlyLimit || acc.nonAgreedTransferPerTxLimit || acc.nonAgreedTransferDailyLimit || acc.nonAgreedTransferMonthlyLimit || acc.atmWithdrawalPerTxLimit || acc.atmWithdrawalDailyLimit || acc.atmWithdrawalMonthlyLimit) ? (
                             <div className="mt-2 flex flex-wrap gap-1">
+                              {acc.agreedTransferPerTxLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">約筆: {((acc.agreedTransferPerTxLimit)/10000).toFixed(0)}萬</span> : null}
                               {acc.agreedTransferDailyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">約日: {((acc.agreedTransferDailyLimit)/10000).toFixed(0)}萬</span> : null}
+                              {acc.agreedTransferMonthlyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">約月: {((acc.agreedTransferMonthlyLimit)/10000).toFixed(0)}萬</span> : null}
+                              {acc.nonAgreedTransferPerTxLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">非約筆: {((acc.nonAgreedTransferPerTxLimit)/10000).toFixed(0)}萬</span> : null}
                               {acc.nonAgreedTransferDailyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">非約日: {((acc.nonAgreedTransferDailyLimit)/10000).toFixed(0)}萬</span> : null}
+                              {acc.nonAgreedTransferMonthlyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">非約月: {((acc.nonAgreedTransferMonthlyLimit)/10000).toFixed(0)}萬</span> : null}
+                              {acc.atmWithdrawalPerTxLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">ATM筆: {((acc.atmWithdrawalPerTxLimit)/10000).toFixed(0)}萬</span> : null}
                               {acc.atmWithdrawalDailyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">ATM日: {((acc.atmWithdrawalDailyLimit)/10000).toFixed(0)}萬</span> : null}
+                              {acc.atmWithdrawalMonthlyLimit ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px]">ATM月: {((acc.atmWithdrawalMonthlyLimit)/10000).toFixed(0)}萬</span> : null}
                             </div>
                         ) : null}
                       </td>
