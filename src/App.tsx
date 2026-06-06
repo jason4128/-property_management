@@ -8064,30 +8064,40 @@ ${targetIns.analysisRaw}
                           isGenerating={isGeneratingTable}
                         />
 
-                        {insurances.find(i => i.id === selectedInsuranceId)?.planCalculatedCoverage && (
-                          <div className="space-y-6">
-                            {JSON.parse(insurances.find(i => i.id === selectedInsuranceId)!.planCalculatedCoverage!).map((cat: any, i: number) => (
-                              <div key={i} className="border border-slate-200 rounded-2xl overflow-hidden">
-                                <div className="bg-slate-800 text-white font-bold px-5 py-3 tracking-wide">
-                                  {cat.category}
-                                </div>
-                                <div className="divide-y divide-slate-100">
-                                  {cat.items.map((item: any, j: number) => (
-                                    <div key={j} className="p-5 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
-                                      <div className="flex-1">
-                                        <div className="font-bold text-slate-700">{item.name}</div>
-                                        {item.note && <div className="text-xs text-slate-400 mt-1">{item.note}</div>}
-                                      </div>
-                                      <div className="font-black text-indigo-600 text-lg">
-                                        {item.amount}
-                                      </div>
+                        {(() => {
+                          const ins = insurances.find(i => i.id === selectedInsuranceId);
+                          if (!ins?.planCalculatedCoverage) return null;
+                          try {
+                            const parsed = JSON.parse(ins.planCalculatedCoverage);
+                            if (!Array.isArray(parsed)) return null;
+                            return (
+                              <div className="space-y-6">
+                                {parsed.map((cat: any, i: number) => (
+                                  <div key={i} className="border border-slate-200 rounded-2xl overflow-hidden">
+                                    <div className="bg-slate-800 text-white font-bold px-5 py-3 tracking-wide">
+                                      {cat.category}
                                     </div>
-                                  ))}
-                                </div>
+                                    <div className="divide-y divide-slate-100">
+                                      {Array.isArray(cat.items) && cat.items.map((item: any, j: number) => (
+                                        <div key={j} className="p-5 flex justify-between items-center bg-white hover:bg-slate-50 transition-colors">
+                                          <div className="flex-1">
+                                            <div className="font-bold text-slate-700">{item.name}</div>
+                                            {item.note && <div className="text-xs text-slate-400 mt-1">{item.note}</div>}
+                                          </div>
+                                          <div className="font-black text-indigo-600 text-lg">
+                                            {item.amount}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                        )}
+                            );
+                          } catch (err) {
+                            return null;
+                          }
+                        })()}
                       </div>
 
                       <div className="space-y-6 pt-6">
