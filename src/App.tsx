@@ -6791,8 +6791,56 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
   );
 };
 
+// --- Insurance Calculation & Utility Helpers ---
+const isPlanBased = (ins: any) => {
+  const coverageStr = String(ins?.planCoverage || '').trim();
+  const options = ins?.planOptions || [];
+  const rateTableStr = ins?.rateTableJSON || '';
+  
+  const hasPlanInCoverage = coverageStr.includes('計畫') || coverageStr.includes('計劃') || /plan/i.test(coverageStr);
+  const hasPlanInOptions = options.some((opt: string) => opt.includes('計畫') || opt.includes('計劃') || /plan/i.test(opt));
+  const hasPlanInRateTable = rateTableStr.includes('計畫') || rateTableStr.includes('計劃') || /plan/i.test(rateTableStr);
+  
+  return hasPlanInCoverage || hasPlanInOptions || hasPlanInRateTable;
+};
+
+const normalizeName = (s: string) => {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/性/g, '')
+    .replace(/[　\s\-_:\(\)]/g, '')
+    .replace(/畫/g, '划')
+    .replace(/划/g, '劃')
+    .trim();
+};
+
+const extractNum = (str: string) => {
+  const cnNums: Record<string, string> = { '一':'1', '二':'2', '三':'3', '四':'4', '五':'5', '六':'6', '七':'7', '八':'8', '九':'9', '十':'10' };
+  let normalized = str;
+  for (const [key, val] of Object.entries(cnNums)) {
+    normalized = normalized.replace(new RegExp(key, 'g'), val);
+  }
+  const match = normalized.match(/\d+/);
+  return match ? match[0] : null;
+};
+
+const isTermOrPlanMatch = (a: string, b: string) => {
+  const normA = normalizeName(a);
+  const normB = normalizeName(b);
+  if (!normA || !normB) return false;
+  
+  if (normA === normB || normA.includes(normB) || normB.includes(normA)) return true;
+  
+  const numA = extractNum(normA);
+  const numB = extractNum(normB);
+  if (numA && numB && numA === numB) return true;
+  
+  return false;
+};
+
 // --- Plan Settings Form Component ---
 const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGenerating }: any) => {
+  const isPlanStyle = isPlanBased(insurance);
   const [localAge, setLocalAge] = useState<number>(insurance.planAge || currentAge);
   const [localGender, setLocalGender] = useState<string>(insurance.planGender || '');
   const [localTerm, setLocalTerm] = useState<string>(insurance.planTerm || '');
@@ -6800,22 +6848,20 @@ const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGener
   const isComposing = useRef(false);
 
   useEffect(() => {
-    // Only reset state if the product actually changes
     if (insurance.id) {
       setLocalAge(insurance.planAge || currentAge);
       setLocalGender(insurance.planGender || '');
       setLocalTerm(insurance.planTerm || '');
       setLocalCoverage(insurance.planCoverage || '');
     }
-  }, [insurance.id]);
+  }, [insurance.id, currentAge]);
 
   const handleUpdateField = (field: string, value: any) => {
-    // If user is still typing Chinese (IME), wait until blur or compositionEnd
     if (isComposing.current) return;
     onUpdate(insurance.id, { [field]: value });
   };
 
-  const isFormValid = localAge && localGender && localTerm && localCoverage;
+  const isFormValid = localAge && localGender && (isPlanStyle ? true : localTerm) && localCoverage;
 
   return (
     <div className="bg-slate-50 p-6 rounded-2xl mb-8">
@@ -6852,7 +6898,7 @@ const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGener
           </select>
         </div>
         <div>
-          <label className="text-xs font-bold text-slate-400 block mb-1">年期 <span className="text-rose-500">*</span></label>
+          <label className="text-xs font-bold text-slate-400 block mb-1">年期 {!isPlanStyle && <span className="text-rose-500">*</span>}</label>
           <input 
             type="text" 
             value={localTerm} 
@@ -6863,8 +6909,8 @@ const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGener
             }}
             onChange={(e) => setLocalTerm(e.target.value)}
             onBlur={() => handleUpdateField('planTerm', localTerm)}
-            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700"
-            placeholder="例: 30年期"
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700 disabled:opacity-50"
+            placeholder={isPlanStyle ? "續約型 (可留空)" : "例: 30年期"}
           />
         </div>
         <div>
@@ -6894,9 +6940,17 @@ const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGener
       </div>
       
       {insurance.planCalculatedPremium && (
-        <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-center justify-between">
-          <span className="text-sm font-bold text-amber-800">當年度預估保費</span>
-          <span className="text-lg font-black text-amber-600">{insurance.planCalculatedPremium}</span>
+        <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-2">
+          <div>
+            <span className="text-sm font-bold text-amber-800 block">當年度預估保費</span>
+            <span className="text-xs text-amber-700/80 mt-0.5 block">
+              {isPlanStyle 
+                ? `適用：【定期續約型費率】無繳費年限，隨年齡增長滾動調整。目前以現行年齡 ${currentAge} 歲對應「${insurance.planCoverage || ''}」計算。` 
+                : `適用：【長年期平準型費率】有繳費年限（如20年），保費持平。以起保年齡 ${insurance.planAge || currentAge} 歲費率乘算「${insurance.planCoverage || ''}」保額。`
+              }
+            </span>
+          </div>
+          <span className="text-lg font-black text-amber-600 shrink-0">{insurance.planCalculatedPremium}</span>
         </div>
       )}
     </div>
@@ -6906,24 +6960,21 @@ const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGener
 const CircularProgress = ({ percent, colorClass, ringColorClass, label }: { percent: number, colorClass: string, ringColorClass: string, label: string }) => {
   const radius = 45;
   const circumference = 2 * Math.PI * radius;
-  // Cap at 100 for the stroke drawing
   const drawPercent = Math.min(100, Math.max(0, percent));
   const strokeDashoffset = circumference - (drawPercent / 100) * circumference;
 
   return (
     <div className="flex flex-col items-center">
       <div className="relative w-32 h-32 flex items-center justify-center">
-        {/* Background circle */}
         <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
           <circle
             cx="50"
             cy="50"
             r={radius}
-            className={`stroke-current ${colorClass.replace('text-', 'text-').replace(/[0-9]+/, '100')}`} // faint bg
+            className={`stroke-current ${colorClass.replace('text-', 'text-').replace(/[0-9]+/, '100')}`}
             strokeWidth="8"
             fill="transparent"
           />
-          {/* Progress circle */}
           <circle
             cx="50"
             cy="50"
@@ -6969,7 +7020,6 @@ const CoverageOverview = ({ insurances }: { insurances: Insurance[] }) => {
           } else if (catName.includes('身故') || catName.includes('壽險')) {
              deathItems.push(...cat.items.map((i: any) => ({ ...i, insName: ins.name })));
           } else {
-             // Fallback
              cat.items.forEach((item: any) => {
                if (item.name.includes('失能') || item.name.includes('殘廢')) disabilityItems.push({...item, insName: ins.name});
                else if (item.name.includes('癌') || item.name.includes('重大')) cancerItems.push({...item, insName: ins.name});
@@ -6983,8 +7033,6 @@ const CoverageOverview = ({ insurances }: { insurances: Insurance[] }) => {
   });
 
   const getAmountStr = (item: any) => item.amount || '';
-  
-  // Heuristic mock percentage based on the number of items or specific values (matching screenshot vibes)
   const disabilityPct = disabilityItems.length > 0 ? 95 : 0;
   const cancerPct = cancerItems.length > 0 ? 35 : 0;
   const medicalPct = medicalItems.length > 0 ? 210 : 0;
