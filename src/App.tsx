@@ -95,6 +95,7 @@ import {
 import { MockTradingPage } from './components/MockTradingPage';
 import { ChildcarePlanner } from './components/ChildcarePlanner';
 import IvfExpenses from './components/IvfExpenses';
+import { PremiumTrendOverview } from './components/PremiumTrendOverview';
 
 import { auth, db } from './firebase';
 import { 
@@ -6920,7 +6921,7 @@ const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGener
           className={`px-6 py-2.5 font-bold text-white text-sm rounded-xl transition-all flex items-center gap-2 shadow-lg active:scale-95 ${!isFormValid ? 'bg-slate-300 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
         >
           {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-          {isGenerating ? '正在由 AI 試算中...' : '產生方案理賠額度表'}
+          {isGenerating ? '正在由 AI 試算中...' : '產生費率與理賠額度表'}
         </button>
       </div>
     </div>
@@ -7152,13 +7153,18 @@ ${ins.analysisRaw || ins.coverageSummary}
 - 年期：${ins.planTerm || '未知'}
 - 保額/單位/計畫別：${ins.planCoverage || '未知'}
 
-請嚴格根據以上資訊，試算出此特定方案的各項理賠額度，並回傳一份 JSON：
-1. 若數據中包含「費率表」，請依「年齡」、「性別」、「計畫別」等條件找出當年度保險費用，若無資料填寫 "無資訊"。
-2. coverageTable 為試算出的各項理賠額度表格。
+請嚴格根據以上資訊，試算出此特定方案的各項理賠額度，並回傳一份 JSON。
 
-格式必須為：
+請特別注意保費走勢：若數據中包含或推算得出「費率表」，請依「年齡」、「性別」、「年期」、「計畫別」等條件分析，列出「從投保年齡開始，到繳費期滿或達特定歲數」為止的保費變化（例如平準費率每年不變，或自然費率每年遞增）。若無法推算，請至少填入首年保費。
+
+格式必須剛好是：
 {
-  "premium": "5,260 元",
+  "firstYearPremium": 5260, // 首年保費 (數字格式)
+  "premium": "5,260 元", // 格式化字串
+  "premiumTrend": [ // 保費走勢陣列，包含往後各年齡的保費數字
+    { "age": 30, "premium": 5260 },
+    { "age": 31, "premium": 5260 }
+  ],
   "coverageTable": [
     {
       "category": "住院 / 每次",
@@ -7170,7 +7176,7 @@ ${ins.analysisRaw || ins.coverageSummary}
   ]
 }
 
-請只回傳 JSON，不要有其他文字。只接受剛好 JSON 開頭跟結尾。`;
+請只回傳 JSON，不要有任何其他文字。只接受剛好 JSON 開頭跟結尾。`;
       
       const ai = new GoogleGenAI({ apiKey });
       const response = await withRetry(() => ai.models.generateContent({
@@ -7186,6 +7192,8 @@ ${ins.analysisRaw || ins.coverageSummary}
       
       const parsed = JSON.parse(text);
       await updateDoc(doc(db, 'insurances', insId), {
+        firstYearPremium: parsed.firstYearPremium || 0,
+        premiumTrendJSON: JSON.stringify(parsed.premiumTrend || []),
         planCalculatedPremium: parsed.premium || "無資訊",
         planCalculatedCoverage: JSON.stringify(parsed.coverageTable || [])
       });
@@ -7708,92 +7716,7 @@ ${ins.analysisRaw || ins.coverageSummary}
       )}
 
       {viewMode === 'table' ? (
-        <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-6 bg-indigo-50/50 border-b border-indigo-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div className="flex items-center gap-6">
-               <div className="flex flex-col">
-                 <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">年度保費總額 (目前)</span>
-                 <span className="text-3xl font-black text-indigo-900 tracking-tight">
-                   ${(premiums.filter(p => p.age === currentAge && insurances.some(i => i.id === p.insuranceId)).reduce((sum, p) => sum + p.premium, 0)).toLocaleString()}
-                 </span>
-               </div>
-               <div className="h-10 w-px bg-indigo-200 hidden md:block"></div>
-               <div className="flex flex-col">
-                 <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">保險產品總數</span>
-                 <span className="text-3xl font-black text-slate-800 tracking-tight">{insurances.length} 件</span>
-               </div>
-            </div>
-            <p className="text-sm text-slate-400 italic font-medium max-w-xs md:text-right leading-tight">※ 資料同步至雲端，可隨時核對 AI 解析結果，點擊金額可直接修改</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[800px]">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500">
-                <tr>
-                  <th className="p-4 text-sm font-black border-r border-slate-200 sticky left-0 z-10 bg-slate-50 w-24 text-center">年齡</th>
-                  {insurances.map(ins => (
-                    <th key={ins.id} className="p-4 text-center border-r border-slate-200 group relative min-w-[120px]">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">{ins.provider}</span>
-                        <span className="text-sm font-black text-slate-800 leading-tight">{ins.name}</span>
-                        <span className="text-[9px] font-bold text-indigo-500/70 mt-1">{ins.type}</span>
-                      </div>
-                      <button onClick={() => setDeleteTarget({ type: 'insurances', id: ins.id, name: `${ins.provider} ${ins.name}` })} className="absolute top-2 right-2 p-1.5 bg-white text-rose-500 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-all hover:scale-110">
-                        <X size={12} />
-                      </button>
-                    </th>
-                  ))}
-                  <th className="p-4 text-center bg-indigo-50/50 border-r border-slate-200 w-32 text-sm font-black text-indigo-700">月預估 / 年總計</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ages.map(age => {
-                  const totalForAge = insurances.reduce((sum, ins) => {
-                    const pre = premiums.find(p => p.insuranceId === ins.id && p.age === age);
-                    return sum + (pre?.premium || 0);
-                  }, 0);
-                  const isCurrent = age === currentAge;
-                  
-                  return (
-                    <tr key={age} className={`border-b border-slate-100 hover:bg-slate-50/50 transition-colors ${isCurrent ? 'bg-indigo-50/30' : ''}`}>
-                      <td className={`p-4 text-base font-bold border-r border-slate-200 sticky left-0 z-10 text-center ${isCurrent ? 'bg-indigo-100/50 text-indigo-700 ring-2 ring-inset ring-indigo-200' : 'bg-white text-slate-500'}`}>
-                        {age} 歲
-                      </td>
-                      {insurances.map(ins => {
-                        const pre = premiums.find(p => p.insuranceId === ins.id && p.age === age);
-                        return (
-                          <td key={`${ins.id}-${age}`} className="p-3 text-right border-r border-slate-200 font-mono text-sm">
-                            <div className="flex items-center justify-end group">
-                              <span className="text-slate-300 text-[10px] mr-1 opacity-0 group-hover:opacity-100">$</span>
-                              <input 
-                                type="number"
-                                className={`w-full bg-transparent text-right focus:bg-white focus:ring-2 focus:ring-indigo-300 rounded-lg px-2 py-1.5 outline-none font-bold transition-all ${isCurrent ? 'text-indigo-800 text-lg' : 'text-slate-600'}`}
-                                value={pre?.premium || 0}
-                                onChange={async (e) => {
-                                  const val = Number(e.target.value);
-                                  if (pre) {
-                                    await updateDoc(doc(db, 'insurancePremiums', pre.id), { premium: val });
-                                  } else if (val > 0) {
-                                    await addDoc(collection(db, 'insurancePremiums'), { insuranceId: ins.id, age, premium: val, uid: user.uid });
-                                  }
-                                }}
-                              />
-                            </div>
-                          </td>
-                        );
-                      })}
-                      <td className={`p-4 text-right font-mono border-r border-slate-200 ${isCurrent ? 'text-indigo-700 bg-indigo-50/30' : 'text-slate-800 bg-slate-50/30'}`}>
-                        <div className="flex flex-col">
-                          <span className={`${isCurrent ? 'text-xl font-black' : 'text-base font-bold'}`}>${totalForAge.toLocaleString()}</span>
-                          <span className="text-[10px] font-bold text-slate-400">平均月繳 ${Math.round(totalForAge / 12).toLocaleString()}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <PremiumTrendOverview insurances={insurances} currentAge={currentAge} />
       ) : viewMode === 'overview' ? (
         <CoverageOverview insurances={insurances} />
       ) : (

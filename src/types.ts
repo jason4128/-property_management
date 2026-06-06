@@ -215,6 +215,9 @@ export interface Insurance {
   planOptions?: string[]; // Array of extracted plan options
   planCalculatedPremium?: string; // AI calculated premium based on plan
   planCalculatedCoverage?: string; // JSON string representing the calculated coverage table
+  premiumTrendJSON?: string; // JSON array of {age: number, premium: number}
+  firstYearPremium?: number; // Calculated first year premium
+  rawDocumentId?: string; // (Optional) Reference to a stored contract text ID
 }
 
 export interface InsurancePremium {
