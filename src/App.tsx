@@ -6814,6 +6814,31 @@ const normalizeName = (s: string) => {
     .trim();
 };
 
+const getPlanNormalizedKey = (s: string) => {
+  let str = String(s || '').toLowerCase()
+    .replace(/[畫划]/g, '劃')
+    .replace(/[　\s\-_:\(\)計畫別計劃別plan]/g, '')
+    .trim();
+  
+  const chineseToNum: Record<string, string> = {
+    '一': '1', '壹': '1',
+    '二': '2', '貳': '2',
+    '三': '3', '參': '3',
+    '四': '4', '肆': '4',
+    '五': '5', '伍': '5',
+    '六': '6', '陸': '6',
+    '七': '7', '柒': '7',
+    '八': '8', '捌': '8',
+    '九': '9', '玖': '9',
+    '十': '10', '拾': '10'
+  };
+  
+  for (const [cn, num] of Object.entries(chineseToNum)) {
+    str = str.replace(new RegExp(cn, 'g'), num);
+  }
+  return str;
+};
+
 const extractNum = (str: string) => {
   const cnNums: Record<string, string> = { '一':'1', '二':'2', '三':'3', '四':'4', '五':'5', '六':'6', '七':'7', '八':'8', '九':'9', '十':'10' };
   let normalized = str;
@@ -6834,6 +6859,12 @@ const isTermOrPlanMatch = (a: string, b: string) => {
   const numA = extractNum(normA);
   const numB = extractNum(normB);
   if (numA && numB && numA === numB) return true;
+  
+  const keyA = getPlanNormalizedKey(normA);
+  const keyB = getPlanNormalizedKey(normB);
+  if (keyA && keyB && (keyA === keyB || keyA.includes(keyB) || keyB.includes(keyA))) {
+    return true;
+  }
   
   return false;
 };
@@ -6999,7 +7030,7 @@ const CircularProgress = ({ percent, colorClass, ringColorClass, label }: { perc
   );
 };
 
-const CoverageOverview = ({ insurances }: { insurances: Insurance[] }) => {
+const CoverageOverview = ({ insurances, currentAge }: { insurances: Insurance[], currentAge: number }) => {
   const disabilityItems: any[] = [];
   const cancerItems: any[] = [];
   const medicalItems: any[] = [];
