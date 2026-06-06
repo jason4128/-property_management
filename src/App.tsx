@@ -7127,7 +7127,63 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
 
   const handleUpdatePlanInfo = async (id: string, updates: Partial<Insurance>) => {
     try {
-      await updateDoc(doc(db, 'insurances', id), updates);
+      const ins = insurances.find(i => i.id === id);
+      if (ins) {
+        let finalUpdates = { ...updates };
+        const current = { ...ins, ...updates };
+        
+        // Local premium calculation logic using the extracted rateTableJSON
+        if (current.rateTableJSON && current.planAge && current.planGender && current.planTerm && current.planCoverage) {
+          try {
+            const rateTable = JSON.parse(current.rateTableJSON);
+            const rateEntry = rateTable.find((r: any) => 
+               r.gender === current.planGender &&
+               r.term === current.planTerm &&
+               r.age === current.planAge
+            );
+            
+            if (rateEntry) {
+              const rate = rateEntry.rate;
+              let covValue = 0;
+              const covStr = String(current.planCoverage).replace(/,/g, '');
+              if (covStr.includes('萬')) {
+                 covValue = parseFloat(covStr) * 10000;
+              } else {
+                 covValue = parseFloat(covStr);
+              }
+
+              let premium = 0;
+              const unit = current.rateUnit || '每千元';
+              if (unit.includes('每千元') || unit.includes('千元')) {
+                 premium = Math.round((covValue / 1000) * rate);
+              } else if (unit.includes('每萬元') || unit.includes('萬元')) {
+                 premium = Math.round((covValue / 10000) * rate);
+              } else {
+                 premium = rate;
+              }
+
+              if (!isNaN(premium) && premium > 0) {
+                 finalUpdates.firstYearPremium = premium;
+                 finalUpdates.planCalculatedPremium = `${premium.toLocaleString()} 元`;
+                 
+                 // Predict level premium trend based on term
+                 const termMatch = current.planTerm.match(/(\d+)/);
+                 if (termMatch) {
+                    const terms = parseInt(termMatch[1]);
+                    const trend = [];
+                    for(let i=0; i<terms; i++) {
+                       trend.push({ age: current.planAge + i, premium: premium });
+                    }
+                    finalUpdates.premiumTrendJSON = JSON.stringify(trend);
+                 }
+              }
+            }
+          } catch(err) {
+            console.warn('Failed local premium calculation:', err);
+          }
+        }
+        await updateDoc(doc(db, 'insurances', id), finalUpdates);
+      }
     } catch (e) {
       console.error(e);
       alert('更新方案設定失敗');
@@ -7226,14 +7282,18 @@ ${ins.analysisRaw || ins.coverageSummary}
 1. 請總結該保險的核心保障項目（例如：住院日額、特定手術、意外失能等）。
 2. 請提取關鍵理賠額度。
 3. 判斷文件中是否有「計畫別」或「保障類別」（例如：計畫一、計畫二、500萬、1000萬等），如果有的話提取出來，以字串陣列回傳。
-4. 【極度重要】如果文件內包含「費率表」（例如：各年齡/性別的每千元保額保費、萬元保費等），請你務必將整個費率表的數據完整、詳細地結構化萃取下來，放進 rawAnalysis 裡面。這對於後續系統計算保費走勢非常關鍵。
-5. 以結構化 Markdown 格式回傳上述所有內容。
+4. 如果文件內包含「費率表」（例如：各年齡/性別的每千元保額保費、萬元保費等），請提取並整理成結構化的 JSON 陣列 (rateTable)，其中元素格式必須為 {"gender": "...", "term": "...", "age": 數字, "rate": 數字}。請只抓出代表性的一般費率，若資料極為龐大，請盡全力萃取出來。同時也請附上費率單位 (rateUnit，例如"每千元"或"每萬元")。
+5. 將條款細節與免責條款放入 rawAnalysis 以供查考。
 
-請回傳 JSON 格式：
+請回傳剛好一份 JSON 格式：
 {
   "summary": "Markdown 格式的保障總結",
-  "rawAnalysis": "詳細的分析數據，包含完整的費率表(若有)",
-  "planOptions": ["計畫一", "計畫二"] // 如果有的話，否則回傳空陣列
+  "rawAnalysis": "詳細的條款與保障內容",
+  "planOptions": ["計畫一", "計畫二"],
+  "rateTable": [
+    { "gender": "男性", "term": "30年期", "age": 32, "rate": 139 }
+  ],
+  "rateUnit": "每千元"
 }`;
 
       const fileParts = aiFileDatas.map(file => ({
@@ -7256,7 +7316,20 @@ ${ins.analysisRaw || ins.coverageSummary}
             properties: {
               summary: { type: Type.STRING },
               rawAnalysis: { type: Type.STRING },
-              planOptions: { type: Type.ARRAY, items: { type: Type.STRING } }
+              planOptions: { type: Type.ARRAY, items: { type: Type.STRING } },
+              rateTable: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    gender: { type: Type.STRING },
+                    term: { type: Type.STRING },
+                    age: { type: Type.NUMBER },
+                    rate: { type: Type.NUMBER }
+                  }
+                }
+              },
+              rateUnit: { type: Type.STRING }
             },
             required: ["summary", "rawAnalysis"]
           }
@@ -7283,11 +7356,17 @@ ${ins.analysisRaw || ins.coverageSummary}
       }
 
       if (result.summary) {
-        await updateDoc(doc(db, 'insurances', selectedInsuranceId), {
+        let updateData: any = {
           coverageSummary: result.summary,
           analysisRaw: result.rawAnalysis,
           planOptions: result.planOptions || []
-        });
+        };
+        if (result.rateTable && result.rateTable.length > 0) {
+           updateData.rateTableJSON = JSON.stringify(result.rateTable);
+           updateData.rateUnit = result.rateUnit || '每千元';
+        }
+
+        await updateDoc(doc(db, 'insurances', selectedInsuranceId), updateData);
         alert('保險契約分析完成！');
       }
       setIsAIModalOpen(false);
@@ -7748,6 +7827,7 @@ ${targetIns.analysisRaw}
           insurances={insurances} 
           currentAge={currentAge} 
           onGenerate={handleGenerateCoverageTable} 
+          onUpdate={handleUpdatePlanInfo}
         />
       ) : viewMode === 'overview' ? (
         <CoverageOverview insurances={insurances} />

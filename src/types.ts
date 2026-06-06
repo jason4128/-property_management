@@ -218,6 +218,8 @@ export interface Insurance {
   premiumTrendJSON?: string; // JSON array of {age: number, premium: number}
   firstYearPremium?: number; // Calculated first year premium
   rawDocumentId?: string; // (Optional) Reference to a stored contract text ID
+  rateTableJSON?: string; // Structured JSON of the rate table
+  rateUnit?: string; // Unit for rate table e.g. "每千元"
 }
 
 export interface InsurancePremium {

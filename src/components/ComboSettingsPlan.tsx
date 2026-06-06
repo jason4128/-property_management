@@ -8,20 +8,18 @@ import { db } from '../firebase';
 export const ComboSettingsPlan = ({ 
   insurances, 
   currentAge,
-  onGenerate
+  onGenerate,
+  onUpdate
 }: { 
   insurances: Insurance[];
   currentAge: number;
   onGenerate: (insId: string) => Promise<void>;
+  onUpdate: (id: string, updates: Partial<Insurance>) => Promise<void>;
 }) => {
   const [generatingId, setGeneratingId] = useState<string | null>(null);
 
-  const handleUpdate = async (id: string, field: string, val: any) => {
-     try {
-       await updateDoc(doc(db, 'insurances', id), { [field]: val });
-     } catch(e) {
-       console.error(e);
-     }
+  const handleUpdateLocal = async (id: string, field: string, val: any) => {
+     await onUpdate(id, { [field]: val });
   };
 
   const providers = Array.from(new Set(insurances.map(i => i.provider)));
@@ -76,7 +74,7 @@ export const ComboSettingsPlan = ({
                            className="w-full md:w-3/4 p-2 bg-slate-50 border border-slate-200 rounded-lg text-center outline-none focus:border-indigo-500 focus:bg-white transition-colors"
                            placeholder="如: 20年期"
                            defaultValue={ins.planTerm || ''}
-                           onBlur={(e) => handleUpdate(ins.id, 'planTerm', e.target.value)}
+                           onBlur={(e) => handleUpdateLocal(ins.id, 'planTerm', e.target.value)}
                         />
                      </div>
 
@@ -87,7 +85,7 @@ export const ComboSettingsPlan = ({
                            <select
                               className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-center font-medium outline-none focus:border-indigo-500 focus:bg-white transition-colors"
                               value={ins.planCoverage || ''}
-                              onChange={(e) => handleUpdate(ins.id, 'planCoverage', e.target.value)}
+                              onChange={(e) => handleUpdateLocal(ins.id, 'planCoverage', e.target.value)}
                            >
                               <option value="">請選擇</option>
                               {ins.planOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -98,7 +96,7 @@ export const ComboSettingsPlan = ({
                               className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-center outline-none focus:border-indigo-500 focus:bg-white transition-colors"
                               placeholder="如: 20萬"
                               defaultValue={ins.planCoverage || ''}
-                              onBlur={(e) => handleUpdate(ins.id, 'planCoverage', e.target.value)}
+                              onBlur={(e) => handleUpdateLocal(ins.id, 'planCoverage', e.target.value)}
                            />
                         )}
                      </div>
@@ -117,7 +115,7 @@ export const ComboSettingsPlan = ({
                                 const val = parseInt(e.target.value);
                                 if (!isNaN(val)) {
                                   // Update premium locally and clear trend so we just rely on firstYearPremium
-                                  handleUpdate(ins.id, 'firstYearPremium', val);
+                                  handleUpdateLocal(ins.id, 'firstYearPremium', val);
                                 }
                               }}
                             />
