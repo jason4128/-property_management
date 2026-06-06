@@ -3244,9 +3244,9 @@ ${text}
     return sum;
   }, 0);
 
-  const maxAgreedDaily = accounts.reduce((sum, a) => sum + Math.min(a.balance || 0, a.agreedTransferDailyLimit || 0), 0);
-  const maxNonAgreedDaily = accounts.reduce((sum, a) => sum + Math.min(a.balance || 0, a.nonAgreedTransferDailyLimit || 0), 0);
-  const maxAtmDaily = accounts.filter(a => !a.isTransferOnly).reduce((sum, a) => sum + Math.min(a.balance || 0, a.atmWithdrawalDailyLimit || 0), 0);
+  const maxAgreedDaily = accounts.reduce((sum, a) => sum + (a.agreedTransferDailyLimit || 0), 0);
+  const maxNonAgreedDaily = accounts.reduce((sum, a) => sum + (a.nonAgreedTransferDailyLimit || 0), 0);
+  const maxAtmDaily = accounts.filter(a => !a.isTransferOnly).reduce((sum, a) => sum + (a.atmWithdrawalDailyLimit || 0), 0);
 
   return (
     <div className="space-y-8">
