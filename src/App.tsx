@@ -6869,35 +6869,26 @@ const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGener
         </div>
         <div>
           <label className="text-xs font-bold text-slate-400 block mb-1">保額 / 計畫別 <span className="text-rose-500">*</span></label>
-          {insurance.planOptions && insurance.planOptions.length > 0 ? (
-            <select
-              value={localCoverage} 
-              onChange={(e) => {
-                const val = e.target.value;
-                setLocalCoverage(val);
-                handleUpdateField('planCoverage', val);
-              }}
-              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700 font-bold"
-            >
-              <option value="">請選擇</option>
+          <input 
+            type="text" 
+            list={`plan-options-${insurance.id}`}
+            value={localCoverage} 
+            onCompositionStart={() => isComposing.current = true}
+            onCompositionEnd={() => {
+              isComposing.current = false;
+              handleUpdateField('planCoverage', localCoverage);
+            }}
+            onChange={(e) => setLocalCoverage(e.target.value)}
+            onBlur={() => handleUpdateField('planCoverage', localCoverage)}
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700"
+            placeholder="例: 20萬 或 計畫5"
+          />
+          {insurance.planOptions && insurance.planOptions.length > 0 && (
+            <datalist id={`plan-options-${insurance.id}`}>
               {insurance.planOptions.map((opt: string) => (
-                <option key={opt} value={opt}>{opt}</option>
+                <option key={opt} value={opt} />
               ))}
-            </select>
-          ) : (
-            <input 
-              type="text" 
-              value={localCoverage} 
-              onCompositionStart={() => isComposing.current = true}
-              onCompositionEnd={() => {
-                isComposing.current = false;
-                handleUpdateField('planCoverage', localCoverage);
-              }}
-              onChange={(e) => setLocalCoverage(e.target.value)}
-              onBlur={() => handleUpdateField('planCoverage', localCoverage)}
-              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700"
-              placeholder="例: 20萬 或 計畫5"
-            />
+            </datalist>
           )}
         </div>
       </div>
@@ -6918,11 +6909,11 @@ const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGener
             }
             onGenerate(insurance.id);
           }}
-          disabled={isGenerating}
-          className={`px-6 py-2.5 font-bold text-white text-sm rounded-xl transition-all flex items-center gap-2 shadow-lg active:scale-95 ${!isFormValid ? 'bg-slate-300 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+          disabled={isGenerating || !isFormValid}
+          className={`px-6 py-2.5 font-bold text-white text-sm rounded-xl transition-all flex items-center gap-2 shadow-lg active:scale-95 ${!isFormValid ? 'bg-slate-300 cursor-not-allowed opacity-0 h-0 w-0 p-0 overflow-hidden pointer-events-none' : 'bg-indigo-600 hover:bg-indigo-700'}`}
         >
           {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-          {isGenerating ? '正在由 AI 試算中...' : '產生費率與理賠額度表'}
+          {isGenerating ? '正在由 AI 試算中...' : (insurance.planCalculatedCoverage || insurance.planCalculatedPremium) ? 'AI 重新試算(自動試算失敗時使用)' : '產生費率與理賠額度表'}
         </button>
       </div>
     </div>
@@ -7182,6 +7173,50 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
             console.warn('Failed local premium calculation:', err);
           }
         }
+        
+        // Local coverage table calculation
+        if (current.coverageTemplateJSON && current.planCoverage) {
+          try {
+            const template = JSON.parse(current.coverageTemplateJSON);
+            const baseUnit = current.coverageBaseUnit || 1;
+            
+            let userCovValue = 1;
+            const covStr = String(current.planCoverage).replace(/,/g, '');
+            if (covStr.includes('計畫')) {
+               const match = covStr.match(/([一二三四五六七八九十]|\d+)/);
+               if (match) {
+                 const numMap: Record<string, number> = { '一':1, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9, '十':10 };
+                 userCovValue = numMap[match[1]] || parseInt(match[1]) || 1;
+               }
+            } else if (covStr.includes('萬')) {
+               userCovValue = parseFloat(covStr) * 10000;
+            } else {
+               userCovValue = parseFloat(covStr) || 1;
+            }
+
+            const ratio = userCovValue / baseUnit;
+
+            const calculatedTemplate = template.map((cat: any) => ({
+               category: cat.category,
+               items: cat.items.map((item: any) => {
+                  let finalAmount = item.amount;
+                  if (item.scalable) {
+                    finalAmount = Math.round(item.amount * ratio);
+                  }
+                  return {
+                     name: item.name,
+                     amount: `${finalAmount.toLocaleString()} 元`,
+                     note: item.note
+                  };
+               })
+            }));
+
+            finalUpdates.planCalculatedCoverage = JSON.stringify(calculatedTemplate);
+          } catch (err) {
+            console.warn('Failed local coverage calculation:', err);
+          }
+        }
+
         await updateDoc(doc(db, 'insurances', id), finalUpdates);
       }
     } catch (e) {
@@ -7280,16 +7315,27 @@ ${ins.analysisRaw || ins.coverageSummary}
       const targetIns = insurances.find(i => i.id === selectedInsuranceId);
       const prompt = `你是一個專業的保險契約分析師。請分析這份「${targetIns?.provider} ${targetIns?.name}」的保險契約文件。
 1. 請總結該保險的核心保障項目（例如：住院日額、特定手術、意外失能等）。
-2. 請提取關鍵理賠額度。
-3. 判斷文件中是否有「計畫別」或「保障類別」（例如：計畫一、計畫二、500萬、1000萬等），如果有的話提取出來，以字串陣列回傳。
-4. 如果文件內包含「費率表」（例如：各年齡/性別的每千元保額保費、萬元保費等），請提取並整理成結構化的 JSON 陣列 (rateTable)，其中元素格式必須為 {"gender": "...", "term": "...", "age": 數字, "rate": 數字}。請只抓出代表性的一般費率，若資料極為龐大，請盡全力萃取出來。同時也請附上費率單位 (rateUnit，例如"每千元"或"每萬元")。
-5. 將條款細節與免責條款放入 rawAnalysis 以供查考。
+2. 請提取關鍵理賠額度，並以「最低基準單位」（例如 1萬保額 或 計畫一）為基礎，提取所有理賠項目與基準理賠金額放入 coverageTemplate 陣列 (金額必須為純數字 amount，不要帶單位字串)。若該項目會隨保額等倍數增加，請設 scalable: true；若為固定額度，則設 scalable: false。
+3. 判斷並提供 coverageBaseUnit，代表上述的 coverageTemplate 是基於多大的保額數字建構的（例如以1萬為單位請填 10000）。若是計畫型(如計畫一為基準)，請填 1。
+4. 判斷文件中是否有「計畫別」或「保障類別」（例如：["1萬", "2萬"] 或 ["計畫一", "計畫二"]），請以字串陣列回傳至 planOptions 欄位。
+5. 【重要】文件內如果包含「總保費費率表」（例如：各年齡/性別的每千元保額保費），請務必將其整理成結構化的 JSON 陣列 (rateTable)，這對於後續即時算保費極度關鍵，元素格式必須為 {"gender": "...", "term": "...", "age": 數字, "rate": 數字}。請只抓出代表性的一般費率。同時附上費率單位 (rateUnit，如"每千元"或"每萬元")。
+6. 將條款細節與免責條款放入 rawAnalysis 以供查考。
 
 請回傳剛好一份 JSON 格式：
 {
   "summary": "Markdown 格式的保障總結",
   "rawAnalysis": "詳細的條款與保障內容",
-  "planOptions": ["計畫一", "計畫二"],
+  "planOptions": ["10年期", "20年期"] 或 ["計畫一", "計畫二"] 或 ["1萬", "2萬"],
+  "coverageBaseUnit": 10000,
+  "coverageTemplate": [
+    {
+      "category": "醫療保障",
+      "items": [
+        { "name": "住院日額(最高)", "amount": 1000, "scalable": true, "note": "最高90天" },
+        { "name": "救護車費用", "amount": 2000, "scalable": false, "note": "定額給付" }
+      ]
+    }
+  ],
   "rateTable": [
     { "gender": "男性", "term": "30年期", "age": 32, "rate": 139 }
   ],
@@ -7317,6 +7363,28 @@ ${ins.analysisRaw || ins.coverageSummary}
               summary: { type: Type.STRING },
               rawAnalysis: { type: Type.STRING },
               planOptions: { type: Type.ARRAY, items: { type: Type.STRING } },
+              coverageBaseUnit: { type: Type.NUMBER },
+              coverageTemplate: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    category: { type: Type.STRING },
+                    items: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          name: { type: Type.STRING },
+                          amount: { type: Type.NUMBER },
+                          scalable: { type: Type.BOOLEAN },
+                          note: { type: Type.STRING }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
               rateTable: {
                 type: Type.ARRAY,
                 items: {
@@ -7364,6 +7432,10 @@ ${ins.analysisRaw || ins.coverageSummary}
         if (result.rateTable && result.rateTable.length > 0) {
            updateData.rateTableJSON = JSON.stringify(result.rateTable);
            updateData.rateUnit = result.rateUnit || '每千元';
+        }
+        if (result.coverageTemplate && result.coverageTemplate.length > 0) {
+           updateData.coverageTemplateJSON = JSON.stringify(result.coverageTemplate);
+           updateData.coverageBaseUnit = result.coverageBaseUnit || 1;
         }
 
         await updateDoc(doc(db, 'insurances', selectedInsuranceId), updateData);

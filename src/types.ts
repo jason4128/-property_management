@@ -220,6 +220,8 @@ export interface Insurance {
   rawDocumentId?: string; // (Optional) Reference to a stored contract text ID
   rateTableJSON?: string; // Structured JSON of the rate table
   rateUnit?: string; // Unit for rate table e.g. "每千元"
+  coverageTemplateJSON?: string;
+  coverageBaseUnit?: number;
 }
 
 export interface InsurancePremium {

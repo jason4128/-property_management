@@ -79,25 +79,20 @@ export const ComboSettingsPlan = ({
                      </div>
 
                      {/* Coverage/Plan */}
-                     <div className="md:col-span-3 flex flex-col md:items-center">
+                     <div className="md:col-span-3 flex flex-col md:items-center relative">
                         <label className="text-[10px] text-slate-400 font-bold mb-1 md:hidden">保額 / 計畫別</label>
-                        {ins.planOptions && ins.planOptions.length > 0 ? (
-                           <select
-                              className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-center font-medium outline-none focus:border-indigo-500 focus:bg-white transition-colors"
-                              value={ins.planCoverage || ''}
-                              onChange={(e) => handleUpdateLocal(ins.id, 'planCoverage', e.target.value)}
-                           >
-                              <option value="">請選擇</option>
-                              {ins.planOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                           </select>
-                        ) : (
-                           <input 
-                              type="text" 
-                              className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-center outline-none focus:border-indigo-500 focus:bg-white transition-colors"
-                              placeholder="如: 20萬"
-                              defaultValue={ins.planCoverage || ''}
-                              onBlur={(e) => handleUpdateLocal(ins.id, 'planCoverage', e.target.value)}
-                           />
+                        <input 
+                           type="text" 
+                           list={`combo-plan-options-${ins.id}`}
+                           className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-center outline-none focus:border-indigo-500 focus:bg-white transition-colors"
+                           placeholder="如: 20萬 或 計畫5"
+                           defaultValue={ins.planCoverage || ''}
+                           onBlur={(e) => handleUpdateLocal(ins.id, 'planCoverage', e.target.value)}
+                        />
+                        {ins.planOptions && ins.planOptions.length > 0 && (
+                          <datalist id={`combo-plan-options-${ins.id}`}>
+                            {ins.planOptions.map(opt => <option key={opt} value={opt} />)}
+                          </datalist>
                         )}
                      </div>
 
