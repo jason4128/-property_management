@@ -3308,19 +3308,19 @@ ${text}
               <LogOut size={18} className="-translate-y-px -translate-x-px" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">單日約定轉出上限</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">單日約轉上限</p>
               <p className="text-lg font-black text-slate-700">${maxAgreedDaily.toLocaleString()}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 pr-4 border-r border-slate-100">
              <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">單日非約定轉出</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">單日非約轉上限</p>
               <p className="text-lg font-black text-slate-700">${maxNonAgreedDaily.toLocaleString()}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
              <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">單日 ATM 提領</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">單日 ATM 提領上限</p>
               <p className="text-lg font-black text-slate-700">${maxAtmDaily.toLocaleString()}</p>
             </div>
           </div>
