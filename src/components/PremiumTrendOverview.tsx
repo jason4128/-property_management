@@ -12,10 +12,16 @@ export const PremiumTrendOverview = ({ insurances, currentAge }: { insurances: I
         try {
           trend = JSON.parse(ins.premiumTrendJSON);
         } catch (e) {}
-      } else if (ins.planCalculatedPremium) {
-          const val = Number(String(ins.planCalculatedPremium).replace(/[^0-9]/g, ''));
-          if (!isNaN(val)) {
-             for (let a = currentAge; a <= currentAge + 20; a++) trend.push({ age: a, premium: val });
+      } 
+      
+      if (trend.length === 0) {
+          let val = 0;
+          if (ins.planCalculatedPremium) {
+             const parsedVal = Number(String(ins.planCalculatedPremium).replace(/[^0-9]/g, ''));
+             if (!isNaN(parsedVal)) val = parsedVal;
+          }
+          for (let a = currentAge; a <= currentAge + 20; a++) {
+             trend.push({ age: a, premium: val });
           }
       }
       return { ins, trend };
