@@ -7286,14 +7286,14 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
         }
         
         // Local coverage table calculation
-        if (current.coverageTemplateJSON && current.planCoverage) {
+        if (!isXHR && current.coverageTemplateJSON && current.planCoverage) {
           try {
             const template = JSON.parse(current.coverageTemplateJSON);
             const baseUnit = current.coverageBaseUnit || 1;
             
             let userCovValue = 1;
             const covStr = String(current.planCoverage).replace(/,/g, '');
-            if (covStr.includes('計畫')) {
+            if (covStr.includes('計畫') || covStr.includes('計劃')) {
                const match = covStr.match(/([一二三四五六七八九十]|\d+)/);
                if (match) {
                  const numMap: Record<string, number> = { '一':1, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9, '十':10 };
