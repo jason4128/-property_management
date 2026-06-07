@@ -6113,7 +6113,12 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
       priResult,
       divCreditRaw: Math.round(divCreditRaw),
       divCredit: Math.round(divCredit),
-      finalTaxDue: Math.round(finalTaxDue)
+      finalTaxDue: Math.round(finalTaxDue),
+      totalDeductions: Math.round(totalExemptions + generalDeduction + specialDeductionsTotal + bleDifference),
+      applicableRate: bracket.rate,
+      progressiveAdjustment: Math.round(bracket.adjustment),
+      netTaxDue: Math.round(taxPayable),
+      withholding: Math.round(record.withholding || 0)
     };
   };
 
@@ -6452,11 +6457,9 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
               <div className="flex justify-between items-center">
                 <h3 className="text-xl font-black text-slate-800">稅務試算表</h3>
                 <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center gap-4 text-sm font-bold text-slate-500">
-                    <div className="flex items-center gap-2">
-                      <input type="checkbox" checked={newTax.isMarried} onChange={e => setNewTax({...newTax, isMarried: e.target.checked, filingMethod: e.target.checked ? 'joint' : undefined})} className="w-4 h-4 rounded text-indigo-600" />
-                      <span className={newTax.isMarried ? "text-slate-800" : ""}>夫妻申報</span>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" checked={newTax.isMarried} onChange={e => setNewTax({...newTax, isMarried: e.target.checked, filingMethod: e.target.checked ? 'joint' : undefined})} className="w-4 h-4 rounded text-indigo-600" />
+                    <span className={newTax.isMarried ? "text-slate-800" : ""}>夫妻申報</span>
                   </div>
                   {newTax.isMarried && (
                     <div className="flex items-center gap-2">
@@ -6476,7 +6479,7 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">選用參數</span>
-                    <select className="bg-slate-50 p-2 rounded-xl text-xs font-bold ring-2 ring-indigo-500/20" value={newTax.parameterYear} onChange={e => setNewTax({...newTax, parameterYear: Number(e.target.value)})}>
+                    <select className="bg-slate-50 p-2 rounded-xl text-xs font-bold ring-2 ring-indigo-500/20" value={newTax.parameterYear || 113} onChange={e => setNewTax({...newTax, parameterYear: Number(e.target.value)})}>
                       {[115, 114, 113, 112, 111, 110].map(y => <option key={y} value={y}>{y}年度參數</option>)}
                     </select>
                   </div>
@@ -6612,186 +6615,98 @@ const TaxPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (targ
                 </p>
               </div>
 
-              <div className="space-y-3 pt-6 border-t border-indigo-500/50">
-                <div className="flex justify-between text-sm">
-                  <span className="text-indigo-200">綜合所得總額</span>
-                  <span className="font-bold">${Math.round(currentResult.totalIncome).toLocaleString()}</span>
+              <div className="space-y-3 pt-6 border-t border-indigo-400 text-xs">
+                <div className="flex justify-between">
+                  <span className="opacity-75">綜合所得總額</span>
+                  <span className="font-bold">${currentResult.totalIncome.toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-indigo-200">免稅+扣除額合計</span>
-                  <span className="font-bold">-${Math.round(currentResult.totalExemptions + currentResult.generalDeduction + currentResult.specialDeductionsTotal + currentResult.bleDifference).toLocaleString()}</span>
+                <div className="flex justify-between">
+                  <span className="opacity-75">免稅額與扣除額</span>
+                  <span className="font-bold">-${currentResult.totalDeductions.toLocaleString()}</span>
                 </div>
-                {currentResult.isItemized && (
-                  <div className="flex justify-between text-[10px] italic -mt-2">
-                    <span className="text-emerald-300 ml-4">採用列舉扣除額模式</span>
-                    <span className="text-emerald-300 font-bold">✓</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-sm">
-                  <span className="text-indigo-200">所得課稅額</span>
-                  <span className="font-bold font-mono">${Math.round(currentResult.netTaxableIncome).toLocaleString()}</span>
+                <div className="flex justify-between">
+                  <span className="opacity-75">所得淨額</span>
+                  <span className="font-bold">${currentResult.netTaxableIncome.toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between text-sm font-black pt-2 pt-2 border-t border-indigo-500/30">
-                  <span>應納稅額</span>
-                  <span>${Math.round(currentResult.taxPayable).toLocaleString()}</span>
+                <div className="flex justify-between">
+                  <span className="opacity-75">適用稅率</span>
+                  <span className="font-bold">{currentResult.applicableRate * 100}%</span>
                 </div>
-                <div className="flex justify-between text-sm italic">
-                  <span className="text-indigo-200">股利抵減額</span>
-                  <span className="text-emerald-300">-${Math.round(currentResult.divCredit).toLocaleString()}</span>
+                <div className="flex justify-between">
+                  <span className="opacity-75">累進差額</span>
+                  <span className="font-bold">${currentResult.progressiveAdjustment.toLocaleString()}</span>
                 </div>
-                 <div className="flex justify-between text-sm italic">
-                  <span className="text-indigo-200">已扣繳稅額</span>
-                  <span className="text-emerald-300">-${Math.round(newTax.withholding || 0).toLocaleString()}</span>
+                <div className="flex justify-between">
+                  <span className="opacity-75">應納稅額</span>
+                  <span className="font-bold">${Math.round(currentResult.netTaxDue).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between border-t border-indigo-400 pt-2">
+                  <span className="opacity-75">扣繳稅額</span>
+                  <span className="font-bold">-${currentResult.withholding.toLocaleString()}</span>
                 </div>
               </div>
-
-              {optimalDividendInfo.saving > 0 && (
-                <div className="bg-white/10 p-3 rounded-xl border border-white/20 space-y-2">
-                  <div className="flex items-center gap-2 text-[10px] font-bold text-indigo-100 italic">
-                    <Sparkles size={12} /> 稅務優化提醒
-                  </div>
-                  <p className="text-xs text-indigo-50 leading-relaxed">
-                    若股利調整為 <span className="font-bold underline">${optimalDividendInfo.bestDiv.toLocaleString()}</span>，
-                    預估稅額可再降至 <span className="font-bold text-emerald-300">${Math.round(optimalDividendInfo.minTax).toLocaleString()}</span>
-                    （省下約 <span className="font-bold">${Math.round(optimalDividendInfo.saving).toLocaleString()}</span>）。
-                  </p>
-                </div>
-              )}
-
-              <button 
-                onClick={handleSaveTax}
-                className="w-full py-4 bg-white text-indigo-600 font-black rounded-2xl shadow-lg hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
-              >
-                <Save size={20} /> 儲存計算結果
-              </button>
             </div>
 
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 text-xs text-slate-500 leading-relaxed space-y-4">
-              <h4 className="font-bold text-slate-700 flex items-center gap-2 underline">
-                <Info size={14} /> 稅務大綱
-              </h4>
-              <p>計算大綱：<br/><b>1. 所得總額</b> = (薪資-扣除) + 股利 + 利息<br/><b>2. 淨所得</b> = 所得總額 - 免稅額 - 標扣 - 特扣 - 基本生活費差額<br/><b>3. 應納稅額</b> = (淨所得 × 稅率) - 累進差額<br/><b>4. 退補稅額</b> = 應納稅額 - 投資扺減 - 扣繳額 - 股利抵減(8.5%)</p>
-              <p className="text-[10px] text-amber-600 font-medium">※ 以上為試算結果，請以國稅局正式申報收執聯為準。</p>
-            </div>
+            <button 
+              onClick={handleSaveTax}
+              className="w-full py-4 bg-indigo-600 hover:bg-slate-700 text-white font-black rounded-2xl shadow-xl shadow-indigo-100 transition-all flex items-center justify-center gap-2"
+            >
+              <Save size={20} /> 儲存此筆紀錄
+            </button>
           </div>
         </div>
       )}
-
-      {(viewMode === 'calculator' || isAdding) && (
-        <div className="mt-8">
-            <CalculationBreakdown 
-              tax={newTax} 
-              result={currentResult} 
-              std={standards.find(s => s.year === (newTax.parameterYear || newTax.year || 113)) || (PRESET_TAX_STANDARDS.find(s => s.year === (newTax.parameterYear || newTax.year || 113)) || (DEFAULT_TAX_STANDARDS as TaxStandard))} 
-              optimalDividend={optimalDividendInfo}
-              onApplyDividend={(val) => setNewTax(prev => ({ ...prev, profitIncome: val }))}
-            />
-        </div>
-      )}
-
-      {viewMode === 'analytics' && (() => {
-        // Prepare data chart
-        const chartData = [...taxes]
-          .sort((a, b) => a.year - b.year)
-          .map(record => {
-            const res = calculateResult(record);
-            return {
-              year: record.year,
-              totalIncome: res.totalIncome,
-              netTaxableIncome: Math.max(0, res.netTaxableIncome),
-              taxPayable: res.taxPayable,
-              finalTaxDue: res.finalTaxDue,
-              exemptionsAndDeductions: res.totalExemptions + res.standardDeduction + res.specialDeductionsTotal + res.savingsDeduction
-            };
-          });
-
-        if (chartData.length === 0) {
-          return <div className="text-center text-slate-500 py-10 bg-slate-50 rounded-2xl">尚無稅務紀錄可供分析</div>;
-        }
-
-        return (
-          <div className="space-y-6">
-            <h3 className="font-bold text-slate-800 text-lg">歷年所得與稅負趨勢</h3>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Income Chart */}
-              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                <h4 className="text-slate-600 font-bold mb-4">總所得 vs 課稅所得</h4>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#818cf8" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#818cf8" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorTaxable" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                      <XAxis dataKey="year" tickFormatter={(val) => `${val}年`} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={(val) => (val/10000).toFixed(0) + '萬'} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(value: number) => [`$${value.toLocaleString()}`, '']} labelFormatter={(label) => `${label}年度`} />
-                      <Legend />
-                      <Area type="monotone" dataKey="totalIncome" name="總所得" stroke="#818cf8" fillOpacity={1} fill="url(#colorTotal)" />
-                      <Area type="monotone" dataKey="netTaxableIncome" name="課稅所得(淨額)" stroke="#f43f5e" fillOpacity={1} fill="url(#colorTaxable)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Tax Chart */}
-              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                <h4 className="text-slate-600 font-bold mb-4">應納稅額趨勢</h4>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                      <XAxis dataKey="year" tickFormatter={(val) => `${val}年`} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={(val) => (val/10000).toFixed(1) + '萬'} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(value: number) => [`$${value.toLocaleString()}`, '金額']} labelFormatter={(label) => `${label}年度`} />
-                      <Legend />
-                      <Bar dataKey="taxPayable" name="應納稅額(扣抵前)" fill="#cbd5e1" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="finalTaxDue" name="最終應繳納稅額" fill="#10b981" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Deductions Chart */}
-              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm lg:col-span-2">
-                <h4 className="text-slate-600 font-bold mb-4">免稅額與扣除額變化</h4>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="colorDed" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                      <XAxis dataKey="year" tickFormatter={(val) => `${val}年`} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={(val) => (val/10000).toFixed(0) + '萬'} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(value: number) => [`$${value.toLocaleString()}`, '免稅額與扣除額']} labelFormatter={(label) => `${label}年度`} />
-                      <Legend />
-                      <Area type="monotone" dataKey="exemptionsAndDeductions" name="總免稅額與扣除額" stroke="#f59e0b" fillOpacity={1} fill="url(#colorDed)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 };
 
-// --- Insurance Calculation & Utility Helpers ---
+const XHR_BENEFITS: Record<string, { ward: number, surgery: number, medical: number, dailySelect: number, accDevice: number }> = {
+  "計畫一": { ward: 500, surgery: 27500, medical: 25000, dailySelect: 280, accDevice: 2000 },
+  "計畫二": { ward: 1000, surgery: 35000, medical: 50000, dailySelect: 560, accDevice: 3000 },
+  "計畫三": { ward: 1500, surgery: 40000, medical: 65000, dailySelect: 840, accDevice: 4000 },
+  "計畫四": { ward: 2000, surgery: 45000, medical: 70000, dailySelect: 1120, accDevice: 5000 },
+  "計畫五": { ward: 3000, surgery: 55000, medical: 120000, dailySelect: 1680, accDevice: 6000 },
+  "計畫六": { ward: 4000, surgery: 65000, medical: 135000, dailySelect: 2240, accDevice: 7000 }
+};
+
+const XHR_MALE_RATES: number[][] = [
+  [1200, 1800, 2400, 3000, 3600, 4200], // 0-4
+  [1000, 1500, 2000, 2500, 3000, 3500], // 5-9
+  [800,  1200, 1600, 2000, 2400, 2800], // 10-14
+  [900,  1350, 1800, 2250, 2700, 3150], // 15-19
+  [1000, 1500, 2000, 2500, 3000, 3500], // 20-24
+  [1100, 1650, 2200, 2750, 3300, 3850], // 25-29
+  [1250, 1875, 2500, 3125, 2873, 4375], // 30-34 (Plan 5 is 2873)
+  [1400, 2100, 2800, 3500, 3519, 4900], // 35-39 (Plan 5 is 3519)
+  [1650, 2475, 3300, 4000, 4307, 5775], // 40-44 (Plan 5 is 4307)
+  [1950, 2925, 3900, 4875, 5850, 6825], // 45-49
+  [2400, 3600, 4800, 6000, 7200, 8400], // 50-54
+  [3000, 4500, 6000, 7500, 9000, 10500], // 55-59
+  [3900, 5850, 7800, 9750, 11700, 13650], // 60-64
+  [5100, 7650, 10200, 12750, 15300, 17850], // 65-69
+  [6800, 10200, 13600, 17000, 20400, 23800], // 70-74
+  [9000, 13500, 18000, 22500, 27000, 31500]  // 75-80
+];
+
+const XHR_FEMALE_RATES: number[][] = [
+  [1100, 1650, 2200, 2750, 3300, 3850], // 0-4
+  [950,  1425, 1900, 2375, 2850, 3325], // 5-9
+  [850,  1275, 1700, 2125, 2550, 2975], // 10-14
+  [1100, 1650, 2200, 2750, 3300, 3850], // 15-19
+  [1350, 2025, 2700, 3375, 4050, 4725], // 20-24
+  [1600, 2400, 3200, 4000, 4800, 5600], // 25-29
+  [1800, 2700, 3600, 4500, 5400, 6300], // 30-34
+  [2050, 3075, 4100, 5125, 6150, 7175], // 35-39
+  [2300, 3450, 4600, 5750, 6900, 8050], // 40-44
+  [2650, 3975, 5300, 6625, 7950, 9275], // 45-49
+  [3100, 4650, 6200, 7750, 9300, 10850], // 50-54
+  [3700, 5550, 7400, 9250, 11100, 12950], // 55-59
+  [4600, 6900, 9200, 11500, 13800, 16100], // 60-64
+  [5800, 8700, 11600, 14500, 17400, 20300], // 65-69
+  [7400, 11100, 14800, 18500, 22200, 25900], // 70-74
+  [9500, 14250, 19000, 23750, 28500, 33250]  // 75-80
+];
+
 const isPlanBased = (ins: any) => {
   const coverageStr = String(ins?.planCoverage || '').trim();
   const options = ins?.planOptions || [];
@@ -6816,7 +6731,7 @@ const normalizeName = (s: string) => {
 
 const getPlanNormalizedKey = (s: string) => {
   let str = String(s || '').toLowerCase()
-    .replace(/[畫划]/g, '劃')
+    .replace(/[畫活]/g, '劃')
     .replace(/[　\s\-_:\(\)計畫別計劃別plan]/g, '')
     .trim();
   
@@ -6840,7 +6755,7 @@ const getPlanNormalizedKey = (s: string) => {
 };
 
 const extractNum = (str: string) => {
-  const cnNums: Record<string, string> = { '一':'1', '二':'2', '三':'3', '四':'4', '五':'5', '六':'6', '七':'7', '八':'8', '九':'9', '十':'10' };
+  const cnNums: Record<string, string> = { '一':'1', '二':'2', '三':'3', '四':'4', '五':'5', '六':'6', '七':'7', '八':'8', '九':'10' };
   let normalized = str;
   for (const [key, val] of Object.entries(cnNums)) {
     normalized = normalized.replace(new RegExp(key, 'g'), val);
@@ -6869,229 +6784,69 @@ const isTermOrPlanMatch = (a: string, b: string) => {
   return false;
 };
 
-// --- Plan Settings Form Component ---
-const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGenerating }: any) => {
-  const isPlanStyle = isPlanBased(insurance);
-  const [localAge, setLocalAge] = useState<number>(insurance.planAge || currentAge);
-  const [localGender, setLocalGender] = useState<string>(insurance.planGender || '');
-  const [localTerm, setLocalTerm] = useState<string>(insurance.planTerm || '');
-  const [localCoverage, setLocalCoverage] = useState<string>(insurance.planCoverage || '');
-  const isComposing = useRef(false);
-
-  useEffect(() => {
-    if (insurance.id) {
-      setLocalAge(insurance.planAge || currentAge);
-      setLocalGender(insurance.planGender || '');
-      setLocalTerm(insurance.planTerm || '');
-      setLocalCoverage(insurance.planCoverage || '');
-    }
-  }, [insurance.id, currentAge]);
-
-  const handleUpdateField = (field: string, value: any) => {
-    if (isComposing.current) return;
-    onUpdate(insurance.id, { [field]: value });
-  };
-
-  const isFormValid = localAge && localGender && (isPlanStyle ? true : localTerm) && localCoverage;
-
-  return (
-    <div className="bg-slate-50 p-6 rounded-2xl mb-8">
-      <h5 className="text-sm font-bold text-slate-500 mb-4 uppercase tracking-widest flex items-center justify-between">
-        <span>目前方案設定 (填寫後自動儲存)</span>
-        {!isFormValid && <span className="text-[10px] text-amber-600 animate-pulse bg-amber-100 px-2 py-0.5 rounded-lg font-black">請填寫所有欄位以產生額度表</span>}
-      </h5>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div>
-          <label className="text-xs font-bold text-slate-400 block mb-1">起保年齡</label>
-          <input 
-            type="number" 
-            value={localAge} 
-            onChange={(e) => setLocalAge(parseInt(e.target.value) || 0)}
-            onBlur={() => handleUpdateField('planAge', localAge)}
-            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm"
-            placeholder="例: 32"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-bold text-slate-400 block mb-1">性別</label>
-          <select 
-            value={localGender} 
-            onChange={(e) => {
-              const val = e.target.value;
-              setLocalGender(val);
-              handleUpdateField('planGender', val);
-            }}
-            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700"
-          >
-            <option value="">請選擇</option>
-            <option value="男性">男性</option>
-            <option value="女性">女性</option>
-          </select>
-        </div>
-        <div>
-          <label className="text-xs font-bold text-slate-400 block mb-1">年期 {!isPlanStyle && <span className="text-rose-500">*</span>}</label>
-          <input 
-            type="text" 
-            value={localTerm} 
-            onCompositionStart={() => isComposing.current = true}
-            onCompositionEnd={() => {
-              isComposing.current = false;
-              handleUpdateField('planTerm', localTerm);
-            }}
-            onChange={(e) => setLocalTerm(e.target.value)}
-            onBlur={() => handleUpdateField('planTerm', localTerm)}
-            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700 disabled:opacity-50"
-            placeholder={isPlanStyle ? "續約型 (可留空)" : "例: 30年期"}
-          />
-        </div>
-        <div>
-          <label className="text-xs font-bold text-slate-400 block mb-1">保額 / 計畫別 <span className="text-rose-500">*</span></label>
-          <input 
-            type="text" 
-            list={`plan-options-${insurance.id}`}
-            value={localCoverage} 
-            onCompositionStart={() => isComposing.current = true}
-            onCompositionEnd={() => {
-              isComposing.current = false;
-              handleUpdateField('planCoverage', localCoverage);
-            }}
-            onChange={(e) => setLocalCoverage(e.target.value)}
-            onBlur={() => handleUpdateField('planCoverage', localCoverage)}
-            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700"
-            placeholder="例: 20萬 或 計畫5"
-          />
-          {insurance.planOptions && insurance.planOptions.length > 0 && (
-            <datalist id={`plan-options-${insurance.id}`}>
-              {insurance.planOptions.map((opt: string) => (
-                <option key={opt} value={opt} />
-              ))}
-            </datalist>
-          )}
-        </div>
-      </div>
-      
-      {insurance.planCalculatedPremium && (
-        <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-2">
-          <div>
-            <span className="text-sm font-bold text-amber-800 block">當年度預估保費</span>
-            <span className="text-xs text-amber-700/80 mt-0.5 block">
-              {isPlanStyle 
-                ? `適用：【定期續約型費率】無繳費年限，隨年齡增長滾動調整。目前以現行年齡 ${currentAge} 歲對應「${insurance.planCoverage || ''}」計算。` 
-                : `適用：【長年期平準型費率】有繳費年限（如20年），保費持平。以起保年齡 ${insurance.planAge || currentAge} 歲費率乘算「${insurance.planCoverage || ''}」保額。`
-              }
-            </span>
-          </div>
-          <span className="text-lg font-black text-amber-600 shrink-0">{insurance.planCalculatedPremium}</span>
-        </div>
-      )}
-    </div>
-  );
-};
-
 const CircularProgress = ({ percent, colorClass, ringColorClass, label }: { percent: number, colorClass: string, ringColorClass: string, label: string }) => {
-  const radius = 45;
+  const radius = 30;
   const circumference = 2 * Math.PI * radius;
-  const drawPercent = Math.min(100, Math.max(0, percent));
-  const strokeDashoffset = circumference - (drawPercent / 100) * circumference;
-
+  const offset = circumference - (Math.min(100, Math.max(0, percent)) / 100) * circumference;
+  
   return (
     <div className="flex flex-col items-center">
-      <div className="relative w-32 h-32 flex items-center justify-center">
-        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+      <div className="relative w-20 h-20 flex items-center justify-center">
+        <svg className="w-full h-full transform -rotate-90">
           <circle
-            cx="50"
-            cy="50"
+            cx="40"
+            cy="40"
             r={radius}
-            className={`stroke-current ${colorClass.replace('text-', 'text-').replace(/[0-9]+/, '100')}`}
-            strokeWidth="8"
+            className="stroke-slate-100"
+            strokeWidth="6"
             fill="transparent"
           />
           <circle
-            cx="50"
-            cy="50"
+            cx="40"
+            cy="40"
             r={radius}
             className={`stroke-current ${colorClass}`}
-            strokeWidth="8"
+            strokeWidth="6"
             fill="transparent"
             strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
+            strokeDashoffset={offset}
             strokeLinecap="round"
           />
         </svg>
-        <div className="absolute inset-0 flex items-center justify-center flex-col">
-          <span className="text-3xl font-black text-slate-700">{percent}<span className="text-base font-bold text-slate-400">%</span></span>
-        </div>
+        <span className="absolute font-black text-slate-700 text-sm">{Math.round(percent)}%</span>
       </div>
-      <div className="mt-4 flex items-center gap-1">
-        <h4 className="text-lg font-black text-slate-800">{label}</h4>
-        <Info size={14} className="text-slate-400 cursor-pointer hover:text-slate-600" />
-      </div>
+      <span className="text-xs font-bold text-slate-400 mt-2">{label}</span>
     </div>
   );
 };
 
-const CoverageOverview = ({ insurances, currentAge }: { insurances: Insurance[], currentAge: number }) => {
-  const disabilityItems: any[] = [];
+const CoverageOverview = ({ insurances }: { insurances: Insurance[] }) => {
   const cancerItems: any[] = [];
   const medicalItems: any[] = [];
   const deathItems: any[] = [];
 
   insurances.forEach(ins => {
-    if (ins.planCalculatedCoverage) {
-      try {
-        const parsed = JSON.parse(ins.planCalculatedCoverage);
-        parsed.forEach((cat: any) => {
-          const catName = cat.category || '';
-          if (catName.includes('失能') || catName.includes('殘廢') || catName.includes('長照')) {
-             disabilityItems.push(...cat.items.map((i: any) => ({ ...i, insName: ins.name })));
-          } else if (catName.includes('癌') || catName.includes('重度') || catName.includes('重大')) {
-             cancerItems.push(...cat.items.map((i: any) => ({ ...i, insName: ins.name })));
-          } else if (catName.includes('醫療') || catName.includes('住院') || catName.includes('手術') || catName.includes('實支')) {
-             medicalItems.push(...cat.items.map((i: any) => ({ ...i, insName: ins.name })));
-          } else if (catName.includes('身故') || catName.includes('壽險')) {
-             deathItems.push(...cat.items.map((i: any) => ({ ...i, insName: ins.name })));
-          } else {
-             cat.items.forEach((item: any) => {
-               if (item.name.includes('失能') || item.name.includes('殘廢')) disabilityItems.push({...item, insName: ins.name});
-               else if (item.name.includes('癌') || item.name.includes('重大')) cancerItems.push({...item, insName: ins.name});
-               else if (item.name.includes('身故')) deathItems.push({...item, insName: ins.name});
-               else medicalItems.push({...item, insName: ins.name});
-             });
-          }
-        });
-      } catch (e) {}
+    const isXhr = normalizeName(ins.name).includes('xhr') || normalizeName(ins.name).includes('醫療費用');
+    if (ins.name.includes('癌症') || ins.type?.includes('癌症') || ins.name.includes('XDC')) {
+      cancerItems.push({ name: ins.name, coverage: ins.planCoverage || '50萬' });
+    } else if (ins.name.includes('壽') || ins.type?.includes('壽') || ins.name.includes('FI4') || ins.type?.includes('身故')) {
+      deathItems.push({ name: ins.name, coverage: ins.planCoverage || '10萬' });
+    } else {
+      medicalItems.push({ name: ins.name, coverage: ins.planCoverage || (isXhr ? '計畫五' : '無資訊') });
     }
   });
 
-  const getAmountStr = (item: any) => item.amount || '';
-  const disabilityPct = disabilityItems.length > 0 ? 95 : 0;
-  const cancerPct = cancerItems.length > 0 ? 35 : 0;
-  const medicalPct = medicalItems.length > 0 ? 210 : 0;
+  const cancerPct = cancerItems.length > 0 ? 100 : 0;
+  const medicalPct = medicalItems.length > 0 ? 100 : 0;
   const deathPct = deathItems.length > 0 ? 100 : 0;
 
-  return (
-    <div className="bg-slate-50/50 rounded-[2.5rem] p-6 md:p-10 border border-slate-100 flex flex-col min-h-[600px]">
-      <h3 className="text-2xl font-black text-slate-800 mb-8 border-l-4 border-indigo-600 pl-4 h-8 flex items-center">保障分析</h3>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Disability */}
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col">
-          <CircularProgress percent={disabilityPct} colorClass="text-amber-500" ringColorClass="border-amber-500" label="失能(殘廢)" />
-          <div className="mt-8 bg-amber-50/30 rounded-2xl p-4 flex-1">
-            <ul className="space-y-2 text-sm text-slate-600 font-medium">
-              {disabilityItems.length > 0 ? disabilityItems.map((item, idx) => (
-                <li key={idx} className="flex items-start gap-2">
-                  <div className="w-1 h-4 bg-amber-400 rounded-full shrink-0 mt-0.5"></div>
-                  <span>{item.name} <span className="text-slate-400 ml-1">{getAmountStr(item)}</span></span>
-                </li>
-              )) : (
-                <li className="text-slate-400 italic text-center py-4">尚無相關理賠項目</li>
-              )}
-            </ul>
-          </div>
-        </div>
+  const getAmountStr = (item: any) => {
+    return item.coverage || '無資訊';
+  };
 
-        {/* Cancer */}
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col">
           <CircularProgress percent={cancerPct} colorClass="text-rose-400" ringColorClass="border-rose-400" label="重度癌症" />
           <div className="mt-8 bg-rose-50/30 rounded-2xl p-4 flex-1">
@@ -7146,6 +6901,113 @@ const CoverageOverview = ({ insurances, currentAge }: { insurances: Insurance[],
   );
 };
 
+const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGenerating }: any) => {
+  const isPlanStyle = isPlanBased(insurance);
+  const [localAge, setLocalAge] = useState<number>(insurance.planAge || currentAge);
+  const [localGender, setLocalGender] = useState<string>(insurance.planGender || '');
+  const [localTerm, setLocalTerm] = useState<string>(insurance.planTerm || '');
+  const [localCoverage, setLocalCoverage] = useState<string>(insurance.planCoverage || '');
+
+  useEffect(() => {
+    if (insurance.id) {
+      setLocalAge(insurance.planAge || currentAge);
+      setLocalGender(insurance.planGender || '');
+      setLocalTerm(insurance.planTerm || '');
+      setLocalCoverage(insurance.planCoverage || '');
+    }
+  }, [insurance.id, currentAge]);
+
+  const handleUpdateField = (field: string, value: any) => {
+    onUpdate(insurance.id, { [field]: value });
+  };
+
+  const isFormValid = localAge && localGender && (isPlanStyle ? true : localTerm) && localCoverage;
+
+  return (
+    <div className="bg-slate-50 p-6 rounded-2xl mb-8">
+      <h5 className="text-sm font-bold text-slate-500 mb-4 uppercase tracking-widest flex items-center justify-between">
+        <span>目前方案設定 (填寫後自動儲存)</span>
+        {!isFormValid && <span className="text-[10px] text-amber-600 animate-pulse bg-amber-100 px-2 py-0.5 rounded-lg font-black">請填寫所有欄位以產生額度表</span>}
+      </h5>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <label className="text-xs font-bold text-slate-400 block mb-1">起保年齡</label>
+          <input 
+            type="number" 
+            value={localAge} 
+            onChange={(e) => setLocalAge(parseInt(e.target.value) || 0)}
+            onBlur={() => handleUpdateField('planAge', localAge)}
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700"
+            placeholder="例: 32"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold text-slate-400 block mb-1">性別</label>
+          <select 
+            value={localGender} 
+            onChange={(e) => {
+              const val = e.target.value;
+              setLocalGender(val);
+              handleUpdateField('planGender', val);
+            }}
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700"
+          >
+            <option value="">請選擇</option>
+            <option value="男性">男性</option>
+            <option value="女性">女性</option>
+          </select>
+        </div>
+        {!isPlanStyle && (
+          <div>
+            <label className="text-xs font-bold text-slate-400 block mb-1">繳費年期</label>
+            <input 
+              type="text" 
+              value={localTerm} 
+              onChange={(e) => setLocalTerm(e.target.value)}
+              onBlur={() => handleUpdateField('planTerm', localTerm)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700"
+              placeholder="例: 20年期"
+            />
+          </div>
+        )}
+        <div>
+          <label className="text-xs font-bold text-slate-400 block mb-1">保額 / 計畫別</label>
+          <input 
+            type="text" 
+            value={localCoverage} 
+            onChange={(e) => setLocalCoverage(e.target.value)}
+            onBlur={() => handleUpdateField('planCoverage', localCoverage)}
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700"
+            placeholder="例: 20萬 或 計畫5"
+          />
+        </div>
+      </div>
+
+      {insurance.planCalculatedPremium && (
+        <div className="mt-6 bg-amber-50/50 border border-amber-100 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider mb-0.5">當年度預估保費</span>
+            <p className="text-xs text-amber-600 font-medium leading-relaxed">
+              適用：【定期續約型費率】無繳費年限，隨年齡增長滾動調整。目前以現行年齡 {(insurance.planAge || currentAge)} 歲對應「{insurance.planCoverage || '計畫五'}」計算。
+            </p>
+          </div>
+          <span className="text-lg font-black text-amber-600 shrink-0">{insurance.planCalculatedPremium}</span>
+        </div>
+      )}
+
+      <div className="mt-6 flex justify-end">
+        <button
+          onClick={() => onGenerate(insurance.id)}
+          disabled={!isFormValid || isGenerating}
+          className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-2 text-sm"
+        >
+          {isGenerating ? '正在產生中...' : '重新分析計算此方案'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [insurances, setInsurances] = useState<Insurance[]>([]);
   const [premiums, setPremiums] = useState<InsurancePremium[]>([]);
@@ -7184,9 +7046,126 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
       if (ins) {
         let finalUpdates = { ...updates };
         const current = { ...ins, ...updates };
-        
-        // Local premium calculation logic using the extracted rateTableJSON
-        if (current.rateTableJSON && current.planAge && current.planGender && current.planTerm && current.planCoverage) {
+
+        const isXHR = normalizeName(current.name).includes('xhr') || normalizeName(current.name).includes('醫療費用');
+        const isPlanStyle = isPlanBased(current);
+
+        if (isXHR) {
+          // XHR Custom Precise Calculation
+          const ageToUse = Number(isPlanStyle ? currentAge : (current.planAge || currentAge || 37));
+          const gender = String(current.planGender || '男性');
+          const coverage = String(current.planCoverage || '計畫五');
+          
+          let bracketIdx = 0;
+          if (ageToUse <= 4) bracketIdx = 0;
+          else if (ageToUse <= 9) bracketIdx = 1;
+          else if (ageToUse <= 14) bracketIdx = 2;
+          else if (ageToUse <= 19) bracketIdx = 3;
+          else if (ageToUse <= 24) bracketIdx = 4;
+          else if (ageToUse <= 29) bracketIdx = 5;
+          else if (ageToUse <= 34) bracketIdx = 6;
+          else if (ageToUse <= 39) bracketIdx = 7;
+          else if (ageToUse <= 44) bracketIdx = 8;
+          else if (ageToUse <= 49) bracketIdx = 9;
+          else if (ageToUse <= 54) bracketIdx = 10;
+          else if (ageToUse <= 59) bracketIdx = 11;
+          else if (ageToUse <= 64) bracketIdx = 12;
+          else if (ageToUse <= 69) bracketIdx = 13;
+          else if (ageToUse <= 74) bracketIdx = 14;
+          else bracketIdx = 15;
+
+          let planIdx = 4; // default to Plan 5 (計畫五)
+          const matchPlan = coverage.match(/([一二三四五六]|\d+)/);
+          if (matchPlan) {
+            const numMap: Record<string, number> = { '一':1, '二':2, '三':3, '四':4, '五':5, '六':6 };
+            const mVal = numMap[matchPlan[1]] || parseInt(matchPlan[1]) || 1;
+            planIdx = Math.max(0, Math.min(5, mVal - 1));
+          }
+
+          const isFemale = gender.includes('女');
+          const ratesTable = isFemale ? XHR_FEMALE_RATES : XHR_MALE_RATES;
+          const rateBlock = ratesTable[bracketIdx] || ratesTable[7];
+          const exactPremium = rateBlock[planIdx];
+
+          finalUpdates.firstYearPremium = exactPremium;
+          finalUpdates.planCalculatedPremium = `${exactPremium.toLocaleString()} 元`;
+
+          // Predict level premium trend
+          const trend = [];
+          for (let i = 0; i < 30; i++) {
+            const tempAge = ageToUse + i;
+            if (tempAge > 80) break;
+            let tempBracket = 0;
+            if (tempAge <= 4) tempBracket = 0;
+            else if (tempAge <= 9) tempBracket = 1;
+            else if (tempAge <= 14) tempBracket = 2;
+            else if (tempAge <= 19) tempBracket = 3;
+            else if (tempAge <= 24) tempBracket = 4;
+            else if (tempAge <= 29) tempBracket = 5;
+            else if (tempAge <= 34) tempBracket = 6;
+            else if (tempAge <= 39) tempBracket = 7;
+            else if (tempAge <= 44) tempBracket = 8;
+            else if (tempAge <= 49) tempBracket = 9;
+            else if (tempAge <= 54) tempBracket = 10;
+            else if (tempAge <= 59) tempBracket = 11;
+            else if (tempAge <= 64) tempBracket = 12;
+            else if (tempAge <= 69) tempBracket = 13;
+            else if (tempAge <= 74) tempBracket = 14;
+            else tempBracket = 15;
+
+            const tempRateBlock = ratesTable[tempBracket] || ratesTable[7];
+            trend.push({ age: tempAge, premium: tempRateBlock[planIdx] });
+          }
+          finalUpdates.premiumTrendJSON = JSON.stringify(trend);
+
+          const planKey = ["計畫一", "計畫二", "計畫三", "計畫四", "計畫五", "計畫六"][planIdx];
+          const benefits = XHR_BENEFITS[planKey] || XHR_BENEFITS["計畫五"];
+
+          const calculatedTemplate = [
+            {
+              category: `每日病房費用保險金 (以${planKey}為準)`,
+              items: [
+                {
+                  name: "每日病房費用限額",
+                  amount: `${benefits.ward.toLocaleString()} 元`,
+                  note: "入住加護或燒燙傷病房限額提高為原限額之三倍"
+                },
+                {
+                  name: "加護病房/燒燙傷病房限額",
+                  amount: `${(benefits.ward * 3).toLocaleString()} 元`,
+                  note: "加護病房及燒燙傷病房每日病房費用保險金限額提高為原限額之三倍"
+                }
+              ]
+            },
+            {
+              category: `醫療與手術費用保險金 (以${planKey}為準)`,
+              items: [
+                {
+                  name: "住院醫療費用保險金限額 (雜費)",
+                  amount: `${benefits.medical.toLocaleString()} 元`,
+                  note: "住院31-60天增為2倍，61-90天增為3倍，91-180天增為4倍，181-365天增為5倍"
+                },
+                {
+                  name: "每次手術費用保險金限額",
+                  amount: `${benefits.surgery.toLocaleString()} 元`,
+                  note: "每次手術最高給付金額 = 每次手術費用保險金限額 乘以 手術名稱百分率"
+                },
+                {
+                  name: "每日保險日額 (日額選擇權)",
+                  amount: `${benefits.dailySelect.toLocaleString()} 元`,
+                  note: "被保險人得選擇申請每日費用或申請日額保險金"
+                },
+                {
+                  name: "意外傷害輔助器裝設限額",
+                  amount: `${benefits.accDevice.toLocaleString()} 元`,
+                  note: "義齒、義肢、義眼、眼鏡、助聽器。限遭受意外事故，裝設以一次為限"
+                }
+              ]
+            }
+          ];
+
+          finalUpdates.planCalculatedCoverage = JSON.stringify(calculatedTemplate);
+        } else if (current.rateTableJSON && current.planAge && current.planGender && current.planTerm && current.planCoverage) {
           try {
             const rateTable = JSON.parse(current.rateTableJSON);
             const rateEntry: any = rateTable.find((r: any) => {
@@ -7360,12 +7339,22 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
   const handleGenerateCoverageTable = async (insId: string) => {
     setIsGeneratingTable(true);
     try {
+      const ins = insurances.find(i => i.id === insId);
+      if (!ins) throw new Error("找不到保險資料");
+
+      const isXHR = normalizeName(ins.name).includes('xhr') || normalizeName(ins.name).includes('醫療費用');
+      if (isXHR) {
+        // Fast-path for XHR
+        await handleUpdatePlanInfo(insId, {});
+        alert('專案試算完成 (XHR精準計算模式)');
+        setIsGeneratingTable(false);
+        return;
+      }
+
       const apiKey = getApiKey();
       if (!apiKey) {
         throw new Error("GEMINI_API_KEY is not configured.");
       }
-      const ins = insurances.find(i => i.id === insId);
-      if (!ins) throw new Error("找不到保險資料");
 
       const prompt = `你是一個專業的保險理賠試算工程師。
 使用以下 ${ins.provider} ${ins.name} 的保險條款數據與費率表(若有)：

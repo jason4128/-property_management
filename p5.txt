@@ -1,0 +1,44 @@
+Plan 5 rates:
+[]
+Template: [
+  {
+    "category": "醫療給付 (實支實付)",
+    "items": [
+      {
+        "name": "每日病房費用保險金限額",
+        "amount": 500,
+        "scalable": true,
+        "note": "加護病房/燒燙傷中心限額提高為3倍"
+      },
+      {
+        "name": "住院醫療費用保險金限額",
+        "amount": 25000,
+        "scalable": true,
+        "note": "隨住院天數增加，31天以上最高增至5倍"
+      },
+      {
+        "name": "每次手術費用保險金限額",
+        "amount": 27500,
+        "scalable": true,
+        "note": "按手術名稱百分比計算"
+      }
+    ]
+  },
+  {
+    "category": "醫療給付 (選擇權/其他)",
+    "items": [
+      {
+        "name": "住院日額保險金(選擇權)",
+        "amount": 280,
+        "scalable": true,
+        "note": "實支實付二選一，每日固定給付"
+      },
+      {
+        "name": "意外傷害裝設義齒、義肢等限額",
+        "amount": 2000,
+        "scalable": true,
+        "note": "限遭受意外傷害事故所致"
+      }
+    ]
+  }
+]
