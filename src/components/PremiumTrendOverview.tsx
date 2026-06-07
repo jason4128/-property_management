@@ -14,12 +14,12 @@ export const PremiumTrendOverview = ({ insurances, currentAge }: { insurances: I
         } catch (e) {}
       } 
       
-      if (trend.length === 0) {
-          let val = 0;
-          if (ins.planCalculatedPremium) {
-             const parsedVal = Number(String(ins.planCalculatedPremium).replace(/[^0-9]/g, ''));
-             if (!isNaN(parsedVal)) val = parsedVal;
-          }
+      let val = 0;
+      if (ins.planCalculatedPremium) {
+         const parsedVal = Number(String(ins.planCalculatedPremium).replace(/[^0-9]/g, ''));
+         if (!isNaN(parsedVal)) val = parsedVal;
+      }
+      if (trend.length === 0 && val > 0) {
           for (let a = currentAge; a <= currentAge + 20; a++) {
              trend.push({ age: a, premium: val });
           }
