@@ -7265,8 +7265,35 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                  if (termMatch) {
                     const terms = parseInt(termMatch[1]);
                     const trend = [];
-                    for(let i=0; i<terms; i++) {
-                       trend.push({ age: current.planAge + i, premium: premium });
+                    if (terms <= 1 && rateEntry.rates && !Array.isArray(rateEntry.rates)) {
+                      // Natural premium over 30 years
+                      for(let i=0; i<30; i++) {
+                        const tempAge = Number(current.planAge) + i;
+                        if (tempAge > 85) break; // Most 1YR end at ~80-85
+                        let keys = Object.keys(rateEntry.rates);
+                        if (keys.length > 0) {
+                          let closestKey = keys.reduce((a, b) => Math.abs(Number(b) - tempAge) < Math.abs(Number(a) - tempAge) ? b : a);
+                          let rawRate = rateEntry.rates[closestKey];
+                          if (typeof rawRate === 'string') rawRate = rawRate.replace(/,/g, '');
+                          const currRate = Number(rawRate);
+                          let tempPrem = 0;
+                          if (covStr.includes('計畫') || covStr.includes('計畫別') || covStr.includes('計劃')) {
+                             tempPrem = Math.round(covValue * currRate);
+                          } else if (unit.includes('每千元') || unit.includes('千元')) {
+                             tempPrem = Math.round((covValue / 1000) * currRate);
+                          } else if (unit.includes('每萬元') || unit.includes('萬元')) {
+                             tempPrem = Math.round((covValue / 10000) * currRate);
+                          } else {
+                             tempPrem = Math.round(covValue * currRate);
+                          }
+                          trend.push({ age: tempAge, premium: tempPrem });
+                        }
+                      }
+                    } else {
+                      // Level premium
+                      for(let i=0; i<terms; i++) {
+                         trend.push({ age: Number(current.planAge) + i, premium: premium });
+                      }
                     }
                     finalUpdates.premiumTrendJSON = JSON.stringify(trend);
                  }
@@ -7342,11 +7369,10 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
       const ins = insurances.find(i => i.id === insId);
       if (!ins) throw new Error("找不到保險資料");
 
-      const isXHR = normalizeName(ins.name).includes('xhr') || normalizeName(ins.name).includes('醫療費用');
-      if (isXHR) {
-        // Fast-path for XHR
+      if (ins.rateTableJSON || ins.coverageTemplateJSON) {
+        // Fast-path for DB-driven calculations
         await handleUpdatePlanInfo(insId, {});
-        alert('專案試算完成 (XHR精準計算模式)');
+        alert('專案試算完成 (精準計算模式)');
         setIsGeneratingTable(false);
         return;
       }
