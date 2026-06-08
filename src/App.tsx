@@ -6972,14 +6972,28 @@ const PlanSettingsForm = ({ insurance, onUpdate, currentAge, onGenerate, isGener
         )}
         <div>
           <label className="text-xs font-bold text-slate-400 block mb-1">保額 / 計畫別</label>
-          <input 
-            type="text" 
-            value={localCoverage} 
-            onChange={(e) => setLocalCoverage(e.target.value)}
-            onBlur={() => handleUpdateField('planCoverage', localCoverage)}
-            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700"
-            placeholder="例: 20萬 或 計畫5"
-          />
+          {isPlanStyle && insurance.planOptions && insurance.planOptions.length > 0 ? (
+            <select
+              value={localCoverage}
+              onChange={(e) => setLocalCoverage(e.target.value)}
+              onBlur={() => handleUpdateField('planCoverage', localCoverage)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700 appearance-none"
+            >
+              <option value="" disabled>請選擇</option>
+              {insurance.planOptions.map((opt: string, idx: number) => (
+                <option key={idx} value={opt}>{opt}</option>
+              ))}
+            </select>
+          ) : (
+            <input 
+              type="text" 
+              value={localCoverage} 
+              onChange={(e) => setLocalCoverage(e.target.value)}
+              onBlur={() => handleUpdateField('planCoverage', localCoverage)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-medium text-sm text-slate-700"
+              placeholder="例: 20萬 或 計畫5"
+            />
+          )}
         </div>
       </div>
 
@@ -7165,7 +7179,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
           ];
 
           finalUpdates.planCalculatedCoverage = JSON.stringify(calculatedTemplate);
-        } else if (current.rateTableJSON && current.planAge && current.planGender && current.planTerm && current.planCoverage) {
+        } else if (current.rateTableJSON && current.planAge && current.planGender && current.planCoverage) {
           try {
             const rateTable = JSON.parse(current.rateTableJSON);
             const rateEntry: any = rateTable.find((r: any) => {
@@ -7173,22 +7187,42 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                const currGender = String(current.planGender || '').trim().replace('性', '');
                const isGenderMatch = !rGender || rGender === currGender || rGender.includes('不分') || currGender.includes('不分');
                
-               const rTermMatch = String(r.term || '').match(/\d+/);
-               const rTerm = rTermMatch ? rTermMatch[0] : String(r.term || '').trim();
-               const currTermMatch = String(current.planTerm || '').match(/\d+/);
-               const currTerm = currTermMatch ? currTermMatch[0] : String(current.planTerm || '').trim();
+               const rTermStr = String(r.term || '').trim();
+               const isPlanInTerm = rTermStr.includes('計畫') || rTermStr.includes('計劃');
+               const currCovStr = String(current.planCoverage || '').trim();
                
-               let isTermMatch = !rTerm || rTerm === currTerm;
-               if (!currTerm && rTerm) isTermMatch = true; // Fallback if user hasn't selected a term
+               let isTermMatch = false;
+               if (isPlanInTerm) {
+                  isTermMatch = rTermStr.replace('計畫', '計劃') === currCovStr.replace('計畫', '計劃');
+               } else {
+                  const rTermMatch = rTermStr.match(/\d+/);
+                  const rTermNum = rTermMatch ? rTermMatch[0] : rTermStr;
+                  const currTermMatch = String(current.planTerm || '').match(/\d+/);
+                  const currTermNum = currTermMatch ? currTermMatch[0] : String(current.planTerm || '').trim();
+                  
+                  isTermMatch = !rTermNum || rTermNum === currTermNum;
+                  if (!currTermNum && rTermNum) isTermMatch = true; // Fallback if user hasn't selected a term
+               }
                
                // Support flat format (age in root) or compact format (age inside rates map/array)
                let hasAgeMatch = false;
+               const planAgeNum = Number(current.planAge);
                if (r.rates && !Array.isArray(r.rates)) {
                   const keys = Object.keys(r.rates);
                   if (keys.length > 0) {
                      let minDiff = 999;
                      for (const k of keys) {
-                        const diff = Math.abs(Number(k) - Number(current.planAge));
+                        let diff = 999;
+                        if (k.includes('-')) {
+                           const [minAge, maxAge] = k.split('-').map(Number);
+                           if (planAgeNum >= minAge && planAgeNum <= maxAge) {
+                              diff = 0;
+                           } else {
+                              diff = Math.min(Math.abs(planAgeNum - minAge), Math.abs(planAgeNum - maxAge));
+                           }
+                        } else {
+                           diff = Math.abs(Number(k) - planAgeNum);
+                        }
                         if (diff < minDiff) minDiff = diff;
                      }
                      hasAgeMatch = minDiff <= 10; // Allow finding closest within 10 years if AI skipped
@@ -7210,10 +7244,26 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
             if (rateEntry) {
               // Extract rate from either compact 'rates' map or flat fields
               let rawRate: string | number = 0;
+              const planAgeNum = Number(current.planAge);
               if (rateEntry.rates && !Array.isArray(rateEntry.rates)) {
                 const keys = Object.keys(rateEntry.rates);
                 if (keys.length > 0) {
-                  let closestKey = keys.reduce((a, b) => Math.abs(Number(b) - Number(current.planAge)) < Math.abs(Number(a) - Number(current.planAge)) ? b : a);
+                  let closestKey = keys.reduce((a, b) => {
+                     let diffA = 999, diffB = 999;
+                     if (a.includes('-')) {
+                        const [minA, maxA] = a.split('-').map(Number);
+                        diffA = (planAgeNum >= minA && planAgeNum <= maxA) ? 0 : Math.min(Math.abs(planAgeNum - minA), Math.abs(planAgeNum - maxA));
+                     } else {
+                        diffA = Math.abs(Number(a) - planAgeNum);
+                     }
+                     if (b.includes('-')) {
+                        const [minB, maxB] = b.split('-').map(Number);
+                        diffB = (planAgeNum >= minB && planAgeNum <= maxB) ? 0 : Math.min(Math.abs(planAgeNum - minB), Math.abs(planAgeNum - maxB));
+                     } else {
+                        diffB = Math.abs(Number(b) - planAgeNum);
+                     }
+                     return diffB < diffA ? b : a;
+                  });
                   if (closestKey) rawRate = rateEntry.rates[closestKey];
                 }
               } else if (rateEntry.rates && Array.isArray(rateEntry.rates)) {
@@ -7229,7 +7279,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
               const rate = Number(rawRate);
               let covValue = 0;
               const covStr = String(current.planCoverage).replace(/,/g, '').trim();
-              if (covStr.includes('計畫') || covStr.includes('計畫別')) {
+              if (covStr.includes('計畫') || covStr.includes('計畫別') || covStr.includes('計劃')) {
                  covValue = 1; // Basic plan logic, standard rates don't scale by default if it's plan-based
                  // Try to see if rate scales by plan number
                  const match = covStr.match(/([一二三四五六七八九十]|\d+)/);
@@ -7245,7 +7295,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
 
               let premium = 0;
               const unit = current.rateUnit || '每千元';
-              if (covStr.includes('計畫') || covStr.includes('計畫別')) {
+              if (covStr.includes('計畫') || covStr.includes('計畫別') || covStr.includes('計劃')) {
                  // For plan-based policies, the rate table is usually per plan
                  premium = Math.round(covValue * rate);
               } else if (unit.includes('每千元') || unit.includes('千元')) {
@@ -7272,7 +7322,22 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                         if (tempAge > 85) break; // Most 1YR end at ~80-85
                         let keys = Object.keys(rateEntry.rates);
                         if (keys.length > 0) {
-                          let closestKey = keys.reduce((a, b) => Math.abs(Number(b) - tempAge) < Math.abs(Number(a) - tempAge) ? b : a);
+                          let closestKey = keys.reduce((a, b) => {
+                             let diffA = 999, diffB = 999;
+                             if (a.includes('-')) {
+                                const [minA, maxA] = a.split('-').map(Number);
+                                diffA = (tempAge >= minA && tempAge <= maxA) ? 0 : Math.min(Math.abs(tempAge - minA), Math.abs(tempAge - maxA));
+                             } else {
+                                diffA = Math.abs(Number(a) - tempAge);
+                             }
+                             if (b.includes('-')) {
+                                const [minB, maxB] = b.split('-').map(Number);
+                                diffB = (tempAge >= minB && tempAge <= maxB) ? 0 : Math.min(Math.abs(tempAge - minB), Math.abs(tempAge - maxB));
+                             } else {
+                                diffB = Math.abs(Number(b) - tempAge);
+                             }
+                             return diffB < diffA ? b : a;
+                          });
                           let rawRate = rateEntry.rates[closestKey];
                           if (typeof rawRate === 'string') rawRate = rawRate.replace(/,/g, '');
                           const currRate = Number(rawRate);
