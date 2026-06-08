@@ -7297,7 +7297,8 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
               const unit = current.rateUnit || '每千元';
               if (covStr.includes('計畫') || covStr.includes('計畫別') || covStr.includes('計劃')) {
                  // For plan-based policies, the rate table is usually per plan
-                 premium = Math.round(covValue * rate);
+                 const isRateAlreadyPerPlan = String(rateEntry.term || '').includes('計畫') || String(rateEntry.term || '').includes('計劃');
+                 premium = isRateAlreadyPerPlan ? Math.round(rate) : Math.round(covValue * rate);
               } else if (unit.includes('每千元') || unit.includes('千元')) {
                  premium = Math.round((covValue / 1000) * rate);
               } else if (unit.includes('每萬元') || unit.includes('萬元')) {
@@ -7311,9 +7312,10 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                  finalUpdates.planCalculatedPremium = `${premium.toLocaleString()} 元`;
                  
                  // Predict level premium trend based on term
-                 const termMatch = current.planTerm.match(/(\d+)/);
-                 if (termMatch) {
-                    const terms = parseInt(termMatch[1]);
+                 const termStr = String(current.planTerm || '');
+                 const termMatch = termStr.match(/(\d+)/);
+                 const terms = termMatch ? parseInt(termMatch[1]) : 1;
+                 if (terms > 0) {
                     const trend = [];
                     if (terms <= 1 && rateEntry.rates && !Array.isArray(rateEntry.rates)) {
                       // Natural premium over 30 years
@@ -7343,7 +7345,8 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                           const currRate = Number(rawRate);
                           let tempPrem = 0;
                           if (covStr.includes('計畫') || covStr.includes('計畫別') || covStr.includes('計劃')) {
-                             tempPrem = Math.round(covValue * currRate);
+                             const isRateAlreadyPerPlan = String(rateEntry.term || '').includes('計畫') || String(rateEntry.term || '').includes('計劃');
+                             tempPrem = isRateAlreadyPerPlan ? Math.round(currRate) : Math.round(covValue * currRate);
                           } else if (unit.includes('每千元') || unit.includes('千元')) {
                              tempPrem = Math.round((covValue / 1000) * currRate);
                           } else if (unit.includes('每萬元') || unit.includes('萬元')) {
