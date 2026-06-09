@@ -7179,7 +7179,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
           ];
 
           finalUpdates.planCalculatedCoverage = JSON.stringify(calculatedTemplate);
-        } else if (current.rateTableJSON && current.planAge && current.planGender && current.planCoverage) {
+        } else if (current.rateTableJSON && (current.planAge || currentAge) && current.planGender && current.planCoverage) {
           try {
             const rateTable = JSON.parse(current.rateTableJSON);
             const rateEntry: any = rateTable.find((r: any) => {
@@ -7196,17 +7196,21 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                   isTermMatch = rTermStr.replace('計畫', '計劃') === currCovStr.replace('計畫', '計劃');
                } else {
                   const rTermMatch = rTermStr.match(/\d+/);
-                  const rTermNum = rTermMatch ? rTermMatch[0] : rTermStr;
+                  const rTermNum = rTermMatch ? rTermMatch[0] : null;
                   const currTermMatch = String(current.planTerm || '').match(/\d+/);
-                  const currTermNum = currTermMatch ? currTermMatch[0] : String(current.planTerm || '').trim();
+                  const currTermNum = currTermMatch ? currTermMatch[0] : null;
                   
-                  isTermMatch = !rTermNum || rTermNum === currTermNum;
-                  if (!currTermNum && rTermNum) isTermMatch = true; // Fallback if user hasn't selected a term
+                  if (!rTermNum) {
+                     isTermMatch = true; // Rate table doesn't specify a numeric term, applies universally
+                  } else {
+                     isTermMatch = rTermNum === currTermNum;
+                     if (!currTermNum) isTermMatch = true; // Fallback if user hasn't selected a term
+                  }
                }
                
                // Support flat format (age in root) or compact format (age inside rates map/array)
                let hasAgeMatch = false;
-               const planAgeNum = Number(current.planAge);
+               const planAgeNum = Number(current.planAge || currentAge);
                if (r.rates && !Array.isArray(r.rates)) {
                   const keys = Object.keys(r.rates);
                   if (keys.length > 0) {
@@ -7229,22 +7233,22 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                   }
                } else if (r.rates && Array.isArray(r.rates)) {
                   if (r.rates.length > 0) {
-                     const minDiff = Math.min(...r.rates.map((rt:any) => Math.abs(Number(rt.age) - Number(current.planAge))));
+                     const minDiff = Math.min(...r.rates.map((rt:any) => Math.abs(Number(rt.age) - Number(current.planAge || currentAge))));
                      hasAgeMatch = minDiff <= 10;
                   }
                } else {
-                  hasAgeMatch = Math.abs(Number(r.age) - Number(current.planAge)) <= 10;
+                  hasAgeMatch = Math.abs(Number(r.age) - Number(current.planAge || currentAge)) <= 10;
                }
                
                return isGenderMatch && isTermMatch && hasAgeMatch;
             });
             console.log("rateTableJSON:", current.rateTableJSON);
-            console.log("Found rateEntry:", rateEntry, "for age", current.planAge);
+            console.log("Found rateEntry:", rateEntry, "for age", current.planAge || currentAge);
             
             if (rateEntry) {
               // Extract rate from either compact 'rates' map or flat fields
               let rawRate: string | number = 0;
-              const planAgeNum = Number(current.planAge);
+              const planAgeNum = Number(current.planAge || currentAge);
               if (rateEntry.rates && !Array.isArray(rateEntry.rates)) {
                 const keys = Object.keys(rateEntry.rates);
                 if (keys.length > 0) {
@@ -7268,7 +7272,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                 }
               } else if (rateEntry.rates && Array.isArray(rateEntry.rates)) {
                 if (rateEntry.rates.length > 0) {
-                  const ageObj = rateEntry.rates.reduce((a:any, b:any) => Math.abs(Number(b.age) - Number(current.planAge)) < Math.abs(Number(a.age) - Number(current.planAge)) ? b : a, rateEntry.rates[0]);
+                  const ageObj = rateEntry.rates.reduce((a:any, b:any) => Math.abs(Number(b.age) - Number(current.planAge || currentAge)) < Math.abs(Number(a.age) - Number(current.planAge || currentAge)) ? b : a, rateEntry.rates[0]);
                   if (ageObj) rawRate = ageObj.rate || ageObj.premium || ageObj.amount || ageObj.price;
                 }
               } else {
@@ -7301,7 +7305,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                  premium = isRateAlreadyPerPlan ? Math.round(rate) : Math.round(covValue * rate);
               } else if (unit.includes('每千元') || unit.includes('千元')) {
                  premium = Math.round((covValue / 1000) * rate);
-              } else if (unit.includes('每萬元') || unit.includes('萬元')) {
+              } else if (unit.includes('每萬元') || unit.includes('萬元') || unit.includes('每萬')) {
                  premium = Math.round((covValue / 10000) * rate);
               } else {
                  premium = Math.round(covValue * rate);
@@ -7320,7 +7324,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                     if (terms <= 1 && rateEntry.rates && !Array.isArray(rateEntry.rates)) {
                       // Natural premium over 30 years
                       for(let i=0; i<30; i++) {
-                        const tempAge = Number(current.planAge) + i;
+                        const tempAge = Number(current.planAge || currentAge) + i;
                         if (tempAge > 85) break; // Most 1YR end at ~80-85
                         let keys = Object.keys(rateEntry.rates);
                         if (keys.length > 0) {
@@ -7349,7 +7353,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                              tempPrem = isRateAlreadyPerPlan ? Math.round(currRate) : Math.round(covValue * currRate);
                           } else if (unit.includes('每千元') || unit.includes('千元')) {
                              tempPrem = Math.round((covValue / 1000) * currRate);
-                          } else if (unit.includes('每萬元') || unit.includes('萬元')) {
+                          } else if (unit.includes('每萬元') || unit.includes('萬元') || unit.includes('每萬')) {
                              tempPrem = Math.round((covValue / 10000) * currRate);
                           } else {
                              tempPrem = Math.round(covValue * currRate);
@@ -7360,7 +7364,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                     } else {
                       // Level premium
                       for(let i=0; i<terms; i++) {
-                         trend.push({ age: Number(current.planAge) + i, premium: premium });
+                         trend.push({ age: Number(current.planAge || currentAge) + i, premium: premium });
                       }
                     }
                     finalUpdates.premiumTrendJSON = JSON.stringify(trend);
