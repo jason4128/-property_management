@@ -7066,7 +7066,7 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
 
         if (isXHR) {
           // XHR Custom Precise Calculation
-          const ageToUse = Number(isPlanStyle ? currentAge : (current.planAge || currentAge || 37));
+          const ageToUse = Number(current.planAge || currentAge || 37);
           const gender = String(current.planGender || '男性');
           const coverage = String(current.planCoverage || '計畫五');
           
@@ -7106,9 +7106,9 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
 
           // Predict level premium trend
           const trend = [];
-          for (let i = 0; i < 30; i++) {
+          for (let i = 0; i < 55; i++) {
             const tempAge = ageToUse + i;
-            if (tempAge > 80) break;
+            if (tempAge > 85) break;
             let tempBracket = 0;
             if (tempAge <= 4) tempBracket = 0;
             else if (tempAge <= 9) tempBracket = 1;
@@ -7322,8 +7322,8 @@ const InsurancePage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget:
                  if (terms > 0) {
                     const trend = [];
                     if (terms <= 1 && rateEntry.rates && !Array.isArray(rateEntry.rates)) {
-                      // Natural premium over 30 years
-                      for(let i=0; i<30; i++) {
+                      // Natural premium over 55 years
+                      for(let i=0; i<55; i++) {
                         const tempAge = Number(current.planAge || currentAge) + i;
                         if (tempAge > 85) break; // Most 1YR end at ~80-85
                         let keys = Object.keys(rateEntry.rates);
