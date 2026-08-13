@@ -184,6 +184,7 @@ export interface Budget {
   frequency: 'monthly' | 'quarterly' | 'semi-annually' | 'annually';
   isPaid: boolean;
   order?: number;
+  belonging?: string;
 }
 
 export interface ChildRecord {

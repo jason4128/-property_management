@@ -1,0 +1,120 @@
+              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-center">操作</th>
+            </tr>
+          </thead>
+          <Reorder.Group 
+            as="tbody" 
+            axis="y" 
+            values={filteredBudgets} 
+            onReorder={handleReorder}
+            className="divide-y divide-slate-100"
+          >
+            {filteredBudgets.map(budget => {
+              const yearlyEquiv = budget.frequency === 'monthly' ? budget.allocated * 12 : budget.allocated;
+              const isEditing = editingId === budget.id;
+              
+              return (
+                <Reorder.Item 
+                  key={budget.id} 
+                  value={budget}
+                  as="tr"
+                  className={`group hover:bg-slate-50/50 transition-colors ${budget.isPaid ? 'bg-emerald-50/10' : ''} ${isEditing ? 'bg-indigo-50/30' : ''} cursor-grab active:cursor-grabbing border-b border-slate-100 last:border-0`}
+                >
+                  <td className="px-3 py-1.5 font-bold text-slate-800 relative pl-10">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <GripVertical size={16} />
+                    </div>
+                    {isEditing ? (
+                      <input 
+                        className="w-full bg-white border border-indigo-200 rounded p-1 text-sm focus:ring-1 focus:ring-indigo-400 outline-none" 
+                        value={editingData.category ?? budget.category} 
+                        onChange={e => setEditingData({...editingData, category: e.target.value})}
+                      />
+                    ) : (
+                      <span onClick={() => { setEditingId(budget.id); setEditingData(budget); }}>{budget.category}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 text-center">
+                    {isEditing ? (
+                      <select 
+                        className="p-1 border border-indigo-200 rounded text-[10px] outline-none" 
+                        value={editingData.belonging ?? budget.belonging ?? 'joint'}
+                        onChange={e => setEditingData({...editingData, belonging: e.target.value})}
+                      >
+                        <option value="joint">兩人共同</option>
+                        <option value="my">我的個人</option>
+                        <option value="wife">老婆個人</option>
+                        <option value="childcare">育兒支出</option>
+                        <option value="income">其他收入/補貼</option>
+                      </select>
+                    ) : (
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600`}>
+                        {
+                          budget.belonging === 'my' ? '我的個人' :
+                          budget.belonging === 'wife' ? '老婆個人' :
+                          budget.belonging === 'childcare' ? '育兒支出' :
+                          budget.belonging === 'income' ? '收入補貼' :
+                          '兩人共同'
+                        }
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 text-center">
+                    {isEditing ? (
+                      <select 
+                        className="p-1 border border-indigo-200 rounded text-[10px] outline-none" 
+                        value={editingData.frequency ?? budget.frequency}
+                        onChange={e => setEditingData({...editingData, frequency: e.target.value as any})}
+                      >
+                         <option value="annually">每年</option>
+                         <option value="monthly">每月</option>
+                         <option value="quarterly">每季</option>
+                      </select>
+                    ) : (
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${budget.frequency === 'monthly' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-600'}`}>
+                        {freqLabels[budget.frequency || 'annually']}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 text-right font-mono text-slate-600 text-xs font-medium">
+                    {isEditing ? (
+                      <input 
+                        type="number" 
+                        className="w-24 bg-white border border-indigo-200 rounded p-1 text-right text-xs" 
+                        value={editingData.allocated ?? budget.allocated} 
+                        onChange={e => setEditingData({...editingData, allocated: Number(e.target.value)})}
+                      />
+                    ) : (
+                      `$${(budget.allocated || 0).toLocaleString()}`
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 text-right font-mono font-bold text-indigo-600 text-xs">
+                    ${(yearlyEquiv || 0).toLocaleString()}
+                  </td>
+                  <td className="px-3 py-1.5 text-right font-mono text-slate-900 font-bold text-xs">
+                    {isEditing ? (
+                      <input 
+                        type="number" 
+                        className="w-24 bg-white border border-indigo-200 rounded p-1 text-right text-xs" 
+                        value={editingData.spent ?? budget.spent} 
+                        onChange={e => setEditingData({...editingData, spent: Number(e.target.value)})}
+                      />
+                    ) : (
+                      budget.isPaid ? `$${(budget.allocated || 0).toLocaleString()}` : `$${(budget.spent || 0).toLocaleString()}`
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 text-center">
+                    <button onClick={() => togglePaid(budget)} className={`p-1 rounded-lg transition-all ${budget.isPaid ? 'text-emerald-600 bg-emerald-100' : 'text-slate-300 bg-slate-50 hover:text-emerald-500'}`}>
+                      <CheckCircle2 size={16} />
+                    </button>
+                  </td>
+                  <td className="px-3 py-1.5 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      {isEditing ? (
+                        <button onClick={handleSaveEdit} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check size={16} /></button>
+                      ) : (
+                        <button onClick={() => { setEditingId(budget.id); setEditingData(budget); }} className="p-1 text-slate-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"><Edit2 size={14} /></button>
+                      )}
+                      <button onClick={() => handleDelete(budget.id, budget.category)} className="p-1 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>

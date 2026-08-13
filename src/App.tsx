@@ -8456,8 +8456,10 @@ ${targetIns.analysisRaw}
 const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (target: any) => void }) => {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [salaries, setSalaries] = useState<SalaryRecord[]>([]);
+  const [wifeSalaries, setWifeSalaries] = useState<any[]>([]);
   const [childRecords, setChildRecords] = useState<ChildRecord[]>([]);
-  const [activeSubTab, setActiveSubTab] = useState<'general' | 'child'>('general');
+  const [activeSubTab, setActiveSubTab] = useState<'general' | 'planner'>('general');
+  const [belongingFilter, setBelongingFilter] = useState<'all' | 'my' | 'wife' | 'joint' | 'childcare' | 'income'>('all');
   const [childSubTab, setChildSubTab] = useState<'planner' | 'tracker' | 'ivf'>('planner');
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingChild, setIsAddingChild] = useState(false);
@@ -8508,8 +8510,15 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
   const filteredBudgets = useMemo(() => {
     return budgets
       .filter(b => b.year === selectedYear)
+      .filter(b => {
+        const itemBelonging = b.belonging || 'joint';
+        if (belongingFilter === 'all') return true;
+        if (belongingFilter === 'childcare') return itemBelonging === 'childcare';
+        if (belongingFilter === 'income') return itemBelonging === 'income' || itemBelonging === 'subsidy';
+        return itemBelonging === belongingFilter;
+      })
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  }, [budgets, selectedYear]);
+  }, [budgets, selectedYear, belongingFilter]);
 
   const handleReorder = async (newOrder: Budget[]) => {
     // Optimistic UI update is handled by Reorder.Group internally if using its state,
@@ -8559,12 +8568,11 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'childRecords');
     });
-
-    return () => {
-      bUnsubscribe();
-      sUnsubscribe();
-      cUnsubscribe();
-    };
+    const wUnsubscribe = onSnapshot(collection(db, 'wifeSalaries'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as any)).filter(r => user?.email === 'guest@example.com' || !r.uid || targetUids.includes(r.uid));
+      setWifeSalaries(data);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'wifeSalaries'));
+    return () => { bUnsubscribe(); sUnsubscribe(); cUnsubscribe(); wUnsubscribe(); };
   }, [user.uid]);
 
   const handleAddChildRecord = async () => {
@@ -8680,35 +8688,81 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
   };
 
   const stats = useMemo(() => {
-    const yearlyItems = filteredBudgets.filter(b => b.frequency !== 'monthly');
-    const monthlyItems = filteredBudgets.filter(b => b.frequency === 'monthly');
-
-    const yearlyTotal = yearlyItems.reduce((sum, b) => sum + b.allocated, 0);
-    const monthlyTotal = monthlyItems.reduce((sum, b) => sum + b.allocated, 0);
-    const yearlyEquivalentTotal = yearlyTotal + (monthlyTotal * 12);
+    const currentYearBudgets = budgets.filter(b => b.year === selectedYear);
+    const yearlyItems = currentYearBudgets.filter(b => b.frequency !== 'monthly');
+    const monthlyItems = currentYearBudgets.filter(b => b.frequency === 'monthly');
     
-    const totalSpent = filteredBudgets.reduce((sum, b) => {
-      if (b.frequency === 'monthly') return sum + (b.spent * 12); 
-      return sum + b.spent;
-    }, 0);
-
+    // Income
     const yearStr = selectedYear.toString();
     const currentYearSalaries = salaries.filter(s => s.date.startsWith(yearStr));
-    let avgMonthlyIncome = 0;
+    let totalSalaryIncome = 0;
     if (currentYearSalaries.length > 0) {
-      const totalIncome = currentYearSalaries.reduce((sum, r) => {
+      totalSalaryIncome = currentYearSalaries.reduce((sum, r) => {
         const income = (r.basicPay || 0) + (r.professionalAllowance || 0) + (r.medicalIncentive || 0) + (r.overtimePay || 0) + (r.yearEndBonus || 0) + (r.performanceBonus || 0) + (r.otherIncome || 0);
         const deduction = (r.civilServiceInsurance || 0) + (r.healthInsurance || 0) + (r.pensionFund || 0) + (r.otherDeduction || 0) + (r.withholdingTax || 0);
         return sum + (income - deduction);
       }, 0);
-      avgMonthlyIncome = totalIncome / currentYearSalaries.length;
     } else if (salaries.length > 0) {
       const latest = [...salaries].sort((a,b) => b.date.localeCompare(a.date))[0];
       const income = (latest.basicPay || 0) + (latest.professionalAllowance || 0) + (latest.medicalIncentive || 0) + (latest.overtimePay || 0) + (latest.yearEndBonus || 0) + (latest.performanceBonus || 0) + (latest.otherIncome || 0);
       const deduction = (latest.civilServiceInsurance || 0) + (latest.healthInsurance || 0) + (latest.pensionFund || 0) + (latest.otherDeduction || 0);
-      avgMonthlyIncome = income - deduction;
+      totalSalaryIncome = (income - deduction) * 12;
     }
 
+    const otherIncomes = currentYearBudgets.filter(b => b.belonging === 'income' || b.belonging === 'subsidy');
+    const totalOtherIncome = otherIncomes.reduce((sum, b) => {
+      return sum + (b.frequency === 'monthly' ? (b.allocated * 12) : b.allocated);
+    }, 0);
+    
+    const currentYearWifeSalaries = wifeSalaries.filter(s => s.date.startsWith(yearStr));
+    let totalWifeSalaryIncome = 0;
+    if (currentYearWifeSalaries.length > 0) {
+      const sum = currentYearWifeSalaries.reduce((acc, r) => acc + (r.netAmount || 0), 0);
+      const avg = sum / currentYearWifeSalaries.length;
+      totalWifeSalaryIncome = avg * 13; // 平均月實領 * 13
+    } else if (wifeSalaries.length > 0) {
+      const latestWife = [...wifeSalaries].sort((a,b) => b.date.localeCompare(a.date))[0];
+      totalWifeSalaryIncome = (latestWife.netAmount || 0) * 13;
+    }
+
+    const totalHouseholdIncome = totalSalaryIncome + totalWifeSalaryIncome + totalOtherIncome;
+
+    // Expenses by category
+    const calculateTotal = (category: string) => {
+      return currentYearBudgets.filter(b => (b.belonging || 'joint') === category).reduce((sum, b) => {
+        return sum + (b.frequency === 'monthly' ? (b.allocated * 12) : b.allocated);
+      }, 0);
+    };
+
+    const myExpensesTotal = calculateTotal('my');
+    const wifeExpensesTotal = calculateTotal('wife');
+    const jointExpensesTotal = calculateTotal('joint');
+    
+    // Childcare net
+    const childcareGross = calculateTotal('childcare');
+    const childcareSubsidies = currentYearBudgets.filter(b => b.belonging === 'subsidy').reduce((sum, b) => {
+      return sum + (b.frequency === 'monthly' ? (b.allocated * 12) : b.allocated);
+    }, 0);
+    const totalChildcareNetExpense = Math.max(0, childcareGross - childcareSubsidies);
+
+    const totalExpenses = myExpensesTotal + wifeExpensesTotal + jointExpensesTotal + childcareGross;
+    const annualSurplus = totalHouseholdIncome - totalExpenses;
+    const monthlySurplus = annualSurplus / 12;
+
+    // Only count actual expenses for these global totals
+    const expenseItems = currentYearBudgets.filter(b => b.belonging !== 'income' && b.belonging !== 'subsidy');
+    const yearlyExpenseItems = expenseItems.filter(b => b.frequency !== 'monthly');
+    const monthlyExpenseItems = expenseItems.filter(b => b.frequency === 'monthly');
+
+    const yearlyTotal = yearlyExpenseItems.reduce((sum, b) => sum + b.allocated, 0);
+    const monthlyTotal = monthlyExpenseItems.reduce((sum, b) => sum + b.allocated, 0);
+    const yearlyEquivalentTotal = yearlyTotal + (monthlyTotal * 12);
+    
+    const totalSpent = expenseItems.reduce((sum, b) => {
+      if (b.frequency === 'monthly') return sum + (b.spent * 12); 
+      return sum + b.spent;
+    }, 0);
+    const avgMonthlyIncome = totalHouseholdIncome / 12;
     const monthlyExpense = (yearlyTotal / 12) + monthlyTotal;
     const canSave = avgMonthlyIncome - monthlyExpense;
 
@@ -8720,9 +8774,17 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
       remaining: yearlyEquivalentTotal - totalSpent,
       avgMonthlyIncome,
       monthlyExpense,
-      canSave
+      canSave,
+      totalHouseholdIncome,
+      myExpensesTotal,
+      wifeExpensesTotal,
+      jointExpensesTotal,
+      totalChildcareNetExpense,
+      totalExpenses,
+      annualSurplus,
+      monthlySurplus
     };
-  }, [filteredBudgets, salaries, selectedYear]);
+  }, [budgets, salaries, wifeSalaries, selectedYear]);
 
   const handleAdd = async () => {
     try {
@@ -8730,6 +8792,7 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
         ...newBudget, 
         uid: user.uid,
         year: selectedYear,
+        belonging: newBudget.belonging || 'joint',
         spent: newBudget.isPaid ? (newBudget.allocated || 0) : (newBudget.spent || 0),
         frequency: newBudget.frequency || 'annually',
         isPaid: newBudget.isPaid || false,
@@ -8737,7 +8800,7 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
       };
       await addDoc(collection(db, 'budgets'), budget);
       setIsAdding(false);
-      setNewBudget({ category: '', allocated: 0, spent: 0, year: selectedYear, frequency: 'annually', isPaid: false });
+      setNewBudget({ category: '', belonging: 'joint', allocated: 0, spent: 0, year: selectedYear, frequency: 'annually', isPaid: false });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'budgets');
     }
@@ -8782,7 +8845,8 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">年度支出預算</h2>
+          <h2 className="text-2xl font-bold text-slate-800">家庭與個人年度預算</h2>
+          <p className="text-xs text-slate-500 mt-1">整合個人開銷、配偶支出、共同家庭預算與育兒補助收支</p>
           <div className="flex items-center gap-2 mt-2">
             <button onClick={() => setSelectedYear(selectedYear - 1)} className="p-1 hover:bg-slate-100 rounded text-slate-500">
               <ChevronLeft size={20} />
@@ -8795,12 +8859,12 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
         </div>
         <div className="flex gap-2">
           {filteredBudgets.length === 0 && hasPreviousYearData && (
-            <button onClick={handleCloneLastYear} className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-100 transition-colors shadow-sm">
-              <Copy size={20} /> 複製上年度
+            <button onClick={handleCloneLastYear} className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-100 transition-colors shadow-sm text-sm font-bold">
+              <Copy size={18} /> 複製上年度
             </button>
           )}
-          <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-lg">
-            <Plus size={20} /> 新增預算項目
+          <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-lg text-sm font-bold">
+            <Plus size={18} /> 新增預算/收入項目
           </button>
         </div>
       </div>
@@ -8810,54 +8874,98 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
           onClick={() => setActiveSubTab('general')}
           className={`px-6 py-3 text-sm font-bold transition-colors relative ${activeSubTab === 'general' ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
         >
-          一般支出預算
+          家庭與個人預算總覽
           {activeSubTab === 'general' && <motion.div layoutId="subtab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" />}
         </button>
         <button 
-          onClick={() => setActiveSubTab('child')}
-          className={`px-6 py-3 text-sm font-bold transition-colors relative ${activeSubTab === 'child' ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+          onClick={() => setActiveSubTab('planner')}
+          className={`px-6 py-3 text-sm font-bold transition-colors relative ${activeSubTab === 'planner' ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
         >
-          育兒預算與補助
-          {activeSubTab === 'child' && <motion.div layoutId="subtab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" />}
+          育兒現金流與補助規劃
+          {activeSubTab === 'planner' && <motion.div layoutId="subtab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" />}
         </button>
       </div>
 
       {activeSubTab === 'general' ? (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm min-w-0">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">年度總預算</p>
-          <p className="text-2xl font-black text-slate-900 truncate" title={`$${(Math.floor(stats.yearlyEquivalentTotal) || 0).toLocaleString()}`}>${(Math.floor(stats.yearlyEquivalentTotal) || 0).toLocaleString()}</p>
-          <div className="flex justify-between text-[11px] mt-2 font-bold text-slate-500">
-            <span>已支出: ${(Math.floor(stats.totalSpent) || 0).toLocaleString()}</span>
-            <span>剩餘: ${(Math.floor(stats.remaining) || 0).toLocaleString()}</span>
+          {/* 家庭財務總覽面板 */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm col-span-2 md:col-span-1">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">家庭總收入 (年)</p>
+              <p className="text-xl font-black text-emerald-600 truncate">${Math.floor(stats.totalHouseholdIncome).toLocaleString()}</p>
+              <p className="text-[10px] text-slate-400 mt-1 truncate">含薪資及補貼/收入</p>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <p className="text-[10px] font-bold text-sky-600 uppercase tracking-widest mb-1 truncate">我的個人支出</p>
+              <p className="text-xl font-black text-sky-700 truncate">${Math.floor(stats.myExpensesTotal).toLocaleString()}</p>
+              <p className="text-[10px] text-slate-400 mt-1 truncate">年化小計</p>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-rose-100 bg-rose-50/20 shadow-sm">
+              <p className="text-[10px] font-bold text-rose-600 uppercase tracking-widest mb-1 truncate">老婆個人支出</p>
+              <p className="text-xl font-black text-rose-700 truncate">${Math.floor(stats.wifeExpensesTotal).toLocaleString()}</p>
+              <p className="text-[10px] text-rose-400 mt-1 truncate">關懷配偶負擔</p>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-indigo-100 bg-indigo-50/20 shadow-sm">
+              <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-1 truncate">兩人共同支出</p>
+              <p className="text-xl font-black text-indigo-700 truncate">${Math.floor(stats.jointExpensesTotal).toLocaleString()}</p>
+              <p className="text-[10px] text-indigo-400 mt-1 truncate">房租/水電/生活</p>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-amber-100 bg-amber-50/20 shadow-sm">
+              <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-1 truncate">育兒淨支出</p>
+              <p className="text-xl font-black text-amber-700 truncate">${Math.floor(stats.totalChildcareNetExpense).toLocaleString()}</p>
+              <p className="text-[10px] text-amber-500 mt-1 truncate">扣除政府補助後</p>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 truncate">家庭總支出</p>
+              <p className="text-xl font-black text-slate-900 truncate">${Math.floor(stats.totalExpenses).toLocaleString()}</p>
+              <p className="text-[10px] text-slate-400 mt-1 truncate">各項年化支出總和</p>
+            </div>
+            <div className="bg-indigo-600 p-4 rounded-xl text-white shadow-md col-span-2 md:col-span-1">
+              <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest mb-1 truncate">預估年度結餘</p>
+              <p className="text-xl font-black truncate">${Math.floor(stats.annualSurplus).toLocaleString()}</p>
+              <p className="text-[10px] text-indigo-200 mt-1 truncate">平均月存 ${Math.floor(stats.monthlySurplus).toLocaleString()}</p>
+            </div>
           </div>
-        </div>
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm min-w-0">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">每月預計支出</p>
-          <p className="text-2xl font-black text-indigo-600 truncate" title={`$${(Math.floor(stats.monthlyExpense) || 0).toLocaleString()}`}>${(Math.floor(stats.monthlyExpense) || 0).toLocaleString()}</p>
-          <p className="text-[10px] text-slate-400 mt-1 font-medium truncate">包含年度項目摊提 (${(Math.floor(stats.yearlyTotal/12) || 0).toLocaleString()}/月)</p>
-        </div>
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm min-w-0">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">平均月實領薪資</p>
-          <p className="text-2xl font-black text-emerald-600 truncate" title={`$${(Math.floor(stats.avgMonthlyIncome) || 0).toLocaleString()}`}>${(Math.floor(stats.avgMonthlyIncome) || 0).toLocaleString()}</p>
-          <p className="text-[10px] text-slate-400 mt-1 font-medium truncate">基於 {selectedYear} 年薪資紀錄</p>
-        </div>
-        <div className="bg-white p-5 rounded-2xl border border-indigo-600/20 bg-indigo-50/10 shadow-sm min-w-0">
-          <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-1 truncate">預計每月可存款額</p>
-          <p className={`text-2xl font-black ${stats.canSave >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
-            ${(Math.floor(stats.canSave) || 0).toLocaleString()}
-          </p>
-          <p className="text-[10px] text-slate-400 mt-1 font-medium">薪資 - 每月預算分配</p>
-        </div>
-      </div>
+
+          {/* 分類篩選頁籤 */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-100 p-1.5 rounded-xl">
+            <div className="flex flex-wrap items-center gap-1">
+              {[
+                { id: 'all', label: '全部項目' },
+                { id: 'my', label: '我的個人' },
+                { id: 'wife', label: '老婆個人' },
+                { id: 'joint', label: '兩人共同' },
+                { id: 'childcare', label: '育兒支出' },
+                { id: 'income', label: '收入與補助' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setBelongingFilter(tab.id as any)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${belongingFilter === tab.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
       {isAdding && (
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-md border border-indigo-100 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-400 uppercase">項目名稱</label>
               <input type="text" placeholder="如: 保險, 房租" className="w-full p-2 border rounded-md" value={newBudget.category ?? ""} onChange={e => setNewBudget({...newBudget, category: e.target.value})} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-400 uppercase">歸屬分類</label>
+              <select className="w-full p-2 border rounded-md bg-white text-sm" value={newBudget.belonging ?? 'joint'} onChange={e => setNewBudget({...newBudget, belonging: e.target.value})}>
+                <option value="joint">兩人共同</option>
+                <option value="my">我的個人</option>
+                <option value="wife">老婆個人</option>
+                <option value="childcare">育兒支出</option>
+                <option value="subsidy">育兒補助款</option>
+                <option value="income">一般收入</option>
+              </select>
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-400 uppercase">頻率</label>
@@ -8886,27 +8994,50 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
         </motion.div>
       )}
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest pl-10">項目</th>
-              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-center">頻率</th>
-              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-right">預算金額</th>
-              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-right whitespace-nowrap">換算每年</th>
-              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-right">已支出</th>
-              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-center">狀態</th>
-              <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-center">操作</th>
-            </tr>
-          </thead>
-          <Reorder.Group 
-            as="tbody" 
-            axis="y" 
-            values={filteredBudgets} 
-            onReorder={handleReorder}
-            className="divide-y divide-slate-100"
-          >
-            {filteredBudgets.map(budget => {
+      <div className="space-y-6">
+        {[
+          { id: 'income', label: '收入與補助', color: 'bg-emerald-50 text-emerald-700', badgeColor: 'bg-emerald-100 text-emerald-700' },
+          { id: 'my', label: '我的個人支出', color: 'bg-sky-50 text-sky-700', badgeColor: 'bg-sky-100 text-sky-700' },
+          { id: 'wife', label: '老婆個人支出', color: 'bg-rose-50 text-rose-700', badgeColor: 'bg-rose-100 text-rose-700' },
+          { id: 'joint', label: '兩人共同支出', color: 'bg-indigo-50 text-indigo-700', badgeColor: 'bg-indigo-100 text-indigo-700' },
+          { id: 'childcare', label: '育兒支出', color: 'bg-amber-50 text-amber-700', badgeColor: 'bg-amber-100 text-amber-700' }
+        ].filter(section => belongingFilter === 'all' || belongingFilter === section.id).map(section => {
+          const sectionItems = filteredBudgets.filter(b => {
+             const itemBelonging = b.belonging || 'joint';
+             if (section.id === 'income') return itemBelonging === 'income';
+             if (section.id === 'childcare') return itemBelonging === 'childcare' || itemBelonging === 'subsidy';
+             return itemBelonging === section.id;
+          });
+          
+          if (sectionItems.length === 0) return null;
+
+          return (
+            <div key={section.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className={`px-4 py-3 font-bold text-sm ${section.color} border-b border-slate-200 flex items-center gap-2`}>
+                {section.label}
+                <span className={`text-xs px-2 py-0.5 rounded-full bg-white/50`}>{sectionItems.length}</span>
+              </div>
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest pl-10">項目</th>
+                    <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-center">歸屬</th>
+                    <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-center">頻率</th>
+                    <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-right">預算金額</th>
+                    <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-right whitespace-nowrap">換算每年</th>
+                    <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-right">已支出</th>
+                    <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-center">狀態</th>
+                    <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest text-center">操作</th>
+                  </tr>
+                </thead>
+                <Reorder.Group 
+                  as="tbody" 
+                  axis="y" 
+                  values={sectionItems} 
+                  onReorder={handleReorder}
+                  className="divide-y divide-slate-100"
+                >
+                  {sectionItems.map(budget => {
               const yearlyEquiv = budget.frequency === 'monthly' ? budget.allocated * 12 : budget.allocated;
               const isEditing = editingId === budget.id;
               
@@ -8929,6 +9060,40 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
                       />
                     ) : (
                       <span onClick={() => { setEditingId(budget.id); setEditingData(budget); }}>{budget.category}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 text-center">
+                    {isEditing ? (
+                      <select 
+                        className="p-1 border border-indigo-200 rounded text-[10px] outline-none" 
+                        value={editingData.belonging ?? budget.belonging ?? 'joint'}
+                        onChange={e => setEditingData({...editingData, belonging: e.target.value})}
+                      >
+                        <option value="joint">兩人共同</option>
+                        <option value="my">我的個人</option>
+                        <option value="wife">老婆個人</option>
+                        <option value="childcare">育兒支出</option>
+                        <option value="subsidy">育兒補助款</option>
+                        <option value="income">一般收入</option>
+                      </select>
+                    ) : (
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                        (budget.belonging || 'joint') === 'my' ? 'bg-sky-50 text-sky-600' :
+                        (budget.belonging || 'joint') === 'wife' ? 'bg-rose-50 text-rose-600' :
+                        (budget.belonging || 'joint') === 'childcare' ? 'bg-amber-50 text-amber-600' :
+                        (budget.belonging === 'subsidy') ? 'bg-emerald-50 text-emerald-600' :
+                        ((budget.belonging || 'joint') === 'income') ? 'bg-emerald-50 text-emerald-600' :
+                        'bg-indigo-50 text-indigo-600'
+                      }`}>
+                        {
+                          (budget.belonging || 'joint') === 'my' ? '我的個人' :
+                          (budget.belonging || 'joint') === 'wife' ? '老婆個人' :
+                          (budget.belonging || 'joint') === 'childcare' ? '育兒支出' :
+                          (budget.belonging === 'subsidy') ? '育兒補助' :
+                          ((budget.belonging || 'joint') === 'income') ? '一般收入' :
+                          '兩人共同'
+                        }
+                      </span>
                     )}
                   </td>
                   <td className="px-3 py-1.5 text-center">
@@ -8996,17 +9161,32 @@ const BudgetPage = ({ user, setDeleteTarget }: { user: User, setDeleteTarget: (t
               );
             })}
           </Reorder.Group>
-          {filteredBudgets.length > 0 && (
-            <tfoot className="bg-slate-50/80 font-bold border-t-2 border-slate-200">
+          {sectionItems.length > 0 && (() => {
+            const getVal = (b: any) => (section.id === 'childcare' && b.belonging === 'subsidy') ? -b.allocated : b.allocated;
+            const getSpent = (b: any) => (section.id === 'childcare' && b.belonging === 'subsidy') ? -b.spent : b.spent;
+
+            const secYearlyTotal = sectionItems.filter(b => b.frequency !== 'monthly').reduce((sum, b) => sum + getVal(b), 0);
+            const secMonthlyTotal = sectionItems.filter(b => b.frequency === 'monthly').reduce((sum, b) => sum + getVal(b), 0);
+            const secYearlyEquivalentTotal = secYearlyTotal + (secMonthlyTotal * 12);
+            const secTotalSpent = sectionItems.reduce((sum, b) => sum + (b.frequency === 'monthly' ? (getSpent(b) * 12) : getSpent(b)), 0);
+            return (
+              <tfoot className="bg-slate-50/80 font-bold border-t-2 border-slate-200">
                <tr>
-                 <td colSpan={3} className="p-4 text-right text-slate-500">合計年度總預算:</td>
-                 <td className="p-4 text-right text-indigo-700 text-lg">${Math.floor(stats.yearlyEquivalentTotal).toLocaleString()}</td>
-                 <td className="p-4 text-right text-slate-700">${Math.floor(stats.totalSpent).toLocaleString()}</td>
+                 <td colSpan={3} className="p-4 text-right text-slate-500">
+                   {section.id === 'childcare' ? '淨支出小計 (扣除補助):' : '小計 (年度等值):'}
+                 </td>
+                 <td className="p-4 text-right font-bold text-slate-900">${Math.floor(secYearlyTotal + secMonthlyTotal).toLocaleString()}</td>
+                 <td className="p-4 text-right text-indigo-700 text-lg">${Math.floor(secYearlyEquivalentTotal).toLocaleString()}</td>
+                 <td className="p-4 text-right text-slate-700">${Math.floor(secTotalSpent).toLocaleString()}</td>
                  <td colSpan={2} />
                </tr>
             </tfoot>
-          )}
+            );
+          })()}
         </table>
+            </div>
+          );
+        })}
       </div>
       </>
       ) : (

@@ -11,6 +11,7 @@ export const TABS = [
   { id: 'stocks', label: '股票/基金', icon: 'BarChart3' },
   { id: 'insurance', label: '保險管理', icon: 'ShieldCheck' },
   { id: 'budget', label: '年度支出預算', icon: 'PieChart' },
+  { id: 'ivf', label: '試管嬰兒支出', icon: 'Heart' },
   { id: 'tax', label: '所得稅管理', icon: 'FileText' },
   { id: 'retirement', label: '退休規劃', icon: 'Coffee' },
 ] as const;
